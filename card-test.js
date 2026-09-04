@@ -24,16 +24,23 @@ const testUi = {
 
 const allTemplates = (window.CARD_LIBRARY?.cardSlots || []).map((card) => ({ ...card }));
 
+function formatEffectText(card) {
+  if (!card || !card.effect) return "无技能效果。";
+  const lines = String(card.effect).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return lines.map((line, index) => {
+    const normalized = line.replace(/^\d+\s*[.、)）]\s*/, "");
+    return lines.length > 1 ? `${index + 1}. ${normalized}` : normalized;
+  }).join("\n");
+}
+
 function makeTestCard(template, row, col, ownerId, attack = template.attack) {
-  const index = allTemplates.findIndex((item) => item.id === template.id) % 20;
-  const rarity = template.rarity || (index < 7 ? "普通" : index < 12 ? "稀有" : index < 15 ? "史诗" : index === 15 ? "传说" : "特殊");
+  const rarity = template.rarity || "普通";
   return {
     id: template.id,
     uid: `${template.id}-${Math.random().toString(36).slice(2, 9)}`,
     name: template.name,
     camp: template.camp,
     skill: template.skill || "无",
-    summary: template.summary || template.skill || "无技能。",
     effect: template.effect || "无技能。",
     rarity,
     attack: Number(attack),
@@ -79,9 +86,9 @@ function renderLibrary() {
   });
   testUi.libraryCount.textContent = `${list.length} 张`;
   testUi.library.innerHTML = list.map((card) => `
-    <button class="library-card ${testState.selectedTemplate?.id === card.id ? "selected" : ""}" data-card-id="${card.id}">
+    <button class="library-card rarity-${card.rarity || "普通"} ${testState.selectedTemplate?.id === card.id ? "selected" : ""}" data-card-id="${card.id}">
       <span class="library-attack">${card.attack}</span>
-      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${card.skill || "无技能"}</small><small class="library-summary">${card.summary || card.skill || "无技能。"}</small></span>
+      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${card.skill || "无技能"}</small></span>
     </button>
   `).join("");
 }
@@ -99,10 +106,18 @@ function renderBoard() {
   const p1 = testState.cards.filter((card) => card.ownerId === 1).length;
   const p2 = testState.cards.filter((card) => card.ownerId === 2).length;
   testUi.summary.textContent = `玩家 1：${p1} 张 · 玩家 2：${p2} 张 · 破坏格：${testState.brokenCells.length}`;
+  testUi.board.querySelectorAll(".unit-name, .unit-skill").forEach((element) => {
+    let size = Number.parseFloat(window.getComputedStyle(element).fontSize) || 14;
+    element.style.fontSize = `${size}px`;
+    while (element.scrollWidth > element.clientWidth && size > 7) {
+      size = Math.max(7, size - 0.5);
+      element.style.fontSize = `${size}px`;
+    }
+  });
 }
 
 function renderBoardCard(card) {
-  return `<article class="test-unit player${card.ownerId} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
+  return `<article class="test-unit player${card.ownerId} rarity-${card.rarity || "普通"} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
     <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span><span class="unit-attack">${card.attack}</span>
   </article>`;
 }
@@ -113,11 +128,11 @@ function renderInspector() {
   testUi.content.hidden = !card;
   testUi.state.textContent = card ? "正在编辑" : "未选择";
   if (!card) return;
-  testUi.preview.className = `preview-card player${card.ownerId}`;
+  testUi.preview.className = `preview-card player${card.ownerId} rarity-${card.rarity || "普通"}`;
   testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity}</p><p>${card.skill}</p>`;
   testUi.owner.value = String(card.ownerId);
   testUi.attack.value = String(card.attack);
-  testUi.effect.textContent = card.summary || card.skill || "无技能。";
+  testUi.effect.textContent = formatEffectText(card);
 }
 
 function render() {

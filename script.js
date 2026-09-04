@@ -83,7 +83,7 @@ function getCampDisplayName(campKey) {
 }
 
 function makeCardTemplate(campKey, slot, index) {
-  const quality = slot.rarity || (index < 7 ? "普通" : index < 12 ? "稀有" : index < 15 ? "史诗" : index === 15 ? "传说" : "特殊");
+  const quality = slot.rarity || "普通";
   return {
     id: slot.id || `${campKey}-${String(index + 1).padStart(2, "0")}`,
     name: slot.name || GAME_CAMP_NAME_POOL[campKey]?.[index] || "未命名卡牌",
@@ -93,7 +93,6 @@ function makeCardTemplate(campKey, slot, index) {
     rarity: quality,
     attack: slot.attack,
     skill: slot.skill || "无",
-    summary: slot.summary || slot.skill || "无技能。",
     effectId: slot.effectId || "none",
     effect: slot.effect || "无",
     image: slot.image || null
@@ -10354,15 +10353,15 @@ function bindEvents() {
     });
   });
 
-  ui.startGameBtn.addEventListener("click", () => startRandomGame(state.selectedMode));
+  ui.startGameBtn.addEventListener("click", () => window.startRandomGame?.(state.selectedMode));
   ui.submitActionBtn.addEventListener("click", () => {
-    submitCurrentAction();
+    window.submitCurrentAction?.();
   });
   ui.cancelSelectionBtn.addEventListener("click", cancelSelection);
-  ui.restartBtn.addEventListener("click", () => startRandomGame(state.game?.mode || state.selectedMode));
-  ui.backMenuBtn.addEventListener("click", resetToMenu);
-  ui.resultRestartBtn.addEventListener("click", () => startRandomGame(state.game?.mode || state.selectedMode));
-  ui.resultMenuBtn.addEventListener("click", resetToMenu);
+  ui.restartBtn.addEventListener("click", () => window.startRandomGame?.(state.game?.mode || state.selectedMode));
+  ui.backMenuBtn.addEventListener("click", () => window.resetToMenu?.());
+  ui.resultRestartBtn.addEventListener("click", () => window.startRandomGame?.(state.game?.mode || state.selectedMode));
+  ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
 }
 
 window.__CARD_DEMO_DEBUG__ = {
@@ -10380,6 +10379,7 @@ window.__CARD_DEMO_DEBUG__ = {
   getBoardCardAt,
   getCampDisplayName
 };
+window.resetToMenu = resetToMenu;
 
 bindEvents();
 runDebugScenarioFromQuery();

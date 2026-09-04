@@ -1039,6 +1039,22 @@ button:disabled {
   white-space: nowrap;
 }
 
+.unit.rarity-普通 .unit-name,
+.card.rarity-普通 .card-top h3,
+.test-unit.rarity-普通 .unit-name { color: #fff; text-shadow: 0 0 3px rgba(0, 0, 0, 0.95), 0 1px 2px rgba(0, 0, 0, 0.8); }
+.unit.rarity-稀有 .unit-name,
+.card.rarity-稀有 .card-top h3,
+.test-unit.rarity-稀有 .unit-name { color: #3f8ed8; text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5); }
+.unit.rarity-史诗 .unit-name,
+.card.rarity-史诗 .card-top h3,
+.test-unit.rarity-史诗 .unit-name { color: #8f55c7; text-shadow: 0 1px 1px rgba(255, 255, 255, 0.55); }
+.unit.rarity-传说 .unit-name,
+.card.rarity-传说 .card-top h3,
+.test-unit.rarity-传说 .unit-name { color: #e47722; text-shadow: 0 1px 1px rgba(255, 255, 255, 0.58); }
+.unit.rarity-特殊 .unit-name,
+.card.rarity-特殊 .card-top h3,
+.test-unit.rarity-特殊 .unit-name { color: #111; text-shadow: 0 0 2px rgba(255, 255, 255, 0.95); }
+
 .unit-camp {
   margin-top: 2px;
   font-size: 10px;
@@ -1092,6 +1108,10 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.skill-effect-list { display: grid; gap: 4px; }
+.skill-effect-line { display: block; }
+.skill-effect-line strong { display: inline-block; min-width: 1.45em; margin-right: 2px; }
 
 .unit-tooltip {
   position: absolute;
@@ -1350,6 +1370,10 @@ button:disabled {
 
 .card h3 {
   font-size: 24px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .card .card-top {
@@ -1358,6 +1382,8 @@ button:disabled {
   justify-content: space-between;
   gap: 8px;
 }
+
+.card .card-top strong { flex: 0 0 auto; white-space: nowrap; }
 
 .card .card-stats {
   margin-top: 10px;

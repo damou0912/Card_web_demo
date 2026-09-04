@@ -35,7 +35,7 @@ context.window = context;
 context.globalThis = context;
 vm.createContext(context);
 
-["card-data.js", "v2-card-data.js", "script.js", "core-v2.js"].forEach((file) => {
+["v2-card-data.js", "script.js", "core-v2.js"].forEach((file) => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file });
 });
 

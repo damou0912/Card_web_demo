@@ -27,6 +27,23 @@
     }
   }
 
+  function coreCloseOverlay() {
+    ui.deckReveal.classList.remove("visible");
+    ui.deckReveal.innerHTML = "";
+  }
+
+  function coreAttachOverlayClose() {
+    document.getElementById("overlay-close")?.addEventListener("click", () => {
+      coreCloseOverlay();
+      if (!state.game) switchScreen("menu");
+    });
+  }
+
+  function corePlayerNameIsValid(name) {
+    const value = String(name || "").trim();
+    return /^[\u3400-\u9fff]{1,6}$/.test(value) || /^[A-Za-z]{1,12}$/.test(value);
+  }
+
   function coreActionLimit(game) {
     return (game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS) + (Number(game.extraActions) || 0);
   }
@@ -1623,6 +1640,7 @@
     const roomCode = state.online.roomCode;
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">ONLINE MATCH</p>
         <h2 class="deck-reveal-title">房间 ${roomCode}</h2>
         <p class="deck-reveal-copy">将房间码发送给另一位玩家，等待对方加入。地图：${state.selectedBoardSize}x${state.selectedBoardSize}。</p>
@@ -1630,6 +1648,7 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
   }
 
   function coreStartOnlineHost() {
@@ -1643,16 +1662,22 @@
   function coreHandleOnlineMessage(message) {
     if (!message) return;
     if (message.type === "room-created") {
-      state.online = { playerId: 1, roomCode: message.roomCode, host: true };
+      state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, host: true };
       coreStartOnlineHost();
+      state.game.players[0].name = message.playerName;
       return;
     }
     if (message.type === "room-joined") {
-      state.online = { playerId: 2, roomCode: message.roomCode, host: false };
+      state.online = { ...state.online, playerId: 2, roomCode: message.roomCode, playerName: message.playerName, host: false };
+      coreCloseOverlay();
+      showToast("已加入房间", `你已加入 ${message.opponentName || "玩家 1"} 创建的房间。正在等待对局同步。`);
       return;
     }
     if (message.type === "peer-joined" && state.online.host && state.game) {
-      ui.deckReveal.classList.remove("visible");
+      coreCloseOverlay();
+      showToast("玩家已加入", `${message.playerName || "玩家 2"} 已加入房间，对局开始。`);
+      state.game.players[0].name = state.online.playerName || "玩家 1";
+      state.game.players[1].name = message.playerName || "玩家 2";
       coreStartTurn(state.game);
       coreRender();
       coreOnlineSendState(state.game);
@@ -1687,14 +1712,16 @@
     }
     window.CardOnline.connect();
     state.online?.unsubscribe?.();
-    state.online = { playerId: null, roomCode: null, host: false };
+    state.online = { playerId: null, roomCode: null, playerName: "", host: false };
     state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="联网对战房间">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">ONLINE MATCH</p>
         <h2 class="deck-reveal-title">联网对战</h2>
-        <p class="deck-reveal-copy">选择地图后创建房间，或输入其他玩家提供的房间码加入。</p>
+        <p class="deck-reveal-copy">先设定玩家 ID，再创建房间或输入其他玩家提供的房间码加入。</p>
         <div class="online-lobby-actions">
+          <label>玩家 ID<input id="online-player-name" maxlength="12" autocomplete="nickname" placeholder="最多 6 中文或 12 英文"></label>
           <button id="online-create-room" class="primary-btn">创建房间</button>
           <label>房间码<input id="online-room-code" maxlength="6" autocomplete="off" placeholder="例如 A1B2C3"></label>
           <button id="online-join-room" class="secondary-btn">加入房间</button>
@@ -1703,12 +1730,22 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
+    const getPlayerName = () => document.getElementById("online-player-name").value.trim();
+    const validatePlayerName = () => {
+      const playerName = getPlayerName();
+      if (corePlayerNameIsValid(playerName)) return playerName;
+      showToast("玩家 ID 无效", "请输入 1-6 个中文字符，或 1-12 个英文字母。");
+      return null;
+    };
     document.getElementById("online-create-room").addEventListener("click", () => {
-      if (!window.CardOnline.createRoom()) showToast("联网未连接", "请稍候再创建房间。");
+      const playerName = validatePlayerName();
+      if (playerName && !window.CardOnline.createRoom(playerName)) showToast("联网未连接", "请稍候再创建房间。");
     });
     document.getElementById("online-join-room").addEventListener("click", () => {
       const roomCode = document.getElementById("online-room-code").value;
-      if (!window.CardOnline.joinRoom(roomCode)) showToast("联网未连接", "请稍候再加入房间。");
+      const playerName = validatePlayerName();
+      if (playerName && !window.CardOnline.joinRoom(roomCode, playerName)) showToast("联网未连接", "请稍候再加入房间。");
     });
   }
 
@@ -1721,6 +1758,7 @@
     const optionMarkup = camps.map((camp) => `<option value="${camp}">${getCampDisplayName(camp)}</option>`).join("");
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="选择势力牌库">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">Core Rules V2</p>
         <h2 class="deck-reveal-title">选择本局势力牌库</h2>
         <p class="deck-reveal-copy">${state.selectedBoardSize || CORE_BOARD_SIZE}x${state.selectedBoardSize || CORE_BOARD_SIZE} 战场；当前使用每个势力预设的 20 张牌库，卡牌技能按 V2 规则自动结算。</p>
@@ -1733,6 +1771,7 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
     document.getElementById("core-deck-confirm").addEventListener("click", () => {
       const playerOneDeck = document.getElementById("core-deck-p1").value;
       const playerTwoDeck = mode === "pve" ? getRandomDeckKey() : document.getElementById("core-deck-p2").value;
@@ -1806,6 +1845,7 @@
     const second = corePlayer(game, otherPlayerId(game.firstPlayerId));
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="本局先后手">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">Opening Order</p>
         <h2 class="deck-reveal-title">${first.name} 获得先手</h2>
         <p class="deck-reveal-copy">${game.boardSize}x${game.boardSize} 战场；先手初始 2 张手牌；后手 ${second.name} 初始 3 张手牌。全局第 1 回合仅有 1 次行动，其余回合有 2 次行动。</p>
@@ -1818,6 +1858,7 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
     document.getElementById("core-opening-start").addEventListener("click", () => {
       ui.deckReveal.classList.remove("visible");
       window.setTimeout(() => {

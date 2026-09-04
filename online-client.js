@@ -19,6 +19,12 @@
     });
   }
 
+  function disconnect() {
+    if (socket) socket.close();
+    socket = null;
+    connected = false;
+  }
+
   function send(message) {
     if (!socket || socket.readyState !== 1) return false;
     socket.send(JSON.stringify(message));
@@ -27,8 +33,9 @@
 
   window.CardOnline = {
     connect,
-    createRoom: () => send({ type: "create-room" }),
-    joinRoom: (roomCode) => send({ type: "join-room", roomCode }),
+    disconnect,
+    createRoom: (playerName) => send({ type: "create-room", playerName }),
+    joinRoom: (roomCode, playerName) => send({ type: "join-room", roomCode, playerName }),
     send,
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     get connected() { return connected; }

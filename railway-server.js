@@ -19,6 +19,18 @@ const contentTypes = {
 };
 const publicExtensions = new Set(Object.keys(contentTypes));
 
+function normalizePlayerName(value) {
+  return String(value || "").trim().replace(/[<>]/g, "").slice(0, 12);
+}
+
+function isValidPlayerName(value) {
+  const name = normalizePlayerName(value);
+  const chineseCount = (name.match(/[\u3400-\u9fff]/g) || []).length;
+  const latinCount = (name.match(/[A-Za-z]/g) || []).length;
+  const otherCount = [...name].length - chineseCount - latinCount;
+  return name.length > 0 && otherCount === 0 && (chineseCount === name.length ? chineseCount <= 6 : latinCount === name.length && latinCount <= 12);
+}
+
 function send(socket, message) {
   if (socket.readyState === 1) socket.send(JSON.stringify(message));
 }
@@ -75,12 +87,14 @@ websocket.on("connection", (socket) => {
     try { message = JSON.parse(String(raw)); } catch (_error) { return send(socket, { type: "error", message: "消息格式无效。" }); }
     if (message.type === "create-room") {
       if (socket.roomCode) return;
+      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
+      const playerName = normalizePlayerName(message.playerName);
       const roomCode = makeRoomCode();
-      const room = { code: roomCode, createdAt: Date.now(), players: { 1: socket, 2: null } };
+      const room = { code: roomCode, createdAt: Date.now(), names: { 1: playerName, 2: null }, players: { 1: socket, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
-      send(socket, { type: "room-created", roomCode, playerId: 1 });
+      send(socket, { type: "room-created", roomCode, playerId: 1, playerName });
       return;
     }
     if (message.type === "join-room") {
@@ -88,11 +102,14 @@ websocket.on("connection", (socket) => {
       const room = rooms.get(roomCode);
       if (!room || room.players[2]) return send(socket, { type: "error", message: "房间不存在或已满。" });
       if (socket.roomCode) return;
+      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
+      const playerName = normalizePlayerName(message.playerName);
       room.players[2] = socket;
+      room.names[2] = playerName;
       socket.roomCode = roomCode;
       socket.playerId = 2;
-      send(socket, { type: "room-joined", roomCode, playerId: 2 });
-      broadcast(room, { type: "peer-joined", playerId: 2 }, socket);
+      send(socket, { type: "room-joined", roomCode, playerId: 2, playerName, opponentName: room.names[1] });
+      broadcast(room, { type: "peer-joined", playerId: 2, playerName }, socket);
       return;
     }
     const room = rooms.get(socket.roomCode);

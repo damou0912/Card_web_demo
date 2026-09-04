@@ -20,7 +20,7 @@ const contentTypes = {
 const publicExtensions = new Set(Object.keys(contentTypes));
 
 function send(socket, message) {
-  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+  if (socket.readyState === 1) socket.send(JSON.stringify(message));
 }
 
 function makeRoomCode() {
@@ -99,6 +99,11 @@ websocket.on("connection", (socket) => {
     if (!room) return send(socket, { type: "error", message: "请先创建或加入房间。" });
     if (message.type === "state-sync" || message.type === "action" || message.type === "game-event") {
       broadcast(room, { ...message, playerId: socket.playerId }, socket);
+      return;
+    }
+    if (["action-request", "end-turn-request", "surrender-request"].includes(message.type)) {
+      if (socket.playerId !== 2) return;
+      send(room.players[1], { ...message, playerId: socket.playerId });
     }
   });
   socket.on("close", () => removeSocket(socket));

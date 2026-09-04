@@ -70,7 +70,8 @@ const state = {
   selectedMode: "pvp",
   selectedBoardSize: 4,
   selectedDecks: { 1: null, 2: null },
-  game: null
+  game: null,
+  online: { playerId: null, roomCode: null, host: false }
 };
 
 function getCampDisplayName(campKey) {

@@ -13,6 +13,20 @@
     return game.players.find((player) => player.id === playerId) || null;
   }
 
+  function coreSerializeOnlineGame(game) {
+    return JSON.stringify(game, (_key, value) => value instanceof Set ? { __coreSet: [...value] } : value);
+  }
+
+  function coreDeserializeOnlineGame(serialized) {
+    return JSON.parse(serialized, (_key, value) => value && value.__coreSet ? new Set(value.__coreSet) : value);
+  }
+
+  function coreOnlineSendState(game) {
+    if (game?.mode === "online" && state.online?.host && window.CardOnline?.connected) {
+      window.CardOnline.send({ type: "state-sync", state: coreSerializeOnlineGame(game) });
+    }
+  }
+
   function coreActionLimit(game) {
     return (game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS) + (Number(game.extraActions) || 0);
   }
@@ -1067,10 +1081,12 @@
       coreRender();
       await coreAnimateVictoryCells(game, game.winner.playerId);
       showResult();
+      coreOnlineSendState(game);
       return true;
     }
     game.lastResolution = `${player.name} 已完成 1 次行动，还可执行 ${coreActionLimit(game) - game.actionsUsed} 次行动。`;
     coreRender();
+    coreOnlineSendState(game);
     return true;
   }
 
@@ -1137,6 +1153,7 @@
       coreRender();
       await coreAnimateVictoryCells(game, game.winner.playerId);
       showResult();
+      coreOnlineSendState(game);
       return;
     }
     if (game.turn >= CORE_MAX_TURNS) {
@@ -1146,6 +1163,7 @@
       coreRender();
       await coreAnimateVictoryCells(game, 0);
       showResult();
+      coreOnlineSendState(game);
       return;
     }
     game.turn += 1;
@@ -1161,6 +1179,7 @@
     if (corePlayer(game, game.activePlayerId).isAI) {
       window.setTimeout(() => coreRunAiTurn(game), 650);
     }
+    coreOnlineSendState(game);
   }
 
   async function coreSurrender(game = state.game) {
@@ -1181,6 +1200,7 @@
     coreRender();
     await coreAnimateVictoryCells(game, winner.id);
     showResult();
+    coreOnlineSendState(game);
   }
 
   function coreAiRarityValue(card) {
@@ -1592,10 +1612,111 @@
       showToast("请选择行动", "请先选择一张手牌与落点，或选择一张可移动的己方卡牌与目标格。");
       return;
     }
+    if (game.mode === "online" && state.online?.playerId !== game.activePlayerId) {
+      if (!window.CardOnline?.send({ type: "action-request", action })) showToast("联网未连接", "请等待联网服务连接后再操作。");
+      return;
+    }
     await coreResolveAction(game, action);
   }
 
+  function coreShowOnlineWaiting() {
+    const roomCode = state.online.roomCode;
+    ui.deckReveal.innerHTML = `
+      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
+        <p class="phase-banner-eyebrow">ONLINE MATCH</p>
+        <h2 class="deck-reveal-title">房间 ${roomCode}</h2>
+        <p class="deck-reveal-copy">将房间码发送给另一位玩家，等待对方加入。地图：${state.selectedBoardSize}x${state.selectedBoardSize}。</p>
+        <p id="online-room-status" class="deck-reveal-copy">等待玩家 2 加入……</p>
+      </section>
+    `;
+    ui.deckReveal.classList.add("visible");
+  }
+
+  function coreStartOnlineHost() {
+    state.selectedDecks = { 1: getRandomDeckKey(), 2: getRandomDeckKey() };
+    state.game = coreCreateGame("online", state.selectedDecks, state.selectedBoardSize);
+    switchScreen("game");
+    coreRender();
+    coreShowOnlineWaiting();
+  }
+
+  function coreHandleOnlineMessage(message) {
+    if (!message) return;
+    if (message.type === "room-created") {
+      state.online = { playerId: 1, roomCode: message.roomCode, host: true };
+      coreStartOnlineHost();
+      return;
+    }
+    if (message.type === "room-joined") {
+      state.online = { playerId: 2, roomCode: message.roomCode, host: false };
+      return;
+    }
+    if (message.type === "peer-joined" && state.online.host && state.game) {
+      ui.deckReveal.classList.remove("visible");
+      coreStartTurn(state.game);
+      coreRender();
+      coreOnlineSendState(state.game);
+      return;
+    }
+    if (message.type === "state-sync" && !state.online.host && message.state) {
+      state.game = coreDeserializeOnlineGame(message.state);
+      switchScreen("game");
+      coreRender();
+      if (state.game.winner) showResult();
+      return;
+    }
+    if (message.type === "action-request" && state.online.host && state.game && message.playerId === 2) {
+      coreResolveAction(state.game, message.action);
+      return;
+    }
+    if (message.type === "end-turn-request" && state.online.host && state.game && message.playerId === 2) {
+      coreEndTurn(state.game);
+      return;
+    }
+    if (message.type === "surrender-request" && state.online.host && state.game && message.playerId === 2) {
+      coreSurrender(state.game);
+      return;
+    }
+    if (message.type === "error") showToast("联网房间", message.message || "联网操作失败。");
+  }
+
+  function coreShowOnlineLobby() {
+    if (!window.CardOnline) {
+      showToast("联网不可用", "当前页面没有加载联网客户端。");
+      return;
+    }
+    window.CardOnline.connect();
+    state.online?.unsubscribe?.();
+    state.online = { playerId: null, roomCode: null, host: false };
+    state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
+    ui.deckReveal.innerHTML = `
+      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="联网对战房间">
+        <p class="phase-banner-eyebrow">ONLINE MATCH</p>
+        <h2 class="deck-reveal-title">联网对战</h2>
+        <p class="deck-reveal-copy">选择地图后创建房间，或输入其他玩家提供的房间码加入。</p>
+        <div class="online-lobby-actions">
+          <button id="online-create-room" class="primary-btn">创建房间</button>
+          <label>房间码<input id="online-room-code" maxlength="6" autocomplete="off" placeholder="例如 A1B2C3"></label>
+          <button id="online-join-room" class="secondary-btn">加入房间</button>
+        </div>
+        <p id="online-lobby-status" class="deck-reveal-copy">正在连接联网服务……</p>
+      </section>
+    `;
+    ui.deckReveal.classList.add("visible");
+    document.getElementById("online-create-room").addEventListener("click", () => {
+      if (!window.CardOnline.createRoom()) showToast("联网未连接", "请稍候再创建房间。");
+    });
+    document.getElementById("online-join-room").addEventListener("click", () => {
+      const roomCode = document.getElementById("online-room-code").value;
+      if (!window.CardOnline.joinRoom(roomCode)) showToast("联网未连接", "请稍候再加入房间。");
+    });
+  }
+
   function coreShowDeckSelector(mode) {
+    if (mode === "online") {
+      coreShowOnlineLobby();
+      return;
+    }
     const camps = getAvailableDeckKeys();
     const optionMarkup = camps.map((camp) => `<option value="${camp}">${getCampDisplayName(camp)}</option>`).join("");
     ui.deckReveal.innerHTML = `
@@ -1769,6 +1890,10 @@
   coreUi.endTurnBtn.addEventListener("click", () => {
     const game = state.game;
     if (!game || game.isAnimating || game.winner) return;
+    if (game.mode === "online" && state.online?.playerId !== game.activePlayerId) {
+      if (!window.CardOnline?.send({ type: "end-turn-request" })) showToast("联网未连接", "请等待联网服务连接后再结束回合。");
+      return;
+    }
     if (coreHasExecutableAction(game) && !window.confirm("本回合仍有可执行操作，确定要结束回合吗？")) return;
     coreEndTurn();
   });
@@ -1777,6 +1902,10 @@
     if (!game || game.isAnimating || game.winner) return;
     const active = corePlayer(game, game.activePlayerId);
     if (!active || active.isAI || !window.confirm(`确定让 ${active.name} 认输吗？认输后将立即判负，且无法撤销。`)) return;
+    if (game.mode === "online" && state.online?.playerId !== game.activePlayerId) {
+      if (!window.CardOnline?.send({ type: "surrender-request" })) showToast("联网未连接", "请等待联网服务连接后再认输。");
+      return;
+    }
     await coreSurrender(game);
   });
   const coreDataValidation = coreValidateV2CardData();

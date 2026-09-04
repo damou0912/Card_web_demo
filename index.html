@@ -10,6 +10,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
   <div id="phase-banner" class="phase-banner" aria-live="polite" aria-atomic="true"></div>
   <div id="deck-reveal" class="deck-reveal" aria-live="polite"></div>
+  <div id="player-id-modal" class="player-id-modal" aria-live="polite"></div>
   <main class="app-shell">
     <section id="menu-screen" class="screen active">
       <div class="hero-card">
@@ -22,6 +23,11 @@
           <button class="mode-btn selected" data-mode="pvp">本地 1v1</button>
           <button class="mode-btn" data-mode="pve">PVE 对战 AI</button>
           <button class="mode-btn" data-mode="online">联网对战</button>
+        </div>
+        <div class="player-id-bar" aria-label="当前玩家 ID">
+          <span>玩家 ID</span>
+          <strong id="player-id-value">未设置</strong>
+          <button id="edit-player-id-btn" class="icon-btn" type="button" aria-label="修改玩家 ID" title="修改玩家 ID">✎</button>
         </div>
         <div class="map-options" role="group" aria-label="选择地图大小">
           <span class="option-label">地图大小</span>

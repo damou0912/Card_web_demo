@@ -34,7 +34,7 @@
   window.CardOnline = {
     connect,
     disconnect,
-    createRoom: (playerName) => send({ type: "create-room", playerName }),
+    createRoom: (playerName, boardSize) => send({ type: "create-room", playerName, boardSize }),
     joinRoom: (roomCode, playerName) => send({ type: "join-room", roomCode, playerName }),
     send,
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },

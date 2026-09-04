@@ -23,6 +23,9 @@ const ui = {
   toastContainer: document.getElementById("toast-container"),
   phaseBanner: document.getElementById("phase-banner"),
   deckReveal: document.getElementById("deck-reveal"),
+  playerIdModal: document.getElementById("player-id-modal"),
+  playerIdValue: document.getElementById("player-id-value"),
+  editPlayerIdBtn: document.getElementById("edit-player-id-btn"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
   mapButtons: [...document.querySelectorAll(".map-btn")],
   startGameBtn: document.getElementById("start-game-btn"),
@@ -69,6 +72,7 @@ const ui = {
 const state = {
   selectedMode: "pvp",
   selectedBoardSize: 4,
+  playerName: "",
   selectedDecks: { 1: null, 2: null },
   game: null,
   online: { playerId: null, roomCode: null, host: false }

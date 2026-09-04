@@ -147,6 +147,46 @@ body {
   pointer-events: auto;
 }
 
+.player-id-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(31, 26, 23, 0.58);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.player-id-modal.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.player-id-card {
+  position: relative;
+  width: min(440px, 94vw);
+  padding: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 18px;
+  background: #202b32;
+  color: #fff8e9;
+  box-shadow: 0 22px 64px rgba(31, 26, 23, 0.42);
+  text-align: center;
+}
+
+.player-id-card h2 { margin: 0 0 10px; }
+.player-id-card p { color: rgba(255, 255, 255, 0.78); line-height: 1.5; }
+.player-id-card label { display: grid; gap: 8px; margin: 22px 0 8px; text-align: left; font-size: 13px; font-weight: 700; }
+.player-id-card input { border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 12px; background: #fffaf0; color: #202b32; font: inherit; }
+.player-id-error { min-height: 20px; color: #ffba8d !important; font-size: 12px; }
+
+.player-id-bar { display: inline-flex; align-items: center; gap: 9px; margin: 18px auto 0; padding: 8px 10px 8px 13px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 250, 240, 0.76); color: var(--muted); font-size: 13px; }
+.player-id-bar strong { color: var(--ink); }
+.icon-btn { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 50%; background: #fff; color: var(--ink); cursor: pointer; }
+
 .deck-reveal-card {
   position: relative;
   width: min(720px, 94vw);
@@ -474,6 +514,13 @@ button:disabled {
   gap: 10px;
   margin: 18px 0 8px;
 }
+
+.online-room-card { max-width: 560px; }
+.online-room-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 22px 0 16px; }
+.online-room-players > div { display: grid; gap: 6px; padding: 13px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 10px; background: rgba(255, 255, 255, 0.08); text-align: left; }
+.online-room-players span { color: #f4ca70; font-size: 12px; }
+.online-deck-choice { display: grid; gap: 7px; margin: 0 0 16px; color: rgba(255, 255, 255, 0.75); font-size: 13px; font-weight: 700; text-align: left; }
+.online-deck-choice select { border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px; background: rgba(20, 35, 44, 0.88); color: #fff8e9; font: inherit; padding: 10px; }
 
 .online-lobby-actions label {
   display: grid;

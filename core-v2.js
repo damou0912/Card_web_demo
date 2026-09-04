@@ -9,6 +9,85 @@
     surrenderBtn: document.getElementById("surrender-btn")
   };
 
+  const PLAYER_ID_MAX_UNITS = 12;
+  const PLAYER_ID_ALLOWED = /^[A-Za-z0-9_\-\.\!\?@#\+=\u3400-\u9fff]+$/;
+
+  function corePlayerIdUnits(value) {
+    return [...String(value || "")].reduce((total, char) => total + (/^[\u3400-\u9fff]$/.test(char) ? 2 : 1), 0);
+  }
+
+  function coreValidatePlayerId(value) {
+    const name = String(value || "").trim();
+    if (!name) return { valid: false, message: "请输入玩家 ID。" };
+    if (!PLAYER_ID_ALLOWED.test(name)) return { valid: false, message: "仅允许中文、英文、数字及 _ - . ! ? @ # + =。" };
+    if (corePlayerIdUnits(name) > PLAYER_ID_MAX_UNITS) return { valid: false, message: "玩家 ID 最多 12 个字符单位，中文每字按 2 个单位计算。" };
+    return { valid: true, value: name };
+  }
+
+  async function coreGetPublicIp() {
+    if (typeof fetch !== "function") return null;
+    try {
+      const response = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return typeof data.ip === "string" && data.ip ? data.ip : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function coreShowPlayerIdModal(required = false) {
+    if (!ui.playerIdModal) return;
+    ui.playerIdModal.innerHTML = `
+      <section class="player-id-card" role="dialog" aria-modal="true" aria-label="设置玩家 ID">
+        ${required ? "" : '<button id="player-id-modal-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>'}
+        <p class="phase-banner-eyebrow">PLAYER ID</p>
+        <h2>${required ? "首次设置玩家 ID" : "修改玩家 ID"}</h2>
+        <p>最多 12 个字符单位；中文每字 2 个单位，英文、数字和常用英文符号每个 1 个单位。</p>
+        <label>玩家 ID<input id="player-id-input" maxlength="12" autocomplete="nickname" value="${String(state.playerName || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}" autofocus></label>
+        <p id="player-id-error" class="player-id-error" aria-live="polite"></p>
+        <button id="player-id-confirm" class="primary-btn" type="button">确认 ID</button>
+      </section>
+    `;
+    ui.playerIdModal.classList.add("visible");
+    const input = document.getElementById("player-id-input");
+    const error = document.getElementById("player-id-error");
+    document.getElementById("player-id-confirm")?.addEventListener("click", () => {
+      const result = coreValidatePlayerId(input.value);
+      if (!result.valid) { error.textContent = result.message; return; }
+      state.playerName = result.value;
+      ui.playerIdValue.textContent = result.value;
+      ui.playerIdModal.classList.remove("visible");
+      ui.playerIdModal.innerHTML = "";
+      corePersistPlayerId(result.value);
+    });
+    document.getElementById("player-id-modal-close")?.addEventListener("click", () => {
+      ui.playerIdModal.classList.remove("visible");
+      ui.playerIdModal.innerHTML = "";
+    });
+  }
+
+  async function corePersistPlayerId(name) {
+    const ip = await coreGetPublicIp();
+    if (!ip) return;
+    try { window.localStorage?.setItem(`cardDemoPlayerId:${ip}`, name); } catch (_error) { /* storage may be unavailable */ }
+  }
+
+  async function coreInitializePlayerIdentity() {
+    const ip = await coreGetPublicIp();
+    let stored = "";
+    if (ip) {
+      try { stored = window.localStorage?.getItem(`cardDemoPlayerId:${ip}`) || ""; } catch (_error) { stored = ""; }
+    }
+    const valid = coreValidatePlayerId(stored);
+    if (valid.valid) {
+      state.playerName = valid.value;
+      if (ui.playerIdValue) ui.playerIdValue.textContent = valid.value;
+    } else if (!state.playerName) {
+      coreShowPlayerIdModal(true);
+    }
+  }
+
   function corePlayer(game, playerId) {
     return game.players.find((player) => player.id === playerId) || null;
   }
@@ -40,8 +119,7 @@
   }
 
   function corePlayerNameIsValid(name) {
-    const value = String(name || "").trim();
-    return /^[\u3400-\u9fff]{1,6}$/.test(value) || /^[A-Za-z]{1,12}$/.test(value);
+    return coreValidatePlayerId(name).valid;
   }
 
   function coreActionLimit(game) {
@@ -136,13 +214,13 @@
     return guards;
   }
 
-  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE) {
+  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null) {
     const selectedSize = Number(boardSize);
     const size = Number.isInteger(selectedSize) && selectedSize >= 3 && selectedSize <= 5 ? selectedSize : CORE_BOARD_SIZE;
     const playerOneCatalog = buildCampDeck(selectedDecks[1]);
     const playerTwoCatalog = buildCampDeck(selectedDecks[2]);
     const playerTwoName = mode === "pve" ? "AI" : "玩家 2";
-    const firstPlayerId = Math.random() < 0.5 ? 1 : 2;
+    const firstPlayerId = [1, 2].includes(Number(firstPlayerIdOverride)) ? Number(firstPlayerIdOverride) : (Math.random() < 0.5 ? 1 : 2);
     const game = {
       ruleset: "core-v2",
       mode,
@@ -1636,27 +1714,70 @@
     await coreResolveAction(game, action);
   }
 
-  function coreShowOnlineWaiting() {
+  function coreShowOnlineWaiting(roomState = state.online.roomState || {}) {
     const roomCode = state.online.roomCode;
+    const ownId = state.online.playerId;
+    const ownDeck = state.online.deckKey || "三国~蜀";
+    const deckOptions = getAvailableDeckKeys().map((deck) => `<option value="${deck}" ${deck === ownDeck ? "selected" : ""}>${getCampDisplayName(deck)}</option>`).join("");
+    const readyText = (id) => roomState.ready?.[id] ? "已准备" : "未准备";
+    const ownReady = Boolean(roomState.ready?.[ownId]);
     ui.deckReveal.innerHTML = `
-      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
-        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
+      <section class="deck-reveal-card online-room-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
+        <button id="online-leave-room" class="overlay-close" type="button" aria-label="退出房间">退出房间</button>
         <p class="phase-banner-eyebrow">ONLINE MATCH</p>
         <h2 class="deck-reveal-title">房间 ${roomCode}</h2>
-        <p class="deck-reveal-copy">将房间码发送给另一位玩家，等待对方加入。地图：${state.selectedBoardSize}x${state.selectedBoardSize}。</p>
-        <p id="online-room-status" class="deck-reveal-copy">等待玩家 2 加入……</p>
+        <p class="deck-reveal-copy">地图：${roomState.boardSize || state.selectedBoardSize}x${roomState.boardSize || state.selectedBoardSize}。请将房间号发送给另一位玩家。</p>
+        <div class="online-room-players">
+          <div><strong>${roomState.names?.[1] || (ownId === 1 ? state.playerName : "等待玩家")}</strong><span>${readyText(1)}</span></div>
+          <div><strong>${roomState.names?.[2] || (ownId === 2 ? state.playerName : "等待加入")}</strong><span>${readyText(2)}</span></div>
+        </div>
+        <label class="online-deck-choice">我的势力牌库<select id="online-deck-choice" ${ownReady ? "disabled" : ""}>${deckOptions}</select></label>
+        <button id="online-ready-btn" class="primary-btn" type="button">${ownReady ? "取消准备" : "准备"}</button>
+        <p id="online-room-status" class="deck-reveal-copy">${roomState.hasPlayers?.[2] ? "等待双方准备……" : "等待玩家 2 加入……"}</p>
       </section>
     `;
     ui.deckReveal.classList.add("visible");
-    coreAttachOverlayClose();
+    document.getElementById("online-leave-room")?.addEventListener("click", () => {
+      if (!window.confirm("确定退出房间吗？")) return;
+      window.CardOnline?.send({ type: "leave-room" });
+      coreCloseOverlay();
+      state.online = { playerId: null, roomCode: null, host: false };
+      switchScreen("menu");
+    });
+    document.getElementById("online-deck-choice")?.addEventListener("change", (event) => {
+      state.online.deckKey = event.target.value;
+      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey });
+    });
+    document.getElementById("online-ready-btn")?.addEventListener("click", () => {
+      const nextReady = !ownReady;
+      if (!state.online.deckKey) state.online.deckKey = ownDeck;
+      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey });
+      window.CardOnline?.send({ type: "set-ready", ready: nextReady });
+    });
   }
 
   function coreStartOnlineHost() {
-    state.selectedDecks = { 1: getRandomDeckKey(), 2: getRandomDeckKey() };
-    state.game = coreCreateGame("online", state.selectedDecks, state.selectedBoardSize);
+    state.game = null;
+    state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
+    coreShowOnlineWaiting({ roomCode: state.online.roomCode, boardSize: state.selectedBoardSize, names: { 1: state.playerName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: false } });
+  }
+
+  function coreStartOnlineMatch(message) {
+    state.selectedDecks = message.decks;
+    state.selectedBoardSize = Number(message.boardSize) || 4;
+    state.game = coreCreateGame("online", state.selectedDecks, state.selectedBoardSize, message.firstPlayerId);
+    state.game.players[0].name = message.names?.[1] || "玩家 1";
+    state.game.players[1].name = message.names?.[2] || "玩家 2";
     switchScreen("game");
-    coreRender();
-    coreShowOnlineWaiting();
+    coreShowOpeningReveal(state.game);
+    window.setTimeout(() => {
+      if (!state.game || state.game.currentPhase !== "开局展示") return;
+      coreCloseOverlay();
+      const wonAtStart = coreStartTurn(state.game);
+      coreRender();
+      if (wonAtStart) showResult();
+      else coreOnlineSendState(state.game);
+    }, 5000);
   }
 
   function coreHandleOnlineMessage(message) {
@@ -1670,17 +1791,24 @@
     if (message.type === "room-joined") {
       state.online = { ...state.online, playerId: 2, roomCode: message.roomCode, playerName: message.playerName, host: false };
       coreCloseOverlay();
-      showToast("已加入房间", `你已加入 ${message.opponentName || "玩家 1"} 创建的房间。正在等待对局同步。`);
+      state.selectedBoardSize = message.boardSize || state.selectedBoardSize;
+      state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
+      showToast("已加入房间", `你已加入 ${message.opponentName || "玩家 1"} 创建的房间。`);
+      coreShowOnlineWaiting({ roomCode: message.roomCode, boardSize: state.selectedBoardSize, names: { 1: message.opponentName, 2: state.playerName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: true } });
       return;
     }
-    if (message.type === "peer-joined" && state.online.host && state.game) {
-      coreCloseOverlay();
-      showToast("玩家已加入", `${message.playerName || "玩家 2"} 已加入房间，对局开始。`);
-      state.game.players[0].name = state.online.playerName || "玩家 1";
-      state.game.players[1].name = message.playerName || "玩家 2";
-      coreStartTurn(state.game);
-      coreRender();
-      coreOnlineSendState(state.game);
+    if (message.type === "peer-joined" && state.online.host) {
+      showToast("玩家已加入", `${message.playerName || "玩家 2"} 已加入房间。`);
+      return;
+    }
+    if (message.type === "room-state") {
+      state.online.roomState = message.state;
+      if (!state.online.roomCode || !state.game || state.game.currentPhase === "开局展示") coreShowOnlineWaiting(message.state);
+      return;
+    }
+    if (message.type === "match-start") {
+      showToast("双方已准备", "对局即将开始。");
+      coreStartOnlineMatch(message);
       return;
     }
     if (message.type === "state-sync" && !state.online.host && message.state) {
@@ -1703,6 +1831,26 @@
       return;
     }
     if (message.type === "error") showToast("联网房间", message.message || "联网操作失败。");
+    if (message.type === "peer-left") {
+      if (state.game?.mode === "online") showToast("玩家已断线", "对方已断开连接，5 分钟内重新连接可继续对局。");
+      else showToast("玩家已退出", "房间已释放该玩家席位，可以等待新玩家加入。");
+      return;
+    }
+    if (message.type === "server-shutdown") {
+      coreCloseOverlay();
+      if (state.game?.mode === "online") {
+        state.game.winner = { playerId: 0, text: message.message || "服务器重启，本局平局。" };
+        state.game.finalControlCounts = coreControlMap(state.game).counts;
+        state.game.currentPhase = "胜负结算";
+        state.game.lastResolution = state.game.winner.text;
+        coreRender();
+        showResult();
+      } else {
+        state.game = null;
+        switchScreen("menu");
+        showToast("房间已失效", "服务器重启，等待中的房间已销毁。");
+      }
+    }
   }
 
   function coreShowOnlineLobby() {
@@ -1721,7 +1869,6 @@
         <h2 class="deck-reveal-title">联网对战</h2>
         <p class="deck-reveal-copy">先设定玩家 ID，再创建房间或输入其他玩家提供的房间码加入。</p>
         <div class="online-lobby-actions">
-          <label>玩家 ID<input id="online-player-name" maxlength="12" autocomplete="nickname" placeholder="最多 6 中文或 12 英文"></label>
           <button id="online-create-room" class="primary-btn">创建房间</button>
           <label>房间码<input id="online-room-code" maxlength="6" autocomplete="off" placeholder="例如 A1B2C3"></label>
           <button id="online-join-room" class="secondary-btn">加入房间</button>
@@ -1731,7 +1878,7 @@
     `;
     ui.deckReveal.classList.add("visible");
     coreAttachOverlayClose();
-    const getPlayerName = () => document.getElementById("online-player-name").value.trim();
+    const getPlayerName = () => state.playerName;
     const validatePlayerName = () => {
       const playerName = getPlayerName();
       if (corePlayerNameIsValid(playerName)) return playerName;
@@ -1740,7 +1887,7 @@
     };
     document.getElementById("online-create-room").addEventListener("click", () => {
       const playerName = validatePlayerName();
-      if (playerName && !window.CardOnline.createRoom(playerName)) showToast("联网未连接", "请稍候再创建房间。");
+      if (playerName && !window.CardOnline.createRoom(playerName, state.selectedBoardSize)) showToast("联网未连接", "请稍候再创建房间。");
     });
     document.getElementById("online-join-room").addEventListener("click", () => {
       const roomCode = document.getElementById("online-room-code").value;
@@ -1854,12 +2001,12 @@
           <div class="deck-reveal-versus">VS</div>
           <article class="deck-reveal-side"><p class="label">${second.name} · 后手</p><h3>${getCampDisplayName(second.deckKey)}</h3><p>${summarizeDeck(second.deckCatalog, second.deckKey)}</p></article>
         </div>
-        <button id="core-opening-start" class="primary-btn">开始第 1 回合</button>
+        ${game.mode === "online" ? "" : '<button id="core-opening-start" class="primary-btn">开始第 1 回合</button>'}
       </section>
     `;
     ui.deckReveal.classList.add("visible");
     coreAttachOverlayClose();
-    document.getElementById("core-opening-start").addEventListener("click", () => {
+    document.getElementById("core-opening-start")?.addEventListener("click", () => {
       ui.deckReveal.classList.remove("visible");
       window.setTimeout(() => {
         ui.deckReveal.innerHTML = "";
@@ -1949,6 +2096,8 @@
     }
     await coreSurrender(game);
   });
+  ui.editPlayerIdBtn?.addEventListener("click", () => coreShowPlayerIdModal(false));
+  coreInitializePlayerIdentity();
   const coreDataValidation = coreValidateV2CardData();
   if (coreDataValidation.duplicateIds.length || coreDataValidation.invalidCards.length) {
     console.warn("V2 卡牌数据校验失败", coreDataValidation);

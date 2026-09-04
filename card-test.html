@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V2 Card Test</title>
+  <link rel="stylesheet" href="card-test.css?v=20260903-scene-validation">
+</head>
+<body>
+  <main class="test-shell">
+    <header class="test-header">
+      <div>
+        <p class="eyebrow">V2 CARD TEST</p>
+        <h1>V2 战场技能测试台</h1>
+        <p class="header-copy">自由摆放三方 V2 卡牌，调整战力和归属，再带入主游戏验证技能与交战。</p>
+      </div>
+      <div class="header-actions">
+          <button id="load-duel" class="ghost-btn">载入 V2 交战预设</button>
+        <button id="clear-board" class="ghost-btn">清空战场</button>
+        <a class="primary-link" href="index.html">返回主游戏</a>
+      </div>
+    </header>
+
+    <section class="test-layout">
+      <aside class="panel library-panel">
+        <div class="panel-heading">
+          <p>卡牌库</p>
+          <span id="library-count">0 张</span>
+        </div>
+        <input id="card-search" class="search-input" type="search" placeholder="搜索名称、技能或势力">
+        <div id="camp-filter" class="filter-row"></div>
+        <div id="card-library" class="card-library"></div>
+      </aside>
+
+      <section class="battle-panel">
+        <div class="battle-toolbar">
+          <div class="owner-control">
+            <span>放置归属</span>
+            <button class="owner-btn active" data-owner="1">玩家 1</button>
+            <button class="owner-btn" data-owner="2">玩家 2</button>
+          </div>
+          <label class="toggle-control"><input id="broken-mode" type="checkbox"> 编辑破坏格</label>
+          <p id="placement-hint" class="placement-hint">从左侧选择一张卡牌，再点击战场格子放置。</p>
+        </div>
+        <div id="test-board" class="test-board" aria-label="4乘4测试战场"></div>
+        <div class="battle-footer">
+          <span id="board-summary">玩家 1：0 张 · 玩家 2：0 张 · 破坏格：0</span>
+          <span>点击场上卡牌可编辑；右键可直接移除；拖动可换格。</span>
+        </div>
+      </section>
+
+      <aside class="panel inspector-panel">
+        <div class="panel-heading"><p>卡牌编辑</p><span id="selected-state">未选择</span></div>
+        <div id="inspector-empty" class="inspector-empty">选择左侧卡牌以放置，或点击场上卡牌修改。</div>
+        <div id="inspector-content" hidden>
+          <div class="preview-card" id="selected-preview"></div>
+          <label>当前归属
+            <select id="edit-owner"><option value="1">玩家 1</option><option value="2">玩家 2</option></select>
+          </label>
+          <label>当前战力
+            <input id="edit-attack" type="number" min="-99" max="99" step="1">
+          </label>
+          <div class="inspector-actions">
+            <button id="duplicate-card" class="ghost-btn">复制到待放置</button>
+            <button id="delete-card" class="danger-btn">移除卡牌</button>
+          </div>
+          <p id="selected-effect" class="effect-copy"></p>
+        </div>
+        <div class="panel-divider"></div>
+        <p class="save-title">场景操作</p>
+        <div id="scene-validation" class="scene-validation" aria-live="polite"></div>
+        <button id="copy-scene" class="ghost-btn full-btn">复制场景数据</button>
+        <button id="import-scene" class="ghost-btn full-btn">导入场景数据</button>
+        <button id="open-in-game" class="primary-btn full-btn">带入主游戏测试</button>
+        <textarea id="scene-data" class="scene-data" spellcheck="false" placeholder="这里会显示或粘贴场景数据"></textarea>
+      </aside>
+    </section>
+  </main>
+  <div id="test-toast" class="test-toast" role="status"></div>
+  <script src="card-data.js?v=20260825-1"></script>
+  <script src="v2-card-data.js?v=20260903-v2"></script>
+  <script src="card-test.js?v=20260903-scene-validation"></script>
+</body>
+</html>

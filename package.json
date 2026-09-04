@@ -1,0 +1,16 @@
+{
+  "name": "card-demo-online",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Card Demo V2 web game with Railway-ready realtime rooms",
+  "main": "railway-server.js",
+  "scripts": {
+    "start": "node railway-server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

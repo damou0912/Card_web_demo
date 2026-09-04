@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Card Demo</title>
+  <link rel="stylesheet" href="style.css?v=20260825-card-test">
+</head>
+<body>
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+  <div id="phase-banner" class="phase-banner" aria-live="polite" aria-atomic="true"></div>
+  <div id="deck-reveal" class="deck-reveal" aria-live="polite"></div>
+  <main class="app-shell">
+    <section id="menu-screen" class="screen active">
+      <div class="hero-card">
+        <p class="eyebrow">Card Demo</p>
+        <h1>卡组对战 Demo</h1>
+        <p class="hero-copy">
+          支持本地 1v1 与 PVE 的卡组对战原型。开局选择预设势力牌库，系统随机决定先后手；当前先验证 V2 核心对局流程。
+        </p>
+        <div class="menu-options">
+          <button class="mode-btn selected" data-mode="pvp">本地 1v1</button>
+          <button class="mode-btn" data-mode="pve">PVE 对战 AI</button>
+        </div>
+        <div class="map-options" role="group" aria-label="选择地图大小">
+          <span class="option-label">地图大小</span>
+          <button class="map-btn" data-board-size="3">3x3</button>
+          <button class="map-btn selected" data-board-size="4">4x4</button>
+          <button class="map-btn" data-board-size="5">5x5</button>
+        </div>
+        <button id="start-game-btn" class="primary-btn">开始游戏</button>
+        <a class="test-entry-link" href="card-test.html">打开 Card Test 测试台</a>
+        <div class="rule-note">
+          <p>规则摘要</p>
+          <ul>
+            <li>可选 3x3、4x4 或 5x5 战场，开局生成 2 张中立守军</li>
+            <li>开局选择预设势力牌库，系统随机先后手</li>
+            <li>双方各自携带 20 张牌，从自己的牌库抽卡</li>
+            <li>双方轮流行动，第 1 回合 1 次行动，其余回合 2 次</li>
+            <li>占领超过当前可用区域一半即可立即获胜</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="game-screen" class="screen">
+      <header class="top-bar">
+        <div>
+          <p class="meta-label">模式</p>
+          <p id="mode-label" class="meta-value"></p>
+        </div>
+        <div>
+          <p class="meta-label">回合</p>
+          <p id="turn-label" class="meta-value"></p>
+        </div>
+        <div>
+          <p class="meta-label">阶段</p>
+          <p id="phase-label" class="meta-value"></p>
+        </div>
+        <div>
+          <p class="meta-label">牌库</p>
+          <p id="deck-label" class="meta-value"></p>
+        </div>
+      </header>
+
+      <section class="status-row">
+        <div class="status-card status-log-card">
+          <div class="panel-head">
+            <p class="status-title">行动日志</p>
+            <span id="action-log-turn" class="badge"></span>
+          </div>
+          <div id="action-log-list" class="action-log-list"></div>
+        </div>
+        <div class="status-card large">
+          <p class="status-title">流程提示</p>
+          <p id="status-message" class="status-main"></p>
+          <p id="status-subtext" class="status-sub"></p>
+          <div class="status-inline">
+            <span>当前操作方 <strong id="acting-player-label"></strong></span>
+            <span>本回合行动 <strong id="actions-label"></strong></span>
+          </div>
+        </div>
+        <div class="status-card control-compare-card">
+          <p class="status-title">占领区域比较</p>
+          <div id="control-compare-label" class="control-scoreboard" aria-label="占领区域比较">
+            <div class="control-player control-player-one">
+              <span class="control-player-name">玩家 1</span>
+              <strong class="control-player-score">0</strong>
+            </div>
+            <span class="control-versus">VS</span>
+            <div class="control-player control-player-two">
+              <span class="control-player-name">玩家 2</span>
+              <strong class="control-player-score">0</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="play-area">
+        <aside class="side-panel">
+          <div class="panel-card">
+            <div class="panel-head">
+              <h2>对方玩家</h2>
+              <span id="player2-control" class="badge"></span>
+            </div>
+            <p id="player2-summary" class="panel-copy"></p>
+          </div>
+          <div class="panel-card detail-card">
+            <div class="panel-head">
+              <h2>卡牌详情</h2>
+              <span id="detail-rarity" class="badge"></span>
+            </div>
+            <p id="detail-name" class="detail-name"></p>
+            <p id="detail-skill" class="detail-skill"></p>
+            <p id="detail-summary" class="panel-copy"></p>
+            <div id="detail-tags" class="detail-tags"></div>
+            <div id="detail-lines" class="detail-lines"></div>
+          </div>
+          <div class="panel-card">
+            <div class="panel-head">
+              <h2>我方玩家</h2>
+              <span id="player1-control" class="badge"></span>
+            </div>
+            <p id="player1-summary" class="panel-copy"></p>
+            <p id="selection-summary" class="panel-copy">选择手牌放置，或选择己方场上卡牌移动。</p>
+          </div>
+        </aside>
+
+        <section class="board-panel">
+          <div id="board-stage" class="board-stage">
+            <div id="board-animation-layer" class="board-animation-layer"></div>
+            <div id="board" class="board"></div>
+          </div>
+          <div class="legend">
+            <span><i class="legend-dot player1"></i>玩家 1 卡牌</span>
+            <span><i class="legend-dot player2"></i>玩家 2 卡牌</span>
+            <span><i class="legend-dot guard"></i>中立守军</span>
+            <span><i class="legend-dot control"></i>占领加成</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="hand-section">
+        <div class="hand-header">
+          <h2 id="hand-title">手牌区</h2>
+          <div id="hand-action-count" class="hand-action-count" aria-live="polite">
+            <span>本回合行动</span>
+            <strong>0 / 0</strong>
+          </div>
+          <div class="action-buttons">
+            <button id="submit-action-btn" class="primary-btn">执行行动</button>
+            <button id="end-turn-btn" class="secondary-btn">结束回合</button>
+            <button id="surrender-btn" class="surrender-btn">认输</button>
+            <button id="cancel-selection-btn" class="secondary-btn">取消选择</button>
+            <button id="restart-btn" class="secondary-btn">重新开始</button>
+            <button id="back-menu-btn" class="secondary-btn">返回主菜单</button>
+          </div>
+        </div>
+        <div id="hand-cards" class="hand-cards"></div>
+      </section>
+    </section>
+
+    <section id="result-screen" class="screen">
+      <div class="hero-card result-card">
+        <p class="eyebrow">对局结果</p>
+        <h2 id="winner-title"></h2>
+        <p id="winner-subtitle" class="hero-copy"></p>
+        <div id="winner-control-summary" class="winner-control-summary" aria-live="polite"></div>
+        <div class="result-columns">
+          <div>
+            <h3>玩家 1 卡组</h3>
+            <p id="deck-summary-player1" class="panel-copy"></p>
+          </div>
+          <div>
+            <h3>玩家 2 卡组</h3>
+            <p id="deck-summary-player2" class="panel-copy"></p>
+          </div>
+        </div>
+        <div id="winner-comparison" class="winner-comparison" aria-live="polite"></div>
+        <div class="action-buttons centered">
+          <button id="result-restart-btn" class="primary-btn">再来一局</button>
+          <button id="result-menu-btn" class="secondary-btn">返回主菜单</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="card-data.js?v=20260817-3"></script>
+  <script src="v2-card-data.js?v=20260903-v2"></script>
+  <script src="script.js?v=20260825-card-test"></script>
+  <script src="core-v2.js?v=20260903-card-test-v2"></script>
+</body>
+</html>

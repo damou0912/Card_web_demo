@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+*.log
+*.ndjson
+browser_*.json
+*_probe.json
+outputs/
+.tmp-*/
+.codex_tmp/
+card-game-web-files.zip

@@ -6,7 +6,7 @@
 
 - 正式入口：`index.html`。
 - 卡牌数据：`v2-card-data.js`，蜀、魏、吴各 20 张。
-- 旧版 `card-data.js` 已移除，`new-card-game` 仅保留为历史试验目录，不进入正式入口。
+- 旧版 `card-data.js` 与 `new-card-game` 旧引擎已停用，正式入口只进入 V2 规则核心。
 - 技能概要字段已删除，技能效果直接读取 `effect`。
 
 ## 当前实现

@@ -99,6 +99,30 @@ function parseRoomGame(room) {
   }
 }
 
+function stateForViewer(state, viewerId) {
+  if (!state) return state;
+  // Player 1 is the browser-side rules host and must retain both hands to resolve player 2 actions.
+  if (Number(viewerId) === 1) return state;
+  try {
+    const game = typeof state === "string" ? JSON.parse(state) : JSON.parse(JSON.stringify(state));
+    game.players = (game.players || []).map((player) => {
+      if (Number(player.id) === Number(viewerId)) return player;
+      return {
+        ...player,
+        hand: Array.isArray(player.hand) ? player.hand.map((card) => ({ uid: card.uid, hidden: true })) : [],
+        drawPile: Array.isArray(player.drawPile) ? player.drawPile.map(() => ({ hidden: true })) : []
+      };
+    });
+    return JSON.stringify(game);
+  } catch (_error) {
+    return state;
+  }
+}
+
+function sendGameState(socket, state) {
+  send(socket, { type: "state-sync", state: stateForViewer(state, socket.playerId) });
+}
+
 function validCell(cell, size) {
   return Number.isInteger(cell?.row) && Number.isInteger(cell?.col)
     && cell.row >= 0 && cell.row < size && cell.col >= 0 && cell.col < size;
@@ -126,6 +150,9 @@ function validateActionRequest(room, playerId, action) {
   const card = cards.find((entry) => entry.uid === action.cardUid && Number(entry.ownerId) === playerId);
   if (!card || !validCell(action.source, size) || !validCell(action.target, size)
     || card.row !== action.source.row || card.col !== action.source.col) return "移动卡牌或位置无效。";
+  if (action.source.row === action.target.row && action.source.col === action.target.col) return "移动目标必须不同于原位置。";
+  const targetCard = cards.find((entry) => entry.row === action.target.row && entry.col === action.target.col);
+  if (targetCard?.uid === card.uid) return "不能与自身交战。";
   if (card.restedTurn === game.turn || card.lastMovedTurn === game.turn) return "该卡牌本回合不能再次主动移动。";
   return null;
 }
@@ -192,7 +219,7 @@ websocket.on("connection", (socket) => {
       socket.playerId = joinId;
       socket.sessionToken = sessionToken;
       send(socket, { type: "room-joined", roomCode, playerId: joinId, playerName, opponentName: room.names[joinId === 1 ? 2 : 1], boardSize: room.boardSize, sessionToken });
-      if (room.state) send(socket, { type: "state-sync", state: room.state });
+      if (room.state) sendGameState(socket, room.state);
       broadcast(room, { type: "peer-joined", playerId: joinId, playerName }, socket);
       broadcast(room, { type: "room-state", state: roomState(room) });
       return;
@@ -211,7 +238,7 @@ websocket.on("connection", (socket) => {
       socket.roomCode = roomCode;
       socket.playerId = playerId;
       socket.sessionToken = room.tokens[playerId];
-      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: room.state, sessionToken: room.tokens[playerId] });
+      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: stateForViewer(room.state, playerId), sessionToken: room.tokens[playerId] });
       if (room.players[1] && room.players[2]) broadcast(room, { type: "peer-reconnected", playerId });
       return;
     }
@@ -221,6 +248,10 @@ websocket.on("connection", (socket) => {
       if (message.type === "state-sync") {
         if (socket.playerId !== 1) return;
         room.state = message.state || null;
+        [room.players[1], room.players[2]].forEach((peer) => {
+          if (peer && peer !== socket) sendGameState(peer, room.state);
+        });
+        return;
       }
       broadcast(room, { ...message, playerId: socket.playerId }, socket);
       return;

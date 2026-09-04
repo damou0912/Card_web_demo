@@ -362,10 +362,29 @@
   function coreRunStartSkills(game, active) {
     game.effectBoardCards = game.boardCards;
     const snapshot = [...game.boardCards];
-    for (const card of snapshot) {
-      if (card.ownerId !== active.id || !game.boardCards.includes(card)) continue;
-      coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player: active, card });
-      if (coreCheckVictory(game)) break;
+    const previousStartContext = game.v2StartContext;
+    const startContext = { processed: new Set(), pendingExtras: new Map() };
+    game.v2StartContext = startContext;
+    const flushExtras = (card) => {
+      const count = startContext.pendingExtras.get(card.uid) || 0;
+      if (!count || !game.boardCards.includes(card)) return;
+      startContext.pendingExtras.delete(card.uid);
+      for (let index = 0; index < count; index += 1) {
+        if (!game.boardCards.includes(card)) break;
+        coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player: active, card });
+      }
+    };
+    try {
+      for (const card of snapshot) {
+        if (card.ownerId !== active.id || !game.boardCards.includes(card)) continue;
+        coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player: active, card });
+        startContext.processed.add(card.uid);
+        // Any extra trigger queued before this card's normal skill now resolves immediately after it.
+        flushExtras(card);
+        if (coreCheckVictory(game)) break;
+      }
+    } finally {
+      game.v2StartContext = previousStartContext;
     }
     coreEnforceZeroDestroy(game, game.roundLog);
     const won = coreCheckVictory(game);
@@ -446,7 +465,17 @@
     if (card.id === "0114") {
       [...game.boardCards]
         .filter((target) => target.ownerId === player.id && target.uid !== card.uid && game.boardCards.includes(target))
-        .forEach((target) => coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player, card: target }));
+        .forEach((target) => {
+          const context = game.v2StartContext;
+          if (!context) {
+            coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player, card: target });
+          } else if (context.processed.has(target.uid)) {
+            // The target's normal skill has already resolved this turn.
+            coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player, card: target });
+          } else {
+            context.pendingExtras.set(target.uid, (context.pendingExtras.get(target.uid) || 0) + 1);
+          }
+        });
     }
     if (card.id === "0115") {
       if (game.boardCards.filter((target) => target.ownerId === player.id).length < game.boardCards.filter((target) => target.ownerId !== player.id).length) game.extraActions = (game.extraActions || 0) + 1;
@@ -921,36 +950,50 @@
     const defenderValue = defender.currentAttack;
     if (attackerValue > defenderValue) {
       const pos = { row: defender.row, col: defender.col };
-      if (coreDestroyV2Card(game, defender, log, attacker)) {
+      const defenderDestroyed = coreDestroyV2Card(game, defender, log, attacker);
+      if (defenderDestroyed) {
         const from = { row: attacker.row, col: attacker.col };
         attacker.row = pos.row; attacker.col = pos.col;
         if (typeof queueSkillMoveAnimation === "function") queueSkillMoveAnimation(game, attacker, from, pos, "技能攻击移动");
         coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, { card: attacker, source: from, target: pos });
       }
+      if (attacker.id === "0116" && defenderDestroyed) drawOneCard(game, player);
     } else if (attackerValue < defenderValue) coreDestroyV2Card(game, attacker, log, defender);
-    else { coreDestroyV2Card(game, attacker, log, defender); coreDestroyV2Card(game, defender, log, attacker); }
+    else {
+      coreDestroyV2Card(game, attacker, log, defender);
+      const defenderDestroyed = coreDestroyV2Card(game, defender, log, attacker);
+      if (attacker.id === "0116" && defenderDestroyed) drawOneCard(game, player);
+    }
   }
 
   function coreDestroyV2Card(game, card, log, causeCard = null) {
     if (!card || !game.boardCards.some((item) => item.uid === card.uid)) return false;
     const original = { row: card.row, col: card.col };
+    if (card.id === "0113" && !card.v2Protected) { card.v2Protected = true; coreSetAttack(game, card, 1, true); log.push(`${card.name} 首次被摧毁时保留在原格，战力变为1。`); return false; }
+    if (card.id === "0302" && !card.v2DestroyTriggered && !isBrokenCell(game, card.row, card.col)) { card.v2DestroyTriggered = true; coreSetAttack(game, card, 1, true); log.push(`${card.name} 被摧毁时保留在原格，战力变为1。`); return false; }
+    if (card.id === "0316" && !card.v2DestroyTriggered) { card.v2DestroyTriggered = true; coreSetAttack(game, card, 4, true); card.restedTurn = game.turn; card.v2CannotMoveTurn = game.turn; log.push(`${card.name} 首次被摧毁时保留并将战力变为4。`); return false; }
+    // A card's own destruction replacement takes precedence over protections granted by another card.
     if (card.v2ProtectedUntilTurn === game.turn) {
       card.v2ProtectedUntilTurn = null;
       coreSetAttack(game, card, 1, true);
       log.push(`${card.name} 触发保护，保留在原格并将战力变为1。`);
       return false;
     }
-    if (card.id === "0113" && !card.v2Protected) { card.v2Protected = true; coreSetAttack(game, card, 1, true); log.push(`${card.name} 首次被摧毁时保留在原格，战力变为1。`); return false; }
-    if (card.id === "0302" && !card.v2DestroyTriggered && !isBrokenCell(game, card.row, card.col)) { card.v2DestroyTriggered = true; coreSetAttack(game, card, 1, true); log.push(`${card.name} 被摧毁时保留在原格，战力变为1。`); return false; }
-    if (card.id === "0316" && !card.v2DestroyTriggered) { card.v2DestroyTriggered = true; coreSetAttack(game, card, 4, true); card.restedTurn = game.turn; card.v2CannotMoveTurn = game.turn; log.push(`${card.name} 首次被摧毁时保留并将战力变为4。`); return false; }
     const adjacentProtectors = card.id === "0118" ? [] : game.boardCards.filter((item) => item.ownerId === card.ownerId && item.id === "0118" && item.uid !== card.uid && Math.abs(item.row - card.row) + Math.abs(item.col - card.col) === 1);
-    const adjacentProtector = adjacentProtectors[0];
+    const adjacentProtector = corePickRandom(adjacentProtectors);
     if (adjacentProtector) { coreDestroyV2Card(game, adjacentProtector, log, causeCard); log.push(`${adjacentProtector.name} 代替 ${card.name} 被摧毁。`); return false; }
     const weiProtector = game.boardCards.find((item) => item.ownerId === card.ownerId && item.id === "0210" && item.uid !== card.uid && Math.abs(item.row - card.row) + Math.abs(item.col - card.col) === 1 && card.currentAttack > 1);
-    if (weiProtector && coreSetAttack(game, card, 0, false)) {
-      log.push(`${weiProtector.name} 使 ${card.name} 保留且战力变为0。`);
-      coreEnforceZeroDestroy(game, log);
-      return !game.boardCards.includes(card);
+    if (weiProtector) {
+      if (!coreCanReduceAttack(game, card)) {
+        // Cao Cao blocks the attack reduction, but does not cancel Cao Ren's protection.
+        log.push(`${weiProtector.name} 使 ${card.name} 保留；曹操使其战力维持不变。`);
+        return false;
+      }
+      if (coreSetAttack(game, card, 0, false)) {
+        log.push(`${weiProtector.name} 使 ${card.name} 保留且战力变为0。`);
+        coreEnforceZeroDestroy(game, log);
+        return !game.boardCards.includes(card);
+      }
     }
     const index = game.boardCards.findIndex((item) => item.uid === card.uid);
     game.boardCards.splice(index, 1);
@@ -1049,7 +1092,8 @@
     const cells = [];
     const directions = [{ row: -1, col: 0 }, { row: 1, col: 0 }, { row: 0, col: -1 }, { row: 0, col: 1 }];
     const canUseLongMove = card.id === "0211" && !card.v2LongMoveUsed;
-    const canCharge = card.id === "0109" && coreEnemyNeighbors(game, card).length > 0;
+    // 马超本回合始终拥有 1 格或 2 格主动移动选项；起始技能的邻敌条件只影响战力加成。
+    const canCharge = card.id === "0109";
     const maxSteps = canUseLongMove
       ? coreBoardSize(game)
       : canCharge ? 2 : 1;
@@ -1141,6 +1185,10 @@
     if (!player || !card) {
       return false;
     }
+    if (action.type === "move" && (!action.source || card.row !== action.source.row || card.col !== action.source.col
+      || !action.target || (card.row === action.target.row && card.col === action.target.col))) {
+      return false;
+    }
     game.isAnimating = true;
     game.flowPrompt = "";
     game.currentPhase = "行动阶段";
@@ -1168,8 +1216,9 @@
       const skillLog = [];
       const extraPlacementSourceUid = player.v2NextPlacementExtra;
       coreApplyV2PlacementSkill(game, player, card, skillLog);
-      if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid && game.boardCards.includes(card)) {
-        coreApplyV2PlacementSkill(game, player, card, skillLog);
+      if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
+        // The marker belongs to this placement even when the original skill removes the card.
+        if (game.boardCards.includes(card)) coreApplyV2PlacementSkill(game, player, card, skillLog);
         if (player.v2NextPlacementExtra === extraPlacementSourceUid) player.v2NextPlacementExtra = null;
         skillLog.push(`${card.name} 的放置技能额外结算 1 次。`);
       }
@@ -1179,6 +1228,12 @@
       coreAppendLog(game, `${player.name} 将 ${card.name} 放置在 ${formatCell(card.row, card.col)}，该卡本回合进入休整。`);
     } else {
       const defender = getBoardCardAt(game, action.target.row, action.target.col);
+      if (defender?.uid === card.uid) {
+        game.isAnimating = false;
+        coreAppendLog(game, `${player.name} 的 ${card.name} 移动请求无效：目标卡牌与自身相同。`);
+        coreRender();
+        return false;
+      }
       const sourcePosition = { row: card.row, col: card.col };
       if (card.id === "0211" && !card.v2LongMoveUsed) card.v2LongMoveUsed = true;
       card.lastMovedTurn = game.turn;
@@ -1210,8 +1265,8 @@
           coreAppendLog(game, `${card.name} 攻击 ${defender.name} 失败，攻击方被摧毁。`);
         } else {
           coreDestroyV2Card(game, card, combatLog, defender);
-          coreDestroyV2Card(game, defender, combatLog, card);
-          if (card.id === "0116") drawOneCard(game, player);
+          const defenderDestroyed = coreDestroyV2Card(game, defender, combatLog, card);
+          if (card.id === "0116" && defenderDestroyed) drawOneCard(game, player);
           coreAppendLog(game, `${card.name} 与 ${defender.name} 同归于尽。`);
         }
         combatLog.forEach((entry) => coreAppendLog(game, entry));
@@ -1618,6 +1673,9 @@
     const game = state.game;
     if (!game) return;
     const active = corePlayer(game, game.activePlayerId);
+    const handOwner = game.mode === "online"
+      ? corePlayer(game, state.online?.playerId) || active
+      : active;
     const control = coreControlMap(game);
     const target = coreVictoryTarget(game);
     ui.modeLabel.textContent = `${game.mode === "pve" ? "PVE" : "本地 1v1"} · ${game.boardSize}x${game.boardSize}`;
@@ -1649,7 +1707,7 @@
         ui.player2Summary.textContent = copy;
       }
     });
-    ui.handTitle.textContent = `${active.name} 的手牌`;
+    ui.handTitle.textContent = `${handOwner.name} 的手牌`;
     ui.submitActionBtn.hidden = true;
     ui.submitActionBtn.disabled = true;
     ui.cancelSelectionBtn.disabled = game.isAnimating;
@@ -1670,7 +1728,7 @@
       ui.selectionSummary.textContent = "选择手牌放置，或选择未休整且未移动过的己方卡牌移动。";
     }
     const selectedCard = game.boardCards.find((card) => card.uid === game.selection.boardCardUid)
-      || active.hand.find((card) => card.uid === game.selection.handCardUid);
+      || handOwner.hand.find((card) => card.uid === game.selection.handCardUid);
     ui.detailRarity.textContent = selectedCard ? getCardTierLabel(selectedCard) : "未选择";
     ui.detailName.textContent = selectedCard ? selectedCard.name : "选择一张卡牌";
     ui.detailSkill.textContent = selectedCard ? selectedCard.skill : "悬停或选择卡牌查看技能";
@@ -1688,7 +1746,7 @@
       ui.actionLogList.appendChild(item);
     });
     coreRenderBoard(game, active, control);
-    coreRenderHand(game, active);
+    coreRenderHand(game, handOwner);
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => coreFitSingleLineText(ui.board));
     else window.setTimeout(() => coreFitSingleLineText(ui.board), 0);
   }

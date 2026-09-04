@@ -86,6 +86,15 @@
     } else if (!state.playerName) {
       coreShowPlayerIdModal(true);
     }
+    try {
+      const lastRoom = JSON.parse(window.localStorage?.getItem("cardDemoOnlineRoom") || "null");
+      if (lastRoom?.roomCode && state.playerName && window.CardOnline) {
+        state.online = { playerId: null, roomCode: lastRoom.roomCode, playerName: state.playerName, host: false };
+        state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
+        window.CardOnline.connect();
+        window.setTimeout(() => window.CardOnline.resumeRoom(lastRoom.roomCode, state.playerName), 250);
+      }
+    } catch (_error) { /* ignore invalid saved room */ }
   }
 
   function corePlayer(game, playerId) {
@@ -1784,12 +1793,14 @@
     if (!message) return;
     if (message.type === "room-created") {
       state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, host: true };
+      try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName })); } catch (_error) { /* ignore */ }
       coreStartOnlineHost();
       state.game.players[0].name = message.playerName;
       return;
     }
     if (message.type === "room-joined") {
       state.online = { ...state.online, playerId: 2, roomCode: message.roomCode, playerName: message.playerName, host: false };
+      try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName })); } catch (_error) { /* ignore */ }
       coreCloseOverlay();
       state.selectedBoardSize = message.boardSize || state.selectedBoardSize;
       state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
@@ -1809,6 +1820,36 @@
     if (message.type === "match-start") {
       showToast("双方已准备", "对局即将开始。");
       coreStartOnlineMatch(message);
+      return;
+    }
+    if (message.type === "room-resumed") {
+      state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, host: message.playerId === 1 };
+      if (message.started && message.state) {
+        state.game = coreDeserializeOnlineGame(message.state);
+        switchScreen("game");
+        coreRender();
+        showToast("已恢复对局", "已回到断线前的对局状态。");
+      } else {
+        coreShowOnlineWaiting(message.state || { roomCode: message.roomCode, boardSize: message.boardSize, names: {}, ready: {}, hasPlayers: {} });
+      }
+      return;
+    }
+    if (message.type === "resume-failed") {
+      try { window.localStorage?.removeItem("cardDemoOnlineRoom"); } catch (_error) { /* ignore */ }
+      state.game = null;
+      coreCloseOverlay();
+      switchScreen("menu");
+      showToast("房间已失效", message.message || "原房间不存在。");
+      return;
+    }
+    if (message.type === "auto-surrender") {
+      if (state.game?.mode === "online") {
+        state.game.winner = { playerId: state.online.playerId, text: message.message || "对方断线超过 5 分钟，视为自动认输。" };
+        state.game.currentPhase = "胜负结算";
+        state.game.lastResolution = state.game.winner.text;
+        coreRender();
+        showResult();
+      }
       return;
     }
     if (message.type === "state-sync" && !state.online.host && message.state) {

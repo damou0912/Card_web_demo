@@ -55,9 +55,22 @@ function removeSocket(socket) {
     room.ready[socket.playerId] = false;
     room.decks[socket.playerId] = null;
     broadcast(room, { type: "room-state", state: roomState(room) }, socket);
+  } else {
+    room.disconnectedAt[socket.playerId] = Date.now();
+    if (!room.disconnectTimer) {
+      room.disconnectTimer = setTimeout(() => {
+        if (!rooms.has(room.code)) return;
+        const firstDrop = Math.min(...Object.values(room.disconnectedAt).filter(Boolean));
+        const loserId = room.disconnectedAt[1] === firstDrop ? 1 : 2;
+        const winner = room.players[loserId === 1 ? 2 : 1];
+        if (winner) send(winner, { type: "auto-surrender", loserId, message: "对方断线超过 5 分钟，视为自动认输。" });
+        [room.players[1], room.players[2]].forEach((peer) => peer?.close());
+        rooms.delete(room.code);
+      }, 5 * 60 * 1000);
+    }
   }
   broadcast(room, { type: "peer-left", playerId: socket.playerId }, socket);
-  if (!room.players[1] && !room.players[2]) rooms.delete(socket.roomCode);
+  if (!room.players[1] && !room.players[2] && !room.started) rooms.delete(socket.roomCode);
 }
 
 function roomState(room) {
@@ -67,7 +80,8 @@ function roomState(room) {
     names: room.names,
     ready: room.ready,
     hasPlayers: { 1: Boolean(room.players[1]), 2: Boolean(room.players[2]) },
-    started: room.started
+    started: room.started,
+    disconnectedAt: room.disconnectedAt
   };
 }
 
@@ -107,7 +121,7 @@ websocket.on("connection", (socket) => {
       const playerName = normalizePlayerName(message.playerName);
       const roomCode = makeRoomCode();
       const boardSize = [3, 4, 5].includes(Number(message.boardSize)) ? Number(message.boardSize) : 4;
-      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, state: null, players: { 1: socket, 2: null } };
+      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
@@ -118,18 +132,33 @@ websocket.on("connection", (socket) => {
     if (message.type === "join-room") {
       const roomCode = String(message.roomCode || "").trim().toUpperCase();
       const room = rooms.get(roomCode);
-      if (!room || room.players[2]) return send(socket, { type: "error", message: "房间不存在或已满。" });
+      const joinId = room && !room.players[1] ? 1 : 2;
+      if (!room || room.players[joinId]) return send(socket, { type: "error", message: "房间不存在或已满。" });
       if (socket.roomCode) return;
       if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
       const playerName = normalizePlayerName(message.playerName);
-      room.players[2] = socket;
-      room.names[2] = playerName;
+      room.players[joinId] = socket;
+      room.names[joinId] = playerName;
       socket.roomCode = roomCode;
-      socket.playerId = 2;
-      send(socket, { type: "room-joined", roomCode, playerId: 2, playerName, opponentName: room.names[1], boardSize: room.boardSize });
+      socket.playerId = joinId;
+      send(socket, { type: "room-joined", roomCode, playerId: joinId, playerName, opponentName: room.names[joinId === 1 ? 2 : 1], boardSize: room.boardSize });
       if (room.state) send(socket, { type: "state-sync", state: room.state });
-      broadcast(room, { type: "peer-joined", playerId: 2, playerName }, socket);
+      broadcast(room, { type: "peer-joined", playerId: joinId, playerName }, socket);
       broadcast(room, { type: "room-state", state: roomState(room) });
+      return;
+    }
+    if (message.type === "resume-room") {
+      const roomCode = String(message.roomCode || "").trim().toUpperCase();
+      const room = rooms.get(roomCode);
+      const playerName = normalizePlayerName(message.playerName);
+      const playerId = room && room.names[1] === playerName ? 1 : room && room.names[2] === playerName ? 2 : null;
+      if (!room || !playerId || room.players[playerId] || !room.disconnectedAt[playerId] || Date.now() - room.disconnectedAt[playerId] > 5 * 60 * 1000) return send(socket, { type: "resume-failed", message: "原房间不存在或已超过重连时间。" });
+      room.players[playerId] = socket;
+      room.disconnectedAt[playerId] = null;
+      socket.roomCode = roomCode;
+      socket.playerId = playerId;
+      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: room.state });
+      if (room.players[1] && room.players[2]) broadcast(room, { type: "peer-reconnected", playerId });
       return;
     }
     const room = rooms.get(socket.roomCode);

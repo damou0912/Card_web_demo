@@ -41,6 +41,10 @@ function makeRoomCode() {
   return code;
 }
 
+function makeSessionToken() {
+  return crypto.randomBytes(24).toString("base64url");
+}
+
 function broadcast(room, message, except = null) {
   [room.players[1], room.players[2]].forEach((socket) => {
     if (socket && socket !== except) send(socket, message);
@@ -85,6 +89,47 @@ function roomState(room) {
   };
 }
 
+function parseRoomGame(room) {
+  if (!room?.state) return null;
+  try {
+    const game = typeof room.state === "string" ? JSON.parse(room.state) : room.state;
+    return game && typeof game === "object" ? game : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function validCell(cell, size) {
+  return Number.isInteger(cell?.row) && Number.isInteger(cell?.col)
+    && cell.row >= 0 && cell.row < size && cell.col >= 0 && cell.col < size;
+}
+
+function validateActionRequest(room, playerId, action) {
+  const game = parseRoomGame(room);
+  if (!game || game.winner || game.activePlayerId !== playerId) return "当前不是你的行动回合。";
+  const actionLimit = (Number(game.turn) === 1 ? 1 : 2) + (Number(game.extraActions) || 0);
+  if (Number(game.actionsUsed) >= actionLimit) return "本回合行动次数已用尽。";
+  if (!action || !["place", "move"].includes(action.type) || action.playerId !== playerId) return "行动数据无效。";
+  const size = [3, 4, 5].includes(Number(room.boardSize)) ? Number(room.boardSize) : 4;
+  const cards = Array.isArray(game.boardCards) ? game.boardCards : [];
+  const players = Array.isArray(game.players) ? game.players : [];
+  const player = players.find((entry) => Number(entry.id) === playerId);
+  if (!player) return "玩家状态无效。";
+  if (action.type === "place") {
+    const inHand = Array.isArray(player.hand) && player.hand.some((card) => card.uid === action.cardUid);
+    if (!inHand || !validCell(action.target, size)) return "放置位置或卡牌无效。";
+    const broken = new Set((game.brokenCells || []).map((cell) => `${cell.row},${cell.col}`));
+    if (broken.has(`${action.target.row},${action.target.col}`)) return "不能放置在破坏格。";
+    if (cards.some((card) => card.row === action.target.row && card.col === action.target.col)) return "目标格已有卡牌。";
+    return null;
+  }
+  const card = cards.find((entry) => entry.uid === action.cardUid && Number(entry.ownerId) === playerId);
+  if (!card || !validCell(action.source, size) || !validCell(action.target, size)
+    || card.row !== action.source.row || card.col !== action.source.col) return "移动卡牌或位置无效。";
+  if (card.restedTurn === game.turn || card.lastMovedTurn === game.turn) return "该卡牌本回合不能再次主动移动。";
+  return null;
+}
+
 const server = http.createServer((request, response) => {
   let requestedPath = decodeURIComponent((request.url || "/").split("?")[0]);
   if (requestedPath === "/") requestedPath = "/index.html";
@@ -121,11 +166,13 @@ websocket.on("connection", (socket) => {
       const playerName = normalizePlayerName(message.playerName);
       const roomCode = makeRoomCode();
       const boardSize = [3, 4, 5].includes(Number(message.boardSize)) ? Number(message.boardSize) : 4;
-      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null } };
+      const sessionToken = makeSessionToken();
+      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
-      send(socket, { type: "room-created", roomCode, playerId: 1, playerName, boardSize });
+      socket.sessionToken = sessionToken;
+      send(socket, { type: "room-created", roomCode, playerId: 1, playerName, boardSize, sessionToken });
       send(socket, { type: "room-state", state: roomState(room) });
       return;
     }
@@ -137,11 +184,14 @@ websocket.on("connection", (socket) => {
       if (socket.roomCode) return;
       if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
       const playerName = normalizePlayerName(message.playerName);
+      const sessionToken = makeSessionToken();
       room.players[joinId] = socket;
       room.names[joinId] = playerName;
+      room.tokens[joinId] = sessionToken;
       socket.roomCode = roomCode;
       socket.playerId = joinId;
-      send(socket, { type: "room-joined", roomCode, playerId: joinId, playerName, opponentName: room.names[joinId === 1 ? 2 : 1], boardSize: room.boardSize });
+      socket.sessionToken = sessionToken;
+      send(socket, { type: "room-joined", roomCode, playerId: joinId, playerName, opponentName: room.names[joinId === 1 ? 2 : 1], boardSize: room.boardSize, sessionToken });
       if (room.state) send(socket, { type: "state-sync", state: room.state });
       broadcast(room, { type: "peer-joined", playerId: joinId, playerName }, socket);
       broadcast(room, { type: "room-state", state: roomState(room) });
@@ -152,12 +202,16 @@ websocket.on("connection", (socket) => {
       const room = rooms.get(roomCode);
       const playerName = normalizePlayerName(message.playerName);
       const playerId = room && room.names[1] === playerName ? 1 : room && room.names[2] === playerName ? 2 : null;
-      if (!room || !playerId || room.players[playerId] || !room.disconnectedAt[playerId] || Date.now() - room.disconnectedAt[playerId] > 5 * 60 * 1000) return send(socket, { type: "resume-failed", message: "原房间不存在或已超过重连时间。" });
+      const providedToken = typeof message.sessionToken === "string" ? Buffer.from(message.sessionToken) : Buffer.alloc(0);
+      const expectedToken = Buffer.from((room && playerId && room.tokens[playerId]) || "");
+      const tokenMatches = providedToken.length === expectedToken.length && providedToken.length > 0 && crypto.timingSafeEqual(providedToken, expectedToken);
+      if (!room || !playerId || !tokenMatches || room.players[playerId] || !room.disconnectedAt[playerId] || Date.now() - room.disconnectedAt[playerId] > 5 * 60 * 1000) return send(socket, { type: "resume-failed", message: "原房间不存在、会话已失效或已超过重连时间。" });
       room.players[playerId] = socket;
       room.disconnectedAt[playerId] = null;
       socket.roomCode = roomCode;
       socket.playerId = playerId;
-      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: room.state });
+      socket.sessionToken = room.tokens[playerId];
+      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: room.state, sessionToken: room.tokens[playerId] });
       if (room.players[1] && room.players[2]) broadcast(room, { type: "peer-reconnected", playerId });
       return;
     }
@@ -172,8 +226,18 @@ websocket.on("connection", (socket) => {
       return;
     }
     if (["action-request", "end-turn-request", "surrender-request"].includes(message.type)) {
-      if (socket.playerId !== 2) return;
-      send(room.players[1], { ...message, playerId: socket.playerId });
+      if (!room.started || !socket.playerId) return;
+      const playerId = socket.playerId;
+      if (message.type === "action-request") {
+        const validationError = validateActionRequest(room, playerId, message.action && { ...message.action, playerId });
+        if (validationError) return send(socket, { type: "action-rejected", message: validationError });
+      } else {
+        const game = parseRoomGame(room);
+        if (game && game.activePlayerId !== playerId) return send(socket, { type: "action-rejected", message: "当前不是你的行动回合。" });
+      }
+      // The host remains the rules engine for now; route every request through
+      // the server so both clients use the same ordered action stream.
+      broadcast(room, { ...message, playerId: socket.playerId });
       return;
     }
     if (message.type === "set-deck" && !room.started) {

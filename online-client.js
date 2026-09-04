@@ -36,7 +36,7 @@
     disconnect,
     createRoom: (playerName, boardSize) => send({ type: "create-room", playerName, boardSize }),
     joinRoom: (roomCode, playerName) => send({ type: "join-room", roomCode, playerName }),
-    resumeRoom: (roomCode, playerName) => send({ type: "resume-room", roomCode, playerName }),
+    resumeRoom: (roomCode, playerName, sessionToken) => send({ type: "resume-room", roomCode, playerName, sessionToken }),
     send,
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     get connected() { return connected; }

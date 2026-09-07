@@ -221,6 +221,11 @@ function getAvailableDeckKeys() {
   return [...new Set(GAME_CARD_SLOT_TEMPLATES.map((slot) => slot.camp).filter(Boolean))];
 }
 
+function getRandomDeckKey() {
+  const decks = getAvailableDeckKeys();
+  return decks.length ? decks[randomInt(0, decks.length - 1)] : "三国~魏";
+}
+
 function otherPlayerId(playerId) {
   return playerId === 1 ? 2 : 1;
 }

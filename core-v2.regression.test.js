@@ -11,7 +11,7 @@ function createElement() {
     appendChild(child) { this.children.push(child); return child; },
     removeChild() {}, replaceChildren() {}, addEventListener() {}, removeEventListener() {},
     querySelector() { return createElement(); }, querySelectorAll() { return []; }, closest() { return null; },
-    setAttribute() {}, removeAttribute() {}, focus() {}
+    setAttribute() {}, removeAttribute() {}, focus() {}, getBoundingClientRect() { return { left: 0, top: 0, width: 400, height: 400 }; }
   };
 }
 
@@ -43,12 +43,16 @@ const validation = context.validateCoreV2CardData();
 const result = context.runCoreV2RegressionTests();
 const boundary = context.runCoreV2CardBoundaryTests();
 const cardIds = new Set(context.CARD_LIBRARY.cardSlots.map((card) => card.id));
+const invalidEffectTags = context.CARD_LIBRARY.cardSlots
+  .flatMap((card) => (Array.isArray(card.effectTags) ? card.effectTags : (card.effectTag ? [card.effectTag] : []))
+    .filter((tag) => [...String(tag)].length !== 2)
+    .map(() => card.id));
 const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.duplicateIds.length || validation.invalidCards.length || result.failed || boundary.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length) {
-  console.error(JSON.stringify({ validation, result, boundary, coverage }, null, 2));
+if (validation.duplicateIds.length || validation.invalidCards.length || invalidEffectTags.length || result.failed || boundary.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length) {
+  console.error(JSON.stringify({ validation, invalidEffectTags, result, boundary, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);

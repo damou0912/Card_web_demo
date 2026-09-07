@@ -93,6 +93,8 @@ function makeCardTemplate(campKey, slot, index) {
     rarity: quality,
     attack: slot.attack,
     skill: slot.skill || "无",
+    effectTags: Array.isArray(slot.effectTags) ? [...slot.effectTags] : (slot.effectTag ? [slot.effectTag] : []),
+    effectTag: slot.effectTag || "",
     effectId: slot.effectId || "none",
     effect: slot.effect || "无",
     image: slot.image || null
@@ -149,29 +151,6 @@ function pickBrokenCells() {
     }
   }
   return blocked;
-}
-
-function createReinforcementCard(playerId) {
-  return {
-    id: `reinforcement-${Math.random().toString(36).slice(2, 8)}`,
-    uid: `reinforcement-${Math.random().toString(36).slice(2, 10)}`,
-    name: "援兵",
-    type: "援",
-    camp: "无势力",
-    quality: "援兵",
-    rarity: "援兵",
-    attack: 1,
-    currentAttack: 1,
-    skill: "无",
-    effectId: "none",
-    effect: "无技能。",
-    image: null,
-    ownerId: playerId,
-    buffCap: 1,
-    movesTaken: 0,
-    isSpecial: false,
-    hasPlaced: false
-  };
 }
 
 function drawOneCard(_game, player) {

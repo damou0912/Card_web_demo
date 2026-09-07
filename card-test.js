@@ -33,6 +33,16 @@ function formatEffectText(card) {
   }).join("\n");
 }
 
+function getEffectTags(card) {
+  if (!card || card.isGuard) return [];
+  if (Array.isArray(card.effectTags)) return card.effectTags.filter(Boolean);
+  return card.effectTag ? [card.effectTag] : [];
+}
+
+function getEffectTagText(card) {
+  return getEffectTags(card).join("、") || "无";
+}
+
 function makeTestCard(template, row, col, ownerId, attack = template.attack) {
   const rarity = template.rarity || "普通";
   return {
@@ -41,6 +51,8 @@ function makeTestCard(template, row, col, ownerId, attack = template.attack) {
     name: template.name,
     camp: template.camp,
     skill: template.skill || "无",
+    effectTags: Array.isArray(template.effectTags) ? [...template.effectTags] : (template.effectTag ? [template.effectTag] : []),
+    effectTag: template.effectTag || "",
     effect: template.effect || "无技能。",
     rarity,
     attack: Number(attack),
@@ -81,14 +93,14 @@ function renderFilters() {
 function renderLibrary() {
   const keyword = testUi.search.value.trim().toLowerCase();
   const list = allTemplates.filter((card) => {
-    const haystack = `${card.name} ${card.camp} ${card.skill} ${card.effect}`.toLowerCase();
+    const haystack = `${card.name} ${card.camp} ${card.skill} ${(card.effectTags || []).join(" ")} ${card.effect}`.toLowerCase();
     return (testState.camp === "全部" || card.camp === testState.camp) && (!keyword || haystack.includes(keyword));
   });
   testUi.libraryCount.textContent = `${list.length} 张`;
   testUi.library.innerHTML = list.map((card) => `
     <button class="library-card rarity-${card.rarity || "普通"} ${testState.selectedTemplate?.id === card.id ? "selected" : ""}" data-card-id="${card.id}">
       <span class="library-attack">${card.attack}</span>
-      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${card.skill || "无技能"}</small></span>
+      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${getEffectTagText(card)} · ${card.skill || "无技能"}</small></span>
     </button>
   `).join("");
 }
@@ -118,7 +130,7 @@ function renderBoard() {
 
 function renderBoardCard(card) {
   return `<article class="test-unit player${card.ownerId} rarity-${card.rarity || "普通"} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
-    <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span><span class="unit-attack">${card.attack}</span>
+    <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span>${getEffectTags(card).length ? `<span class="unit-effect-tags">${getEffectTags(card).map((tag) => `<span class="unit-effect-tag">${tag}</span>`).join("")}</span>` : ""}<span class="unit-attack">${card.attack}</span>
   </article>`;
 }
 
@@ -129,10 +141,10 @@ function renderInspector() {
   testUi.state.textContent = card ? "正在编辑" : "未选择";
   if (!card) return;
   testUi.preview.className = `preview-card player${card.ownerId} rarity-${card.rarity || "普通"}`;
-  testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity}</p><p>${card.skill}</p>`;
+  testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity} · ${getEffectTagText(card)}</p><p>${card.skill}</p>`;
   testUi.owner.value = String(card.ownerId);
   testUi.attack.value = String(card.attack);
-  testUi.effect.textContent = formatEffectText(card);
+  testUi.effect.textContent = `${getEffectTagText(card)}：${formatEffectText(card)}`;
 }
 
 function render() {

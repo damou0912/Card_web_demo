@@ -144,7 +144,7 @@ function renderInspector() {
   testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity} · ${getEffectTagText(card)}</p><p>${card.skill}</p>`;
   testUi.owner.value = String(card.ownerId);
   testUi.attack.value = String(card.attack);
-  testUi.effect.textContent = `${getEffectTagText(card)}：${formatEffectText(card)}`;
+  testUi.effect.textContent = formatEffectText(card);
 }
 
 function render() {

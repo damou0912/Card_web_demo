@@ -4,20 +4,20 @@
 
 本文档用于使用 HTML、CSS 和 JavaScript 实现浏览器版卡牌对战 Demo。规则与 Unity 规格完全一致；Web 层负责 DOM、动画、输入和可视反馈，规则状态与技能结算应集中在独立的运行时模块。
 
-卡牌数据来源：
+卡牌信息表：
 
-- `outputs/shu-v2-card-table-xlsx/shu_cards_v2.xlsx`
-- `outputs/wei-v2-card-table-xlsx/wei_cards_v2.xlsx`
-- `outputs/wu-v2-card-table-xlsx/wu_cards_v2.xlsx`
+- `outputs/card-info-table-xlsx/card_info_v2.xlsx`
 
-三套 Excel 已生成至 `v2-card-data.js`；运行时只读取 V2 卡牌数据，并校验卡牌 ID 唯一、品质合法、战力为非负整数。
+当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。魏国阶段性独立效果实现位于 `wei-card-effects.js`；蜀、吴在迁移完成前由核心兼容分支处理。
+
+三套 V2 数据已汇总至 `outputs/card-info-table-xlsx/card_info_v2.xlsx`；运行 `npm run generate:card-info` 可从该表格重新生成 `card-info.js`。其中表格“基础战力”导出为 `baseAttack`，`v2-card-data.js` 再映射为核心使用的 `attack`；运行时只读取其适配结果，并校验卡牌 ID 唯一、品质合法、战力为非负整数。
 
 ## 2. 页面与模块
 
 ```text
 index.html              页面骨架和无障碍结构
 styles.css              棋盘、卡牌、提示颜色、响应式布局
-card-catalog.js/json    三套势力卡牌定义
+card-info.js             统一卡牌信息表的运行时导出
 game-state.js            对局状态和不可变更新入口
 rules-engine.js          放置、移动、交战、摧毁、技能、胜负
 skill-engine.js          技能触发队列和 10 次上限
@@ -27,7 +27,7 @@ ai-controller.js         PVE AI
 animation-controller.js  移动、交战、摧毁、技能动画
 ```
 
-正式入口应使用当前根目录 `index.html`；`new-card-game` 只作为独立试验入口，不作为正式规则来源。
+正式入口应使用当前根目录 `index.html`；旧试验入口已删除，不进入正式规则来源。
 
 ## 3. 对局配置
 

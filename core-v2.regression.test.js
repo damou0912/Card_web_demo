@@ -1,4 +1,5 @@
 /* Run with the bundled Node runtime: node core-v2.regression.test.js */
+/* The runner loads core-v2.test-suite.js separately; production code has no test cases. */
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -35,7 +36,7 @@ context.window = context;
 context.globalThis = context;
 vm.createContext(context);
 
-["v2-card-data.js", "script.js", "core-v2.js"].forEach((file) => {
+ ["card-info.js", "v2-card-data.js", "script.js", "wei-card-effects.js", "core-v2.js", "core-v2.test-suite.js"].forEach((file) => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file });
 });
 
@@ -43,6 +44,8 @@ const validation = context.validateCoreV2CardData();
 const result = context.runCoreV2RegressionTests();
 const boundary = context.runCoreV2CardBoundaryTests();
 const cardIds = new Set(context.CARD_LIBRARY.cardSlots.map((card) => card.id));
+const weiEffectIds = new Set(Object.keys(context.CARD_EFFECTS_V2?.wei || {}));
+const missingWeiEffects = [...cardIds].filter((id) => id.startsWith("02") && !weiEffectIds.has(id));
 const invalidEffectTags = context.CARD_LIBRARY.cardSlots
   .flatMap((card) => (Array.isArray(card.effectTags) ? card.effectTags : (card.effectTag ? [card.effectTag] : []))
     .filter((tag) => [...String(tag)].length !== 2)
@@ -51,11 +54,12 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.duplicateIds.length || validation.invalidCards.length || invalidEffectTags.length || result.failed || boundary.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length) {
-  console.error(JSON.stringify({ validation, invalidEffectTags, result, boundary, coverage }, null, 2));
+if (validation.duplicateIds.length || validation.invalidCards.length || invalidEffectTags.length || result.failed || boundary.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingWeiEffects.length) {
+  console.error(JSON.stringify({ validation, invalidEffectTags, missingWeiEffects, result, boundary, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);
   console.log(`V2 card boundary tests passed: ${boundary.passed}/${boundary.results.length}`);
   console.log(`V2 card test coverage: ${coverage.testedCards}/${cardIds.size}`);
+  console.log(`Wei independent effects loaded: ${weiEffectIds.size}/20`);
 }

@@ -2,15 +2,11 @@
 
 ## 1. 文档用途
 
-本文档用于使用 Unity 引擎实现卡牌对战 Demo。规则基线为当前已确认的 V2 规则；卡牌数据来自三套 V2 卡表，吴势力当前使用：
+本文档用于使用 Unity 引擎实现卡牌对战 Demo。规则基线为当前已确认的 V2 规则；卡牌数据统一来自：
 
-`outputs/wu-v2-card-table-xlsx/wu_cards_v2.xlsx`
+`outputs/card-info-table-xlsx/card_info_v2.xlsx`
 
-蜀、魏数据来源：
-
-`outputs/shu-v2-card-table-xlsx/shu_cards_v2.xlsx`
-
-`outputs/wei-v2-card-table-xlsx/wei_cards_v2.xlsx`
+当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。魏国阶段性独立效果实现位于 `wei-card-effects.js`，效果仅调用通用规则操作。
 
 Unity 负责表现、输入和场景管理；规则核心应保持为可测试的纯 C# 运行时，不将规则散落在 MonoBehaviour 中。
 

@@ -5,12 +5,16 @@
   "description": "Card Demo V2 web game with Railway-ready realtime rooms",
   "main": "railway-server.js",
   "scripts": {
-    "start": "node railway-server.js"
+    "start": "node railway-server.js",
+    "generate:card-info": "node scripts/generate-card-info.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "xlsx": "^0.18.5"
   }
 }

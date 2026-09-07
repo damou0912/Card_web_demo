@@ -924,7 +924,7 @@
       { const a = makeCard("0306", 1, 1, 1), g = makeGame([a]); destroy(g, a); check("0306", "被摧毁时临时占领相邻空格", g.v2ControlCells.length === 1); }
       { const a = makeCard("0307", 1, 1, 1), g = makeGame([a]); g.players[1].hand = [makeCard("0201", 2, null, null)]; destroy(g, a); check("0307", "被摧毁时敌方弃置一张手牌", g.players[1].hand.length === 0); }
       { const a = makeCard("0308", 1, 1, 1), cause = makeCard("0201", 2, 1, 2), g = makeGame([a, cause]); destroy(g, a, cause); check("0308", "被摧毁时永久削弱摧毁者两点", cause.currentAttack === cause.attack - 2); }
-      { const a = makeCard("0309", 1, 1, 1), g = makeGame([a]); destroy(g, a); check("0309", "被摧毁时原格生成己方援兵", g.boardCards.length === 1 && g.boardCards[0].name === "援兵" && g.boardCards[0].ownerId === 1); }
+      { const a = makeCard("0309", 1, 1, 1), enemyA = makeCard("0201", 2, 1, 0), enemyB = makeCard("0202", 2, 0, 1), g = makeGame([a, enemyA, enemyB]); g.players[0].drawPile = [makeCard("0101", 1, null, null), makeCard("0102", 1, null, null)]; destroy(g, a); check("0309", "按四方相邻敌方数量抽牌且不生成援兵", g.players[0].hand.length === 2 && g.boardCards.length === 2 && !g.boardCards.some((card) => card.name === "援兵")); }
       { const a = makeCard("0310", 1, 1, 1), ally = makeCard("0101", 1, 1, 2), g = makeGame([a, ally]); destroy(g, a); check("0310", "被摧毁时永久强化相邻友军", ally.currentAttack === ally.attack + 2); }
       { const a = makeCard("0311", 1, 1, 1), ally = makeCard("0101", 1, 1, 2), enemyA = makeCard("0201", 2, 0, 0), enemyB = makeCard("0201", 2, 0, 1), g = makeGame([a, ally, enemyA, enemyB]); destroy(g, a); check("0311", "己方劣势时被摧毁强化其他友军", ally.currentAttack === ally.attack + 1); }
       { const a = makeCard("0312", 1, 1, 1), cause = makeCard("0201", 2, 1, 2), g = makeGame([a, cause]); destroy(g, a, cause); check("0312", "被摧毁时锁定并永久削弱摧毁者", g.moveLocks[cause.uid] && cause.currentAttack === cause.attack - 1); }
@@ -1015,7 +1015,18 @@
     }
     if (card.id === "0307" && enemyPlayer?.hand.length) { enemyPlayer.hand.splice(randomInt(0, enemyPlayer.hand.length - 1), 1); log.push(`${card.name} 使敌方随机弃置1张手牌。`); }
     if (card.id === "0308" && causeCard && game.boardCards.includes(causeCard)) { coreAdjustAttack(causeCard, -2); log.push(`${card.name} 使摧毁者 ${causeCard.name} 永久战力-2。`); }
-    if (card.id === "0309") { const cell = !isBrokenCell(game, original.row, original.col) && !getBoardCardAt(game, original.row, original.col); if (cell) { const reinforcement = createReinforcementCard(card.ownerId); reinforcement.row = original.row; reinforcement.col = original.col; game.boardCards.push(reinforcement); log.push(`${card.name} 在原格留下援兵。`); } else if (card.ownerId && drawOneCard(game, corePlayer(game, card.ownerId)).status === "drawn") log.push(`${card.name} 的原格不可用，改为抽取1张牌。`); }
+    if (card.id === "0309" && card.ownerId) {
+      const adjacentEnemies = getOrthogonalNeighbors(original.row, original.col)
+        .map((cell) => getBoardCardAt(game, cell.row, cell.col))
+        .filter((target) => target && target.ownerId !== card.ownerId);
+      const owner = corePlayer(game, card.ownerId);
+      let drawn = 0;
+      for (let index = 0; index < adjacentEnemies.length; index += 1) {
+        if (drawOneCard(game, owner).status !== "drawn") break;
+        drawn += 1;
+      }
+      if (drawn) log.push(`${card.name} 因四方相邻 ${adjacentEnemies.length} 张敌方卡牌抽取 ${drawn} 张牌。`);
+    }
     if (card.id === "0310") { const ally = corePickRandom(allies.filter((item) => Math.abs(item.row - original.row) + Math.abs(item.col - original.col) === 1)); if (ally) { coreAdjustAttack(ally, 2); log.push(`${card.name} 使相邻友军 ${ally.name} 永久战力+2。`); } }
     if (card.id === "0311" && allies.length < game.boardCards.filter((item) => item.ownerId === otherPlayerId(card.ownerId)).length) allies.forEach((ally) => coreAdjustAttack(ally, 1, true));
     if (card.id === "0312" && causeCard && game.boardCards.includes(causeCard)) { game.moveLocks[causeCard.uid] = game.turn; coreAdjustAttack(causeCard, -1); }

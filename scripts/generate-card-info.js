@@ -6,6 +6,7 @@ const XLSX = require("xlsx");
 const root = path.resolve(__dirname, "..");
 const sourcePath = path.join(root, "outputs", "card-info-table-xlsx", "card_info_v2.xlsx");
 const targetPath = path.join(root, "card-info.js");
+const cardInfoSchemaVersion = "card-info-v2-display-effect-isolation-20260908";
 const expectedHeaders = ["卡牌ID", "卡牌名称", "势力", "技能名称", "基础战力", "品质", "技能效果描述", "触发词条"];
 const cardIdPattern = /^0[1-3][1-5]\d{2}$/;
 
@@ -48,7 +49,7 @@ const cards = rows.filter((row) => row.some((value) => cellText(value))).map((ro
     camp: cellText(values[2]),
     skill: cellText(values[3]),
     baseAttack,
-    // Compatibility alias for existing UI/core card objects.
+    // The adapter maps this source value to the runtime attack field.
     attack: baseAttack,
     rarity: cellText(values[5]),
     effect: cellText(values[6]),
@@ -63,6 +64,7 @@ const output = [
   "/* Generated from outputs/card-info-table-xlsx/card_info_v2.xlsx. */",
   "/* Run: npm run generate:card-info */",
   `const CARD_INFO = ${JSON.stringify(cards, null, 2)};`,
+  `window.CARD_INFO_SCHEMA_VERSION = ${JSON.stringify(cardInfoSchemaVersion)};`,
   "window.CARD_INFO = CARD_INFO;",
   ""
 ].join("\n");

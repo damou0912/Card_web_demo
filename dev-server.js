@@ -24,7 +24,11 @@ http.createServer((request, response) => {
       response.end("Not found");
       return;
     }
-    response.writeHead(200, { "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream" });
+    const extension = path.extname(filePath).toLowerCase();
+    response.writeHead(200, {
+      "Content-Type": contentTypes[extension] || "application/octet-stream",
+      "Cache-Control": extension === ".html" ? "no-store" : "no-cache, must-revalidate"
+    });
     response.end(data);
   });
 }).listen(4173, "127.0.0.1", () => {

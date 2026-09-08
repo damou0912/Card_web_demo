@@ -1,4 +1,6 @@
 const TEST_BOARD_SIZE = 4;
+const CARD_TEST_SCENE_VERSION = 2;
+const CARD_TEST_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
 const testState = { cards: [], brokenCells: [], selectedTemplate: null, selectedCardUid: null, ownerId: 1, camp: "全部" };
 
 const testUi = {
@@ -22,7 +24,10 @@ const testUi = {
   toast: document.getElementById("test-toast")
 };
 
-const allTemplates = (window.CARD_LIBRARY?.cardSlots || []).map((card) => ({ ...card }));
+if (window.CARD_LIBRARY?.version !== CARD_TEST_DATA_VERSION || !Array.isArray(window.CARD_LIBRARY?.cardSlots)) {
+  throw new Error("Card Test 无法加载当前版本的卡牌展示数据。");
+}
+const allTemplates = window.CARD_LIBRARY.cardSlots.map((card) => ({ ...card, effectTags: [...card.effectTags] }));
 
 function formatEffectText(card) {
   if (!card || !card.effect) return "无技能效果。";
@@ -35,8 +40,7 @@ function formatEffectText(card) {
 
 function getEffectTags(card) {
   if (!card || card.isGuard) return [];
-  if (Array.isArray(card.effectTags)) return card.effectTags.filter(Boolean);
-  return card.effectTag ? [card.effectTag] : [];
+  return Array.isArray(card.effectTags) ? card.effectTags.filter(Boolean) : [];
 }
 
 function getEffectTagText(card) {
@@ -50,10 +54,9 @@ function makeTestCard(template, row, col, ownerId, attack = template.attack) {
     uid: `${template.id}-${Math.random().toString(36).slice(2, 9)}`,
     name: template.name,
     camp: template.camp,
-    skill: template.skill || "无",
-    effectTags: Array.isArray(template.effectTags) ? [...template.effectTags] : (template.effectTag ? [template.effectTag] : []),
-    effectTag: template.effectTag || "",
-    effect: template.effect || "无技能。",
+    skill: template.skill,
+    effectTags: [...template.effectTags],
+    effect: template.effect,
     rarity,
     attack: Number(attack),
     ownerId,
@@ -194,7 +197,13 @@ function toggleBroken(row, col) {
 }
 
 function buildScene() {
-  return { version: 1, boardSize: TEST_BOARD_SIZE, cards: testState.cards.map(({ id, ownerId, row, col, attack }) => ({ id, ownerId, row, col, attack })), brokenCells: testState.brokenCells };
+  return {
+    version: CARD_TEST_SCENE_VERSION,
+    cardDataVersion: CARD_TEST_DATA_VERSION,
+    boardSize: TEST_BOARD_SIZE,
+    cards: testState.cards.map(({ id, ownerId, row, col, attack }) => ({ id, ownerId, row, col, attack })),
+    brokenCells: testState.brokenCells
+  };
 }
 
 function formatTestCell(row, col) {
@@ -234,7 +243,10 @@ function renderSceneValidation() {
 }
 
 function loadScene(scene) {
-  if (!scene || !Array.isArray(scene.cards)) throw new Error("场景数据格式不正确。");
+  if (!scene || scene.version !== CARD_TEST_SCENE_VERSION
+    || scene.cardDataVersion !== CARD_TEST_DATA_VERSION || !Array.isArray(scene.cards)) {
+    throw new Error("场景数据版本不匹配，请使用当前 Card Test 重新生成。");
+  }
   testState.cards = scene.cards.map((entry) => {
     const template = getTemplateById(entry.id);
     if (!template) throw new Error(`找不到卡牌：${entry.id}`);
@@ -321,7 +333,7 @@ document.getElementById("open-in-game").addEventListener("click", () => {
   const issues = getSceneIssues();
   if (issues.length) return showToast(`请先修正场景：${issues[0]}`);
   localStorage.setItem("cardDemoCardTestSetup", JSON.stringify(buildScene()));
-  window.location.href = "index.html?card-test=1";
+  window.location.href = "index.html?card-test=1&v=20260908-display-effect-isolation";
 });
 
 render();

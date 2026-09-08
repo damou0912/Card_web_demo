@@ -786,4 +786,5 @@ const CARD_INFO = [
     ]
   }
 ];
+window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-display-effect-isolation-20260908";
 window.CARD_INFO = CARD_INFO;

@@ -6,7 +6,7 @@
 
 `outputs/card-info-table-xlsx/card_info_v2.xlsx`
 
-当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。魏国阶段性独立效果实现位于 `wei-card-effects.js`，效果仅调用通用规则操作。
+当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。实际技能按势力分别存放在 `shu-card-effects.js`、`wei-card-effects.js`、`wu-card-effects.js`，每张卡牌独立一个代码块，只调用通用规则操作。界面按 ID 从统一卡牌信息表读取卡牌名称、技能名称和技能效果，实际结算按 ID 从势力效果文件读取函数，两侧不读取对方的数据。
 
 Unity 负责表现、输入和场景管理；规则核心应保持为可测试的纯 C# 运行时，不将规则散落在 MonoBehaviour 中。
 

@@ -11,8 +11,19 @@ const BOARD_PULSE_FADE_MS = 260;
 const BOARD_PULSE_STEP_GAP_MS = 140;
 let destructionAnimationSequence = 0;
 
-const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots || [];
-const GAME_CAMP_NAME_POOL = window.CARD_LIBRARY?.campNamePool || {};
+const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots;
+if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908" || !Array.isArray(GAME_CARD_SLOT_TEMPLATES)) {
+  throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
+}
+const GAME_CARD_DISPLAY_BY_ID = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+const GUARD_CARD_DISPLAY = Object.freeze({
+  name: "守军", camp: "无势力", rarity: "普通", skill: "无",
+  effect: "中立守军：双方均视为敌方卡牌。", effectTags: Object.freeze([])
+});
+const UNKNOWN_CARD_DISPLAY = Object.freeze({
+  name: "未知卡牌", camp: "无势力", rarity: "普通", skill: "无",
+  effect: "无技能效果。", effectTags: Object.freeze([])
+});
 
 const ui = {
   screens: {
@@ -79,47 +90,44 @@ const state = {
 };
 
 function getCampDisplayName(campKey) {
-  return campKey.replace("~", "·");
+  return String(campKey || "无势力").replace("~", "·");
 }
 
-function makeCardTemplate(campKey, slot, index) {
-  const quality = slot.rarity || "普通";
+function getCardDisplay(cardOrId) {
+  if (cardOrId?.isGuard) return GUARD_CARD_DISPLAY;
+  const id = typeof cardOrId === "object" ? cardOrId?.id : cardOrId;
+  return GAME_CARD_DISPLAY_BY_ID.get(String(id || "")) || UNKNOWN_CARD_DISPLAY;
+}
+
+function getCardDisplayName(cardOrId) {
+  return getCardDisplay(cardOrId).name;
+}
+
+function makeCardTemplate(slot) {
   return {
-    id: slot.id || `${campKey}-${String(index + 1).padStart(2, "0")}`,
-    name: slot.name || GAME_CAMP_NAME_POOL[campKey]?.[index] || "未命名卡牌",
-    type: slot.type || "普通",
-    camp: slot.camp || campKey,
-    quality,
-    rarity: quality,
-    attack: slot.attack,
-    skill: slot.skill || "无",
-    effectTags: Array.isArray(slot.effectTags) ? [...slot.effectTags] : (slot.effectTag ? [slot.effectTag] : []),
-    effectTag: slot.effectTag || "",
-    effectId: slot.effectId || "none",
-    effect: slot.effect || "无",
-    image: slot.image || null
+    id: String(slot.id),
+    attack: Number(slot.attack) || 0
   };
 }
 
 function cloneCard(template) {
+  const id = String(template?.id || "");
+  const attack = Math.max(0, Number(template?.attack) || 0);
   return {
-    ...template,
-    uid: `${template.id}-${Math.random().toString(36).slice(2, 8)}`,
+    id,
+    attack,
+    uid: `${id}-${Math.random().toString(36).slice(2, 8)}`,
     ownerId: null,
-    currentAttack: template.attack,
-    buffCap: template.attack,
+    currentAttack: attack,
+    buffCap: attack,
     movesTaken: 0,
-    isSpecial: template.rarity === "特殊",
     hasPlaced: false
   };
 }
 
 function buildCampDeck(campKey) {
   const directCards = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.camp === campKey);
-  if (directCards.length > 0) {
-    return directCards.map((slot, index) => cloneCard(makeCardTemplate(campKey, slot, index)));
-  }
-  return GAME_CARD_SLOT_TEMPLATES.map((slot, index) => cloneCard(makeCardTemplate(campKey, slot, index)));
+  return directCards.map((slot) => cloneCard(makeCardTemplate(slot)));
 }
 
 function createPlayer(id, name, deckKey, deckCatalog, isAI = false) {
@@ -202,7 +210,7 @@ function getAvailableDeckKeys() {
 
 function getRandomDeckKey() {
   const decks = getAvailableDeckKeys();
-  return decks.length ? decks[randomInt(0, decks.length - 1)] : "三国~魏";
+  return decks.length ? decks[randomInt(0, decks.length - 1)] : null;
 }
 
 function otherPlayerId(playerId) {
@@ -295,7 +303,7 @@ function formatCell(row, col) {
 }
 
 function getCardQuality(card) {
-  return card.type || card.rarity || "普通";
+  return getCardDisplay(card).rarity || "普通";
 }
 
 function getCardTierLabel(card) {
@@ -369,21 +377,23 @@ function getBoardCellElement(row, col) {
 }
 
 function createMovingCard(card, ownerId) {
+  const display = getCardDisplay(card);
   const ghost = document.createElement("div");
   ghost.className = `moving-card player${ownerId}`;
   ghost.innerHTML = `
-    <span class="unit-name">${card.name}</span>
-    <span class="unit-meta">${card.skill} · ${getCardAttackText(card)}</span>
+    <span class="unit-name">${display.name}</span>
+    <span class="unit-meta">${display.skill} · ${getCardAttackText(card)}</span>
   `;
   return ghost;
 }
 
 function createCombatCard(card, side) {
+  const display = getCardDisplay(card);
   const ghost = document.createElement("div");
   ghost.className = `combat-card player${card.ownerId} combat-${side}`;
   ghost.innerHTML = `
-    <span class="combat-card-name">${card.name}</span>
-    <span class="combat-card-skill">${card.skill}</span>
+    <span class="combat-card-name">${display.name}</span>
+    <span class="combat-card-skill">${display.skill}</span>
     <strong>${resolveAttackValue(state.game, card)}</strong>
   `;
   return ghost;
@@ -402,11 +412,12 @@ function applyDestructionVisual(element, card, game) {
 }
 
 function createDestructionCard(event) {
+  const display = getCardDisplay(event.cardId);
   const ghost = document.createElement("div");
   ghost.className = `combat-card player${event.ownerId || 1} destruction-card`;
   ghost.innerHTML = `
-    <span class="combat-card-name">${event.cardName || "卡牌"}</span>
-    <span class="combat-card-skill">${event.skillName || event.label || "被摧毁"}</span>
+    <span class="combat-card-name">${display === UNKNOWN_CARD_DISPLAY ? "卡牌" : display.name}</span>
+    <span class="combat-card-skill">${display === UNKNOWN_CARD_DISPLAY ? (event.label || "被摧毁") : display.skill}</span>
     <strong>${event.label || "撕毁"}</strong>
   `;
   ghost.classList.add(`destroy-${event.destruction?.kind || "tear"}`);
@@ -440,7 +451,7 @@ async function playCombatClashAnimation(game, cardA, cardB, row, col, mode) {
   });
   cardAElement.style.left = `${rect.left - stageRect.left - rect.width * 0.06}px`;
   cardBElement.style.left = `${rect.left - stageRect.left + rect.width * 0.32}px`;
-  showCombatFlowPrompt(game, `${cardA.name} 与 ${cardB.name} 在${game.currentPhase || "行动阶段"}进行${mode}。`);
+  showCombatFlowPrompt(game, `${getCardDisplayName(cardA)} 与 ${getCardDisplayName(cardB)} 在${game.currentPhase || "行动阶段"}进行${mode}。`);
   await nextFrame();
   cardAElement.classList.add("engaged");
   cardBElement.classList.add("engaged");
@@ -454,29 +465,31 @@ async function finishCombatAnimation(game, scene, boardCards, outcome = null) {
   }
   const aAlive = boardCards.some((card) => card.uid === scene.cardA.uid);
   const bAlive = boardCards.some((card) => card.uid === scene.cardB.uid);
+  const cardAName = getCardDisplayName(scene.cardA);
+  const cardBName = getCardDisplayName(scene.cardB);
   const result = document.createElement("div");
   result.className = "combat-result";
   let message;
   if (!aAlive && !bAlive) {
     applyDestructionVisual(scene.cardAElement, scene.cardA, game);
     applyDestructionVisual(scene.cardBElement, scene.cardB, game);
-    message = `${scene.cardA.name} 与 ${scene.cardB.name} 同归于尽`;
+    message = `${cardAName} 与 ${cardBName} 同归于尽`;
   } else if (aAlive && !bAlive) {
     applyDestructionVisual(scene.cardBElement, scene.cardB, game);
-    message = `${scene.cardA.name} 胜利，${scene.cardB.name} 被摧毁`;
+    message = `${cardAName} 胜利，${cardBName} 被摧毁`;
   } else if (!aAlive && bAlive) {
     applyDestructionVisual(scene.cardAElement, scene.cardA, game);
-    message = `${scene.cardB.name} 胜利，${scene.cardA.name} 被摧毁`;
+    message = `${cardBName} 胜利，${cardAName} 被摧毁`;
   } else if (outcome === "both") {
     scene.cardAElement.classList.add("shielded");
     scene.cardBElement.classList.add("shielded");
-    message = `${scene.cardA.name} 与 ${scene.cardB.name} 交战未分胜负`;
+    message = `${cardAName} 与 ${cardBName} 交战未分胜负`;
   } else if (aAlive) {
     scene.cardBElement.classList.add("shielded");
-    message = `${scene.cardA.name} 占优，但 ${scene.cardB.name} 防守成功`;
+    message = `${cardAName} 占优，但 ${cardBName} 防守成功`;
   } else {
     scene.cardAElement.classList.add("shielded");
-    message = `${scene.cardB.name} 占优，但 ${scene.cardA.name} 防守成功`;
+    message = `${cardBName} 占优，但 ${cardAName} 防守成功`;
   }
   result.textContent = message;
   ui.boardAnimationLayer.appendChild(result);
@@ -534,7 +547,7 @@ function queueSkillMoveAnimation(game, card, from, to, detail = "技能移动") 
 }
 
 function getSkillAnimationProfile(card, detail, tone) {
-  const text = `${card?.effect || ""} ${detail || ""}`;
+  const text = `${getCardDisplay(card).effect || ""} ${detail || ""}`;
   if (tone === "skill-warn" || /摧毁|崩解|冲锋|裂阵|焚舟|失效|弃牌/.test(text)) {
     return { effectType: "danger", glyph: "破", tag: "破坏" };
   }
@@ -551,13 +564,14 @@ function getSkillAnimationProfile(card, detail, tone) {
 }
 
 function formatSkillFlowPrompt(game, card, detail) {
+  const display = getCardDisplay(card);
   const phase = game?.currentPhase || "结算阶段";
   const outcome = (detail || "触发技能效果。").trim();
   if (outcome.startsWith("对") || outcome.startsWith("使")) {
-    return `${card.name}在${phase}以${card.skill}${outcome}`;
+    return `${display.name}在${phase}以${display.skill}${outcome}`;
   }
-  const simplified = outcome.startsWith(card.name) ? outcome.slice(card.name.length).trim() : outcome;
-  return `${card.name}在${phase}以${card.skill}发动：${simplified}`;
+  const simplified = outcome.startsWith(display.name) ? outcome.slice(display.name.length).trim() : outcome;
+  return `${display.name}在${phase}以${display.skill}发动：${simplified}`;
 }
 
 function showSkillFlowPrompt(game, prompt) {
@@ -579,14 +593,15 @@ function queueSkillAnimation(game, card, detail = null, tone = "skill") {
   if (!card) {
     return;
   }
+  const display = getCardDisplay(card);
   const profile = getSkillAnimationProfile(card, detail, tone);
   queueBoardAnimation(game, {
     row: card.row,
     col: card.col,
     ownerId: card.ownerId || 1,
     kind: tone,
-    label: card.skill || "技能触发",
-    detail: detail || card.name,
+    label: display.skill || "技能触发",
+    detail: detail || display.name,
     flowPrompt: formatSkillFlowPrompt(game, card, detail),
     cardUid: card.uid,
     ...profile
@@ -813,6 +828,9 @@ function bindEvents() {
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
 }
 
-window.__CARD_DEMO_DEBUG__ = { state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid, getBoardCardAt, getCampDisplayName };
+window.__CARD_DEMO_DEBUG__ = {
+  state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
+  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName
+};
 window.resetToMenu = resetToMenu;
 bindEvents();

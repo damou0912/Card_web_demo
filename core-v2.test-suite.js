@@ -1,14 +1,14 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill, coreControlMap, coreCreateGame, coreDestroyV2Card, coreEnforceZeroDestroy, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreTriggerOtherV2PlacementEffects, coreValidMoves, coreVictoryTarget, HAND_LIMIT, state } = api;
+  const { cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill, coreControlMap, coreCreateGame, coreDestroyV2Card, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreTriggerOtherV2PlacementEffects, coreValidMoves, coreVictoryTarget, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
     const check = (name, condition) => results.push({ name, passed: Boolean(condition) });
     const makeCard = (id, ownerId, row, col) => {
       const template = window.CARD_LIBRARY?.cardSlots?.find((card) => card.id === id);
-      const card = cloneCard(template || { id, name: id, attack: 0, camp: "三国~魏", skill: "测试", effect: "测试", rarity: "普通" });
+      const card = cloneCard(template || { id, attack: 0 });
       Object.assign(card, { ownerId, row, col, currentAttack: Number(card.attack) || 0, v2PermanentBonus: 0, v2TempBonus: 0 });
       return card;
     };
@@ -61,8 +61,8 @@
       const commander = makeCard("02314", 1, 0, 0);
       const zero = makeCard("02105", 2, 0, 1); zero.currentAttack = 0;
       const zeroGame = makeGame([commander, zero]); state.game = zeroGame;
-      coreEnforceZeroDestroy(zeroGame, []);
-      check("司马懿摧毁归零卡牌后永久加一", commander.currentAttack === 1 && !zeroGame.boardCards.includes(zero));
+      coreRunV2EndSkills(zeroGame, zeroGame.players[0], []);
+      check("司马懿仅在回合结束摧毁归零卡牌后永久加一", commander.currentAttack === 1 && !zeroGame.boardCards.includes(zero));
 
       const order = makeCard("02519", 1, 0, 0);
       const ally = makeCard("01101", 1, 0, 1);
@@ -115,7 +115,9 @@
       const fragileTarget = makeCard("02105", 2, 0, 1);
       const zeroTriggerGame = makeGame([simaYi, fragileTarget]); state.game = zeroTriggerGame;
       coreAdjustAttack(fragileTarget, -1, true);
-      check("司马懿会响应任意减益造成的归零", !zeroTriggerGame.boardCards.includes(fragileTarget) && simaYi.currentAttack === 1);
+      const remainsBeforeEnd = zeroTriggerGame.boardCards.includes(fragileTarget) && simaYi.currentAttack === 0;
+      coreRunV2EndSkills(zeroTriggerGame, zeroTriggerGame.players[0], []);
+      check("司马懿不会即时摧毁归零卡牌，只在回合结束结算", remainsBeforeEnd && !zeroTriggerGame.boardCards.includes(fragileTarget) && simaYi.currentAttack === 1);
 
       const supply = makeCard("01519", 1, 0, 0);
       const remoteSupplyAlly = makeCard("01101", 1, 3, 3);
@@ -181,6 +183,8 @@
       check("AI虎豹骑更愿意交换高战力敌军", coreAiPlacementScore(strongTradeGame, strongTradeGame.players[0], tigerCavalry, { row: 1, col: 1 }) > coreAiPlacementScore(weakTradeGame, weakTradeGame.players[0], tigerCavalry, { row: 1, col: 1 }));
 
       const imported = coreLoadCardTestSetup({
+        version: 2,
+        cardDataVersion: "card-info-v2-display-effect-isolation-20260908",
         cards: [
           { id: "01101", ownerId: 1, row: 1, col: 1, attack: 6 },
           { id: "02101", ownerId: 2, row: 2, col: 2, attack: 2 },
@@ -189,6 +193,7 @@
         brokenCells: [{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 }, { row: 1, col: 0 }, { row: 1, col: 3 }]
       });
       check("Card Test 场景会以 V2 核心导入并过滤非法重叠", imported && state.game.ruleset === "core-v2" && state.game.boardCards.length === 2 && state.game.boardCards[0].attack === 6 && state.game.brokenCells.length === 5);
+      check("旧版 Card Test 场景不会进入当前对局", !coreLoadCardTestSetup({ version: 1, cards: [], brokenCells: [] }));
 
       const winningCards = [];
       for (let index = 0; index < 9; index += 1) winningCards.push(makeCard("02518", 1, Math.floor(index / 4), index % 4));
@@ -240,7 +245,7 @@
       { const a = makeCard("01313", 1, 1, 1), g = makeGame([a]); a.currentAttack = 2; start(g, a); const restoredAtStart = a.currentAttack === 4; const protectedFirst = !destroy(g, a) && a.currentAttack === 1; const destroyedSecond = destroy(g, a); check("01313", "低战力恢复且免毁仅限本回合一次", restoredAtStart && protectedFirst && destroyedSecond && !g.boardCards.includes(a)); }
       { const a = makeCard("01314", 1, 1, 1), ally = makeCard("01105", 1, 1, 2), enemy = makeCard("02105", 2, 1, 3), g = makeGame([a, ally, enemy]); start(g, a); check("01314", "其他友军开始技能额外结算", ally.currentAttack === ally.attack + 1); }
       { const a = makeCard("01315", 1, 1, 1), enemyA = makeCard("02101", 2, 0, 0), enemyB = makeCard("02101", 2, 0, 1), g = makeGame([a, enemyA, enemyB]); start(g, a); check("01315", "卡牌较少时增加行动位", g.extraActions === 1); }
-      { const a = makeCard("01416", 1, 1, 1), g = makeGame([a]); start(g, a); check("01416", "回合开始强化并标记免费行动", a.currentAttack === a.attack + 2 && a.freeActionTurn === g.turn); }
+      { const a = makeCard("01416", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), drawn = makeCard("01101", 1, null, null), g = makeGame([a, enemy]); g.players[0].drawPile = [drawn]; start(g, a); coreResolveSkillAttack(g, a, enemy, g.players[0], []); check("01416", "回合开始强化、免费行动且摧毁敌军后抽牌", a.currentAttack === a.attack + 2 && a.freeActionTurn === g.turn && g.players[0].hand.includes(drawn)); }
       { const a = makeCard("01517", 1, 1, 1), row = makeCard("02101", 2, 1, 3), col = makeCard("02101", 2, 3, 1), diagonal = makeCard("02101", 2, 2, 2), g = makeGame([a, row, col, diagonal]); start(g, a); check("01517", "仅同行同列卡牌被永久削弱", row.currentAttack === row.attack - 1 && col.currentAttack === col.attack - 1 && diagonal.currentAttack === diagonal.attack); }
       { const a = makeCard("01518", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); const saved = !destroy(g, ally); check("01518", "代替相邻友军被摧毁", saved && !g.boardCards.includes(a) && g.boardCards.includes(ally)); }
       { const a = makeCard("01519", 1, 0, 0), ally = makeCard("01101", 1, 3, 3), g = makeGame([a, ally]); g.players[0].hand = Array.from({ length: HAND_LIMIT }, () => makeCard("01101", 1, null, null)); start(g, a); check("01519", "满手时改为强化任意其他友军", ally.currentAttack === ally.attack + 2); }
@@ -260,7 +265,8 @@
       { const a = makeCard("02211", 1, 0, 0), g = makeGame([a]); check("02211", "首次主动移动允许远距离直线移动", coreValidMoves(g, a).some((cell) => cell.row === 0 && cell.col === 3)); }
       { const a = makeCard("02212", 1, 1, 1), g = makeGame([a]); place(g, a); check("02212", "放置后标记下一张友军额外结算", g.players[0].v2NextPlacementExtra === a.uid); }
       { const a = makeCard("02313", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); check("02313", "敌军因放置减益归零时强化自身", enemy.currentAttack === 0 && a.currentAttack === a.attack + 1); }
-      { const a = makeCard("02314", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); check("02314", "放置后摧毁其他归零卡牌并强化自身", !g.boardCards.includes(enemy) && a.currentAttack === a.attack + 1); }
+      { const a = makeCard("02314", 1, 1, 1), enemy = makeCard("02102", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); const afterPlacement = enemy.currentAttack === enemy.attack - 1; start(g, a); const notRepeatedAtStart = enemy.currentAttack === enemy.attack - 1; check("02314", "全场减益只在放置时执行，不会在回合开始时重复触发", afterPlacement && notRepeatedAtStart); }
+      { const a = makeCard("02314", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); const remainsUntilEnd = g.boardCards.includes(enemy) && enemy.currentAttack === 0 && a.currentAttack === a.attack; coreRunV2EndSkills(g, g.players[0], []); check("02314", "归零卡牌在回合结束才被摧毁并强化司马懿", remainsUntilEnd && !g.boardCards.includes(enemy) && a.currentAttack === a.attack + 1); }
       { const a = makeCard("02315", 1, 1, 1), placed = makeCard("01101", 1, 3, 3), g = makeGame([a, placed]); coreTriggerOtherV2PlacementEffects(g, g.players[0], placed, []); check("02315", "其他友军放置时自身低于三则强化", a.currentAttack === 2); }
       { const a = makeCard("02416", 1, 1, 1), ally = makeCard("01101", 1, 3, 3), g = makeGame([a, ally]); place(g, a); coreAdjustAttack(ally, -1); check("02416", "全场强化友军且阻止我方减益", ally.currentAttack === ally.attack + 1); }
       { const a = makeCard("02517", 1, 1, 1), enemy = makeCard("01101", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); check("02517", "放置时与相邻敌军同时摧毁", !g.boardCards.includes(a) && !g.boardCards.includes(enemy)); }
@@ -277,7 +283,7 @@
       { const a = makeCard("03106", 1, 1, 1), g = makeGame([a]); place(g, a); check("03106", "放置时四方相邻空格被我方占领", g.v2ControlCells.length === 4 && coreControlMap(g).counts[1] === 5); }
       { const a = makeCard("03107", 1, 1, 1), g = makeGame([a]); g.players[1].hand = [makeCard("02101", 2, null, null)]; destroy(g, a); check("03107", "摧毁时敌方随机弃置一张手牌", g.players[1].hand.length === 0); }
       { const a = makeCard("03208", 1, 1, 1), enemyDeckCard = makeCard("02101", 2, null, null), g = makeGame([a]); g.players[1].drawPile = [enemyDeckCard]; place(g, a); const placedDraw = g.players[0].hand.includes(enemyDeckCard) && enemyDeckCard.ownerId === 1; const second = makeCard("03208", 1, 2, 2); g.boardCards.push(second); g.players[1].drawPile = [makeCard("02102", 2, null, null)]; destroy(g, second); check("03208", "放置与摧毁时从敌方牌库抽牌", placedDraw && g.players[0].hand.length === 2); }
-      { const a = makeCard("03209", 1, 1, 1), enemyA = makeCard("02101", 2, 1, 0), guard = { uid: "guard-test", ownerId: null, row: 0, col: 1, currentAttack: 2, attack: 2, isGuard: true }, g = makeGame([a, enemyA, guard]); g.players[0].drawPile = [makeCard("01101", 1, null, null), makeCard("01102", 1, null, null)]; destroy(g, a); check("03209", "按相邻敌方卡牌含守军数量抽牌且不生成援兵", g.players[0].hand.length === 2 && !g.boardCards.some((card) => card.name === "援兵")); }
+      { const a = makeCard("03209", 1, 1, 1), enemyA = makeCard("02101", 2, 1, 0), guard = { uid: "guard-test", ownerId: null, row: 0, col: 1, currentAttack: 2, attack: 2, isGuard: true }, g = makeGame([a, enemyA, guard]); g.players[0].drawPile = [makeCard("01101", 1, null, null), makeCard("01102", 1, null, null)]; destroy(g, a); check("03209", "按相邻敌方卡牌含守军数量抽牌且不生成援兵", g.players[0].hand.length === 2 && g.boardCards.length === 2); }
       { const a = makeCard("03210", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), cause = makeCard("02101", 2, 1, 3), g = makeGame([a, ally, cause]); destroy(g, a, cause); check("03210", "相邻友军本回合加二并攻击摧毁者", ally.currentAttack === ally.attack + 2 && !g.boardCards.includes(cause)); }
       { const a = makeCard("03211", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemyA = makeCard("02101", 2, 0, 0), enemyB = makeCard("02101", 2, 0, 1), g = makeGame([a, ally, enemyA, enemyB]); destroy(g, a); check("03211", "己方卡牌少于敌方时其他友军永久加一", ally.currentAttack === ally.attack + 1); }
       { const a = makeCard("03212", 1, 1, 1), ally = makeCard("01101", 2, 1, 2), g = makeGame([a, ally]); place(g, a); const converted = a.ownerId === 2 && !destroy(g, a); g.turn = 2; const destroyed = destroy(g, a); check("03212", "放置转为对方所有且本回合免毁，之后摧毁相邻友军", converted && destroyed && !g.boardCards.includes(ally)); }
@@ -285,6 +291,7 @@
       { const a = makeCard("03314", 1, 1, 1), g = makeGame([a]); g.players[1].drawPile = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)]; place(g, a); const drew = a.currentAttack === a.attack + 2 && g.players[1].hand.length === 2; g.players[1].hand.push(makeCard("02103", 2, null, null)); destroy(g, a); check("03314", "敌方实际抽牌使自身加一，摧毁时仅弃牌", drew && g.players[1].hand.length === 1); }
       { const a = makeCard("03315", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), g = makeGame([a, enemy]); place(g, a); const placementDebuff = enemy.currentAttack === enemy.attack - 2; const remote = makeCard("02102", 2, 3, 3); remote.currentAttack = 0; g.boardCards.push(remote); destroy(g, a); check("03315", "放置按两个数量条件减益，摧毁时销毁低于自身的全场敌军", placementDebuff && !g.boardCards.includes(enemy) && !g.boardCards.includes(remote)); }
       { const a = makeCard("03416", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); destroy(g, ally); const gained = a.currentAttack === a.attack + 1; a.currentAttack = 5; const saved = !destroy(g, a) && a.currentAttack === 2; check("03416", "友军摧毁时加一，战力大于四被摧毁时原格减三保留", gained && saved); }
+      { const a = makeCard("03416", 1, 1, 1), enemy = makeCard("01313", 2, 1, 2), g = makeGame([a, enemy]); a.v2PermanentBonus = 1; a.currentAttack = 5; enemy.v2PermanentBonus = 2; enemy.currentAttack = 6; coreResolveSkillAttack(g, a, enemy, g.players[0], []); check("03416", "交战后孙策若仍在场则使对方永久战力减二", g.boardCards.includes(a) && g.boardCards.includes(enemy) && a.currentAttack === 2 && enemy.currentAttack === 4); }
       { const ship = makeCard("03517", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([ship, ally]); const original = { row: ally.row, col: ally.col }; destroy(g, ally); check("03517", "相邻友军被摧毁时楼船阵自毁并将其重放到楼船位置", !g.boardCards.includes(ship) && g.boardCards.includes(ally) && ally.row === 1 && ally.col === 1 && (original.row !== ally.row || original.col !== ally.col)); }
       { const sima = makeCard("02314", 1, 0, 0), ship = makeCard("03517", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([sima, ship, ally]); ally.v2StartTurn = 1; ally.v2StartAttack = ally.attack; ally.currentAttack = ally.attack + 1; destroy(g, ally); coreRunV2EndSkills(g, g.players[0], []); check("02314", "司马懿回合结束跳过楼船阵重放卡牌", g.boardCards.includes(ally) && ally.currentAttack === ally.attack); }
       { const a = makeCard("03518", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 2, 1), g = makeGame([a, ally, enemy]); destroy(g, a); check("03518", "摧毁四方相邻及原位置卡牌并生成破坏格", !g.boardCards.includes(ally) && !g.boardCards.includes(enemy) && g.brokenCells.some((cell) => cell.row === 1 && cell.col === 1)); }
@@ -303,4 +310,3 @@
   window.runCoreV2RegressionTests = coreRunV2RegressionTests;
   window.runCoreV2CardBoundaryTests = coreRunV2CardBoundaryTests;
 })();
-

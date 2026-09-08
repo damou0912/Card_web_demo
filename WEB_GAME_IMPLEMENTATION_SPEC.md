@@ -8,9 +8,9 @@
 
 - `outputs/card-info-table-xlsx/card_info_v2.xlsx`
 
-当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。魏国阶段性独立效果实现位于 `wei-card-effects.js`；蜀、吴在迁移完成前由核心兼容分支处理。
+当前 V2 卡牌 ID 统一为 5 位：势力序号 2 位、品质编号 1 位、势力内序号 2 位。实际技能按势力分别存放在 `shu-card-effects.js`、`wei-card-effects.js`、`wu-card-effects.js`，每张卡牌独立一个代码块。页面按 ID 从表格导出读取卡牌名称、技能名称和技能效果，实际结算按 ID 从势力效果文件读取函数；两侧不读取对方的数据。
 
-三套 V2 数据已汇总至 `outputs/card-info-table-xlsx/card_info_v2.xlsx`；运行 `npm run generate:card-info` 可从该表格重新生成 `card-info.js`。其中表格“基础战力”导出为 `baseAttack`，`v2-card-data.js` 再映射为核心使用的 `attack`；运行时只读取其适配结果，并校验卡牌 ID 唯一、品质合法、战力为非负整数。
+三套 V2 数据已汇总至 `outputs/card-info-table-xlsx/card_info_v2.xlsx`；运行 `npm run generate:card-info` 可从该表格重新生成 `card-info.js`。其中表格“基础战力”导出为 `baseAttack`，`v2-card-data.js` 再映射为核心使用的 `attack`。对局卡牌对象只保存 ID、战力和对局状态，不复制任何展示字段；旧联网状态中的展示字段会被清除，旧版本状态不会载入当前对局。
 
 ## 2. 页面与模块
 

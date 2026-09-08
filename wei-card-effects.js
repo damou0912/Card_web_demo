@@ -35,16 +35,19 @@
   wei["02104"] = {
     onPlace(ctx) {
       const targets = ctx.allies();
-      targets.forEach((target) => ctx.adjust(target, 1));
-      if (targets.length) ctx.log("使相邻友军战力永久+1。");
+      targets.forEach((target) => ctx.adjust(target, 1, true));
+      if (targets.length) ctx.log("使相邻友军本回合战力+1。");
     }
   };
 
   wei["02105"] = {
     onPlace(ctx) {
-      if (ctx.player.hand.length < ctx.handLimit && ctx.draw(ctx.player)) {
-        ctx.log("抽取 1 张牌。");
+      const drawCount = ctx.player.hand.length === 0 ? 2 : (ctx.player.hand.length < ctx.handLimit ? 1 : 0);
+      let drawn = 0;
+      for (let index = 0; index < drawCount; index += 1) {
+        if (ctx.draw(ctx.player)) drawn += 1;
       }
+      if (drawn) ctx.log(`抽取 ${drawn} 张牌。`);
     }
   };
 
@@ -87,7 +90,12 @@
   };
 
   wei["02210"] = {
-    flags: { protectAdjacent: true }
+    onBeforeAdjacentAllyDestroy(ctx) {
+      if (ctx.card.currentAttack <= 1) return;
+      ctx.adjust(ctx.card, -1);
+      ctx.log("使相邻友军免于摧毁，自身战力永久-1。");
+      return false;
+    }
   };
 
   wei["02211"] = {
@@ -95,25 +103,26 @@
   };
 
   wei["02212"] = {
-    onPlace(ctx) {
+    onTurnStart(ctx) {
       ctx.player.v2NextPlacementExtra = ctx.card.uid;
-      ctx.log("使本回合下一张友军的放置技能额外结算1次。");
+      ctx.player.v2NextPlacementExtraTurn = ctx.game.turn;
+      ctx.log("回合开始时，使本回合下一张友军的放置技能额外结算1次。");
     }
   };
 
   wei["02313"] = {
     onPlace(ctx) {
-      let zeroedCount = 0;
-      const targets = ctx.enemies();
-      targets.forEach((target) => {
-        const before = target.currentAttack;
-        ctx.adjust(target, -2, true);
-        if (before > 0 && target.currentAttack === 0) {
-          ctx.adjust(ctx.card, 1);
-          zeroedCount += 1;
-        }
-      });
-      if (targets.length) ctx.log(`使 ${targets.length} 张相邻敌军本回合战力-2${zeroedCount ? `，自身永久战力+${zeroedCount}` : ""}。`);
+      ctx.adjust(ctx.card, 5);
+      ctx.log("放置时自身永久战力+5。");
+    },
+    onTurnStart(ctx) {
+      if (ctx.card.currentAttack < 2) {
+        ctx.destroy(ctx.card);
+        ctx.log("回合开始时战力不足2，自我摧毁。");
+        return;
+      }
+      ctx.adjust(ctx.card, -2);
+      ctx.log("回合开始时自身永久战力-2。");
     }
   };
 
@@ -142,31 +151,25 @@
   };
 
   wei["02315"] = {
-    flags: { replacementWatcher: true },
+    flags: { preventReduction: true },
     onPlace(ctx) {
-      ctx.card.v2ReplacedThisTurn = new Set();
-      ctx.log("本回合将尝试重新放置被摧毁的其他友军。");
+      ctx.card.v2PowerGainWatchTurn = ctx.game.turn;
+      ctx.log("本回合我方卡牌增加战力时，其战力永久+1。");
     },
-    onOtherPlaced(ctx) { if (ctx.card.currentAttack < 3) ctx.adjust(ctx.card, 2); },
-    onOtherDestroyed(ctx) {
-      const target = ctx.destroyedCard;
-      if (!target || target.uid === ctx.card.uid || target.ownerId !== ctx.card.ownerId || target.isGuard) return;
-      if (!(ctx.card.v2ReplacedThisTurn instanceof Set)) ctx.card.v2ReplacedThisTurn = new Set();
-      if (ctx.card.v2ReplacedThisTurn.has(target.uid)) return;
-      const cell = ctx.pickRandom(ctx.placementCells(target.ownerId));
-      if (!cell) return;
-      ctx.card.v2ReplacedThisTurn.add(target.uid);
-      if (ctx.reenter(target, cell)) ctx.log("使被摧毁的友军先结算摧毁技能，再恢复基础战力重新放置。");
+    onOwnCardAttackIncreased(ctx) {
+      if (ctx.card.v2PowerGainWatchTurn !== ctx.game.turn) return;
+      ctx.adjust(ctx.increasedCard, 1);
+      ctx.log("使该友方卡牌额外永久战力+1。");
     }
   };
 
   wei["02416"] = {
-    flags: { preventReduction: true, commander: true },
     onPlace(ctx) {
       const targets = ctx.board.filter((target) => target.ownerId === ctx.player.id && target.uid !== ctx.card.uid);
       targets.forEach((target) => ctx.adjust(target, 1));
-      ctx.card.v2Commander = true;
-      if (targets.length) ctx.log("使所有其他友军战力永久+1。");
+      if (ctx.player.hand.length >= (ctx.otherPlayer?.hand.length || 0)) ctx.addActions(1);
+      if (targets.length) ctx.log("使所有其他友军永久战力+1。");
+      if (ctx.player.hand.length >= (ctx.otherPlayer?.hand.length || 0)) ctx.log("因手牌不少于敌方，行动数+1。");
     },
     onOtherPlaced(ctx) {
       ctx.adjust(ctx.card, 1);

@@ -1,12 +1,14 @@
 /* Core Rules V2: sequential turns with V2 card skills enabled. */
 (() => {
-  const CORE_BOARD_SIZE = 4;
+  const CORE_BOARD_SIZE = 5;
   const CORE_MAX_TURNS = 30;
   const CORE_FIRST_TURN_ACTIONS = 1;
   const CORE_STANDARD_ACTIONS = 2;
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
   const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260908";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
+  // This is a client-side GM convenience gate, not a security boundary.
+  const CORE_GM_3X3_PASSWORD = "dm0912";
   let coreRuntimeReady = true;
   const coreUi = {
     endTurnBtn: document.getElementById("end-turn-btn"),
@@ -112,48 +114,21 @@
   function coreCardDisplay(cardOrId) {
     return typeof getCardDisplay === "function"
       ? getCardDisplay(cardOrId)
-      : { name: "未知卡牌", camp: "无势力", rarity: "普通", skill: "无", effect: "无技能效果。", effectTags: [] };
+      : { name: "未知卡牌", camp: "无势力", rarity: "普通", skill: "无", effect: "无技能效果。" };
   }
 
   function coreCardName(cardOrId) {
     return coreCardDisplay(cardOrId).name;
   }
 
-  function coreSkillEffectLines(card) {
-    if (!card || card.isGuard) return ["无"];
-    const lines = String(coreCardDisplay(card).effect || "无技能效果。").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    return lines.length ? lines : ["无技能效果。"];
-  }
-
-  function coreEffectTags(card) {
-    if (!card || card.isGuard) return [];
-    const tags = coreCardDisplay(card).effectTags;
-    return Array.isArray(tags) ? tags.filter(Boolean) : [];
-  }
-
-  function coreEffectTagTitle(tag) {
-    return ({ 起势: "回合开始前", 收势: "回合结束时", 遗志: "卡牌被摧毁时触发后续效果", 入阵: "卡牌放置时", 行军: "卡牌移动后" })[tag] || tag;
-  }
-
-  function coreEffectTagBadges(card, className = "effect-keyword") {
-    return coreEffectTags(card).map((tag) => `<b class="${className}" title="${coreEscapeHtml(coreEffectTagTitle(tag))}">${coreEscapeHtml(tag)}</b>`).join("");
+  function coreSkillEffectText(card) {
+    if (!card || card.isGuard) return "无";
+    const effect = coreCardDisplay(card).effect;
+    return effect === undefined || effect === null ? "无技能效果。" : String(effect);
   }
 
   function coreSkillEffectHtml(card) {
-    const lines = coreSkillEffectLines(card);
-    return lines.map((line, index) => {
-      const normalized = line.replace(/^\d+\s*[.、)）]\s*/, "");
-      return lines.length > 1
-        ? `<span class="skill-effect-line"><strong>${index + 1}.</strong>${coreEscapeHtml(normalized)}</span>`
-        : `<span class="skill-effect-line">${coreEscapeHtml(normalized)}</span>`;
-    }).join("");
-  }
-
-  function coreSkillEffectText(card) {
-    return coreSkillEffectLines(card).map((line, index, lines) => {
-      const normalized = line.replace(/^\d+\s*[.、)）]\s*/, "");
-      return lines.length > 1 ? `${index + 1}. ${normalized}` : normalized;
-    }).join("\n");
+    return `<span class="skill-effect-line">${coreEscapeHtml(coreSkillEffectText(card))}</span>`;
   }
 
   function coreFitSingleLineText(root) {
@@ -170,7 +145,7 @@
     });
   }
 
-  const CORE_RUNTIME_DISPLAY_FIELDS = Object.freeze(["name", "camp", "rarity", "quality", "skill", "effect", "effectTags", "effectTag"]);
+  const CORE_RUNTIME_DISPLAY_FIELDS = Object.freeze(["name", "camp", "rarity", "quality", "skill", "effect"]);
 
   function coreStripRuntimeDisplayData(game) {
     const cards = [game?.boardCards];
@@ -208,6 +183,48 @@
     ui.deckReveal.innerHTML = "";
   }
 
+  function coreRequestBoardSizeAccess(onApproved) {
+    if (!ui.playerIdModal) return;
+    ui.playerIdModal.innerHTML = `
+      <section class="player-id-card gm-access-card" role="dialog" aria-modal="true" aria-label="验证 3x3 地图权限">
+        <button id="gm-access-close" class="overlay-close" type="button" aria-label="取消">取消</button>
+        <p class="phase-banner-eyebrow">GM ACCESS</p>
+        <h2>解锁 3x3 战场</h2>
+        <p>3x3 为 GM 调试地图，请输入 6 位密码后继续。</p>
+        <label>GM 密码<input id="gm-access-input" maxlength="6" minlength="6" inputmode="text" autocomplete="off" spellcheck="false" autofocus></label>
+        <p id="gm-access-error" class="player-id-error" aria-live="polite"></p>
+        <button id="gm-access-confirm" class="primary-btn" type="button">验证并进入 3x3</button>
+      </section>
+    `;
+    ui.playerIdModal.classList.add("visible");
+    const input = document.getElementById("gm-access-input");
+    const error = document.getElementById("gm-access-error");
+    const close = () => {
+      ui.playerIdModal.classList.remove("visible");
+      ui.playerIdModal.innerHTML = "";
+    };
+    document.getElementById("gm-access-confirm")?.addEventListener("click", () => {
+      const password = String(input?.value || "").trim();
+      if (!/^[A-Za-z0-9]{6}$/.test(password)) {
+        error.textContent = "密码必须为 6 位数字或英文字母。";
+        input?.focus();
+        return;
+      }
+      if (password.toLowerCase() !== CORE_GM_3X3_PASSWORD) {
+        error.textContent = "GM 密码不正确。";
+        input?.select();
+        return;
+      }
+      close();
+      onApproved?.();
+    });
+    document.getElementById("gm-access-close")?.addEventListener("click", close);
+    input?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") document.getElementById("gm-access-confirm")?.click();
+      if (event.key === "Escape") close();
+    });
+  }
+
   function coreAttachOverlayClose() {
     document.getElementById("overlay-close")?.addEventListener("click", () => {
       coreCloseOverlay();
@@ -221,6 +238,14 @@
 
   function coreActionLimit(game) {
     return (game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS) + (Number(game.extraActions) || 0);
+  }
+
+  function coreHasFreeAction(game, card) {
+    return Boolean(card && coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn);
+  }
+
+  function coreCanUseAction(game, card = null) {
+    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card);
   }
 
   function coreBoardSize(game) {
@@ -306,6 +331,7 @@
       game, player, card, logEntries: log, handLimit: HAND_LIMIT,
       otherPlayer: corePlayer(game, otherPlayerId(player?.id ?? card?.ownerId)),
       board: game.boardCards,
+      controlCounts: () => ({ ...coreControlMap(game).counts }),
       allies,
       enemies,
       enemiesOf: enemies,
@@ -321,7 +347,7 @@
         return target && target.currentAttack !== before;
       }),
       setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
-      draw: (targetPlayer = player) => drawOneCard(game, targetPlayer).status === "drawn",
+      draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
       drawFromEnemyDeck: (count = 1) => coreDrawFromEnemyDeck(game, card.ownerId, count, log),
       discard: (targetPlayer, count = 1) => {
         if (!targetPlayer?.hand?.length) return 0;
@@ -357,7 +383,12 @@
       placementCells: (ownerId = card.ownerId) => corePlacementAvailability(game, ownerId).cells,
       nextOwnerTurn: (ownerId = card.ownerId) => coreNextOwnerTurn(game, ownerId),
       replaceControlCells: (cells, options = {}) => {
-        game.v2ControlCells = (game.v2ControlCells || []).filter((entry) => entry.sourceUid !== card.uid);
+        const incomingKeys = new Set(cells.map((cell) => cellKey(cell.row, cell.col)));
+        game.v2ControlCells = (game.v2ControlCells || []).filter((entry) => {
+          const incoming = incomingKeys.has(cellKey(entry.row, entry.col));
+          if (entry.sourceUid === card.uid) return options.retainExisting && !incoming;
+          return !incoming || !entry.invalidateOnAnyControl;
+        });
         cells.forEach((cell) => game.v2ControlCells.push({
           row: cell.row,
           col: cell.col,
@@ -366,7 +397,9 @@
           untilTurn: options.untilTurn ?? Infinity,
           ...(options.startsAtTurn ? { startsAtTurn: options.startsAtTurn } : {}),
           ...(options.persistent ? { persistent: true } : {}),
-          ...(options.invalidateOnEnemyEntry ? { invalidateOnEnemyEntry: true } : {})
+          ...(options.invalidateOnEnemyEntry ? { invalidateOnEnemyEntry: true } : {}),
+          ...(options.invalidateOnAnyEntry ? { invalidateOnAnyEntry: true } : {}),
+          ...(options.invalidateOnAnyControl ? { invalidateOnAnyControl: true } : {})
         }));
       },
       addBrokenCell: (position) => {
@@ -492,7 +525,7 @@
   }
 
   function coreDrawAtTurnStart(game, player) {
-    const result = drawOneCard(game, player);
+    const result = coreDrawOneCard(game, player, game.roundLog || []);
     if (result.status === "hand-full") {
       showToast("手牌已满", `${player.name} 当前已有 ${HAND_LIMIT} 张手牌，本回合不抽牌。`);
       return `${player.name} 手牌已满 ${HAND_LIMIT} 张，跳过抽牌。`;
@@ -517,7 +550,6 @@
         card.v2TempBonus = 0;
         card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0));
         card.v2StartAttack = card.currentAttack;
-        if (coreCardEffectHasFlag(card, "replacementWatcher")) card.v2ReplacedThisTurn = new Set();
       }
       if (card.ownerId === active.id && card.restedTurn !== null && card.restedTurn !== game.turn) {
         card.restedTurn = null;
@@ -567,14 +599,40 @@
     return won;
   }
 
+  function coreNotifyV2AttackIncrease(game, card, amount, temporary) {
+    if (!game || !card || amount <= 0 || !game.boardCards?.includes(card) || game.v2PowerIncreaseWatcherDepth) return;
+    const watchers = game.boardCards.filter((watcher) => (
+      watcher.ownerId === card.ownerId
+      && typeof coreCardEffectDefinition(watcher)?.onOwnCardAttackIncreased === "function"
+    ));
+    if (!watchers.length) return;
+    game.v2PowerIncreaseWatcherDepth = (Number(game.v2PowerIncreaseWatcherDepth) || 0) + 1;
+    try {
+      watchers.forEach((watcher) => {
+        const effectDefinition = coreCardEffectDefinition(watcher);
+        effectDefinition.onOwnCardAttackIncreased(coreCreateCardEffectContext(
+          game,
+          corePlayer(game, watcher.ownerId),
+          watcher,
+          game.roundLog || [],
+          { increasedCard: card, increaseAmount: amount, temporary }
+        ));
+      });
+    } finally {
+      game.v2PowerIncreaseWatcherDepth -= 1;
+    }
+  }
+
   function coreAdjustAttack(card, delta, temporary = false) {
     if (!card || !delta) return;
     const game = state.game;
+    const previous = Number(card.currentAttack ?? card.attack) || 0;
     if (delta < 0 && !coreCanReduceAttack(game, card)) return;
     if (temporary) card.v2TempBonus = (Number(card.v2TempBonus) || 0) + delta;
     else card.v2PermanentBonus = (Number(card.v2PermanentBonus) || 0) + delta;
     card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0) + (Number(card.v2TempBonus) || 0));
     if (game && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") queuePowerAnimation(game, card, delta);
+    if (card.currentAttack > previous) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
   }
 
   function coreSetAttack(game, card, nextAttack, temporary = true) {
@@ -591,6 +649,7 @@
     if (next !== previous && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
       queuePowerAnimation(game, card, next - previous);
     }
+    if (next > previous) coreNotifyV2AttackIncrease(game, card, next - previous, temporary);
     return true;
   }
 
@@ -628,12 +687,28 @@
     return Boolean(attacker && defender && attacker.ownerId !== defender.ownerId && !coreIsFightLocked(game, attacker) && !coreIsFightLocked(game, defender));
   }
 
+  function coreDrawOneCard(game, player, log = []) {
+    const result = drawOneCard(game, player);
+    if (result.status !== "drawn") {
+      coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player, reason: result.status, log });
+    }
+    return result;
+  }
+
   function coreDrawFromEnemyDeck(game, ownerId, count, log) {
     const owner = corePlayer(game, ownerId);
     const enemy = corePlayer(game, otherPlayerId(ownerId));
     let drawn = 0;
     for (let index = 0; index < count; index += 1) {
-      if (!owner || !enemy || owner.hand.length >= HAND_LIMIT || !enemy.drawPile.length) break;
+      if (!owner || !enemy) break;
+      if (owner.hand.length >= HAND_LIMIT) {
+        coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player: owner, reason: "hand-full", log: log || [] });
+        break;
+      }
+      if (!enemy.drawPile.length) {
+        coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player: owner, reason: "deck-empty", log: log || [] });
+        break;
+      }
       const card = enemy.drawPile.shift();
       card.ownerId = owner.id;
       owner.hand.push(card);
@@ -648,13 +723,12 @@
     return cells.map((cell) => getBoardCardAt(game, cell.row, cell.col)).filter(Boolean);
   }
 
-  function coreInvalidateEnemyControlCell(game, card) {
-    game.v2ControlCells = (game.v2ControlCells || []).filter((entry) => (
-      !entry.invalidateOnEnemyEntry
-      || entry.ownerId === card.ownerId
-      || entry.row !== card.row
-      || entry.col !== card.col
-    ));
+  function coreInvalidateControlCellOnEntry(game, card) {
+    game.v2ControlCells = (game.v2ControlCells || []).filter((entry) => {
+      if (entry.row !== card.row || entry.col !== card.col) return true;
+      if (entry.invalidateOnAnyEntry) return false;
+      return !entry.invalidateOnEnemyEntry || entry.ownerId === card.ownerId;
+    });
   }
 
   function coreAddReplacedCard(game, card, target, position, log) {
@@ -673,6 +747,7 @@
     card.v2LongMoveUsed = false;
     game.boardCards.push(card);
     coreApplyV2PlacementSkill(game, corePlayer(game, card.ownerId), card, log);
+    coreInvalidateControlCellOnEntry(game, card);
     coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, card.ownerId), card, log });
     return true;
   }
@@ -694,10 +769,26 @@
     });
   }
 
+  function coreRunV2DrawFailedEffects(game, player, reason, log) {
+    [...game.boardCards]
+      .filter((card) => card.ownerId === player.id)
+      .forEach((card) => {
+        if (!game.boardCards.includes(card)) return;
+        const effectDefinition = coreCardEffectDefinition(card);
+        if (typeof effectDefinition?.onDrawFailed === "function") {
+          effectDefinition.onDrawFailed(coreCreateCardEffectContext(game, player, card, log, {
+            drawFailureReason: reason,
+            drawingPlayer: player
+          }));
+        }
+      });
+  }
+
   const CORE_V2_EVENT = Object.freeze({
     TURN_START: "turnStart",
     CARD_PLACED: "cardPlaced",
     CARD_MOVED: "cardMoved",
+    DRAW_FAILED: "drawFailed",
     TURN_END: "turnEnd"
   });
 
@@ -705,13 +796,13 @@
     if (event === CORE_V2_EVENT.TURN_START && payload.card && payload.player) return coreRunV2StartSkill(game, payload.player, payload.card);
     if (event === CORE_V2_EVENT.CARD_PLACED && payload.card && payload.player) return coreTriggerOtherV2PlacementEffects(game, payload.player, payload.card, payload.log || []);
     if (event === CORE_V2_EVENT.CARD_MOVED && payload.card && payload.source && payload.target) return coreRunV2MoveEffects(game, payload.card, payload.source, payload.target, payload.successful !== false);
+    if (event === CORE_V2_EVENT.DRAW_FAILED && payload.player) return coreRunV2DrawFailedEffects(game, payload.player, payload.reason, payload.log || []);
     if (event === CORE_V2_EVENT.TURN_END && payload.player) return coreRunV2EndSkills(game, payload.player, payload.log || []);
     return null;
   }
 
   function coreValidateV2CardData() {
     const cards = window.CARD_LIBRARY?.cardSlots || [];
-    const allowedEffectTags = new Set(["起势", "收势", "遗志", "入阵", "行军"]);
     const seen = new Set();
     const duplicateIds = [];
     const invalidCards = [];
@@ -719,13 +810,11 @@
     cards.forEach((card) => {
       if (seen.has(card.id)) duplicateIds.push(card.id);
       seen.add(card.id);
-      const effectTags = Array.isArray(card.effectTags) ? card.effectTags : [];
       const id = String(card.id || "");
       const sequence = Number(id.slice(3));
       const validId = /^0[1-3][1-5]\d{2}$/.test(id) && sequence >= 1 && sequence <= 20;
       if (!validId || !card.name || !card.skill || !card.effect || !card.camp || !card.rarity
-        || !Number.isFinite(Number(card.attack))
-        || effectTags.some((tag) => !allowedEffectTags.has(tag) || [...String(tag)].length !== 2)) {
+        || !Number.isFinite(Number(card.attack))) {
         invalidCards.push(card.id || "<missing-id>");
       }
       if (validId && !coreCardEffectDefinition(card)) missingEffectIds.push(id);
@@ -825,21 +914,21 @@
     ));
     const adjacentProtector = corePickRandom(adjacentProtectors);
     if (adjacentProtector) { coreDestroyV2Card(game, adjacentProtector, log, causeCard); log.push(`${coreCardName(adjacentProtector)} 代替 ${coreCardName(card)} 被摧毁。`); return false; }
-    const weiProtector = game.boardCards.find((item) => item.ownerId === card.ownerId
-      && coreCardEffectHasFlag(item, "protectAdjacent")
+    const adjacentProtectionSources = game.boardCards.filter((item) => (
+      item.ownerId === card.ownerId
       && item.uid !== card.uid
       && Math.abs(item.row - card.row) + Math.abs(item.col - card.col) === 1
-      && card.currentAttack > 1);
-    if (weiProtector) {
-      if (!coreCanReduceAttack(game, card)) {
-        // Cao Cao blocks the attack reduction, but does not cancel Cao Ren's protection.
-        log.push(`${coreCardName(weiProtector)} 使 ${coreCardName(card)} 保留；曹操使其战力维持不变。`);
-        return false;
-      }
-      if (coreSetAttack(game, card, 0, false)) {
-        log.push(`${coreCardName(weiProtector)} 使 ${coreCardName(card)} 保留且战力变为0。`);
-        return !game.boardCards.includes(card);
-      }
+      && typeof coreCardEffectDefinition(item)?.onBeforeAdjacentAllyDestroy === "function"
+    ));
+    for (const protector of adjacentProtectionSources) {
+      const result = coreCardEffectDefinition(protector).onBeforeAdjacentAllyDestroy(coreCreateCardEffectContext(
+        game,
+        corePlayer(game, protector.ownerId),
+        protector,
+        log,
+        { protectedCard: card, original, causeCard }
+      ));
+      if (result === false) return false;
     }
     const index = game.boardCards.findIndex((item) => item.uid === card.uid);
     game.boardCards.splice(index, 1);
@@ -861,7 +950,7 @@
 
   function coreRunV2MoveEffects(game, card, source, target, successful) {
     if (!successful) return;
-    coreInvalidateEnemyControlCell(game, card);
+    coreInvalidateControlCellOnEntry(game, card);
     game.boardCards.filter((watcher) => watcher.uid !== card.uid).forEach((watcher) => {
       const effectDefinition = coreCardEffectDefinition(watcher);
       if (effectDefinition?.onOtherMoved) {
@@ -888,7 +977,7 @@
   }
 
   function coreValidMoves(game, card) {
-    if (!card || card.isGuard || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || card.lastMovedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
+    if (!card || card.isGuard || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || card.lastMovedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
       return [];
     }
     const cells = [];
@@ -923,9 +1012,10 @@
 
   function coreBuildPendingAction(game) {
     const player = corePlayer(game, game.activePlayerId);
-    if (!player || game.actionsUsed >= coreActionLimit(game)) return null;
+    if (!player) return null;
     const selection = game.selection;
     if (selection.handCardUid && selection.targetCell) {
+      if (!coreCanUseAction(game)) return null;
       const card = player.hand.find((item) => item.uid === selection.handCardUid);
       const legal = corePlacementAvailability(game).cells.some((cell) => (
         cell.row === selection.targetCell.row && cell.col === selection.targetCell.col
@@ -936,6 +1026,7 @@
     }
     if (selection.boardCardUid && selection.targetCell) {
       const card = game.boardCards.find((item) => item.uid === selection.boardCardUid && item.ownerId === player.id);
+      if (!coreCanUseAction(game, card)) return null;
       const legal = coreValidMoves(game, card).some((cell) => (
         cell.row === selection.targetCell.row && cell.col === selection.targetCell.col
       ));
@@ -984,7 +1075,7 @@
   async function coreResolveAction(game, action) {
     const player = corePlayer(game, action.playerId);
     const card = getCardByUid(game, action.cardUid);
-    if (!player || !card) {
+    if (!player || !card || !coreCanUseAction(game, action.type === "move" ? card : null)) {
       return false;
     }
     if (action.type === "move" && (!action.source || card.row !== action.source.row || card.col !== action.source.col
@@ -1016,13 +1107,22 @@
       game.boardCards.push(card);
       game.effectBoardCards = game.boardCards;
       const skillLog = [];
-      const extraPlacementSourceUid = player.v2NextPlacementExtra;
+      const extraPlacementSourceUid = player.v2NextPlacementExtraTurn === game.turn
+        ? player.v2NextPlacementExtra
+        : null;
+      if (player.v2NextPlacementExtra && !extraPlacementSourceUid) {
+        player.v2NextPlacementExtra = null;
+        player.v2NextPlacementExtraTurn = null;
+      }
       coreApplyV2PlacementSkill(game, player, card, skillLog);
-      coreInvalidateEnemyControlCell(game, card);
+      coreInvalidateControlCellOnEntry(game, card);
       if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
         // The marker belongs to this placement even when the original skill removes the card.
         if (game.boardCards.includes(card)) coreApplyV2PlacementSkill(game, player, card, skillLog);
-        if (player.v2NextPlacementExtra === extraPlacementSourceUid) player.v2NextPlacementExtra = null;
+        if (player.v2NextPlacementExtra === extraPlacementSourceUid) {
+          player.v2NextPlacementExtra = null;
+          player.v2NextPlacementExtraTurn = null;
+        }
         skillLog.push(`${coreCardName(card)} 的放置技能额外结算 1 次。`);
       }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, card.ownerId), card, log: skillLog });
@@ -1081,7 +1181,7 @@
 
     syncPlayerBoardIds(game);
     if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
-    const consumesAction = !(coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn);
+    const consumesAction = !coreHasFreeAction(game, card);
     if (consumesAction) game.actionsUsed += 1;
     const won = coreCheckVictory(game);
     game.isAnimating = false;
@@ -1134,9 +1234,9 @@
     game.boardCards.forEach((card) => {
       card.v2TempBonus = 0;
       card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0));
-      if (card.ownerId === active.id && coreCardEffectHasFlag(card, "replacementWatcher")) card.v2ReplacedThisTurn = new Set();
     });
     active.v2NextPlacementExtra = null;
+    active.v2NextPlacementExtraTurn = null;
     game.extraActions = 0;
   }
 
@@ -1314,16 +1414,18 @@
 
   function corePlanAiAction(game, player) {
     const candidates = [];
-    const movableCards = game.boardCards.filter((card) => card.ownerId === player.id && !card.isGuard);
+    const movableCards = game.boardCards.filter((card) => card.ownerId === player.id && !card.isGuard && coreCanUseAction(game, card));
     movableCards.forEach((card) => coreValidMoves(game, card).forEach((target) => {
       const score = coreAiMoveScore(game, player, card, target);
       if (Number.isFinite(score)) candidates.push({ score, action: { type: "move", playerId: player.id, cardUid: card.uid, source: { row: card.row, col: card.col }, target } });
     }));
-    const cells = corePlacementAvailability(game).cells;
-    player.hand.forEach((card) => cells.forEach((target) => candidates.push({
-      score: coreAiPlacementScore(game, player, card, target),
-      action: { type: "place", playerId: player.id, cardUid: card.uid, target }
-    })));
+    if (coreCanUseAction(game)) {
+      const cells = corePlacementAvailability(game).cells;
+      player.hand.forEach((card) => cells.forEach((target) => candidates.push({
+        score: coreAiPlacementScore(game, player, card, target),
+        action: { type: "place", playerId: player.id, cardUid: card.uid, target }
+      })));
+    }
     if (!candidates.length) return null;
     const bestScore = Math.max(...candidates.map((candidate) => candidate.score));
     const shortlist = candidates.filter((candidate) => candidate.score >= bestScore - 0.35);
@@ -1335,7 +1437,7 @@
     if (!game || game.winner || !ai?.isAI || game.isAnimating) {
       return;
     }
-    while (!game.winner && game.activePlayerId === ai.id && game.actionsUsed < coreActionLimit(game)) {
+    while (!game.winner && game.activePlayerId === ai.id && coreHasExecutableAction(game)) {
       const action = corePlanAiAction(game, ai);
       if (!action) {
         await coreEndTurn(game, false);
@@ -1419,7 +1521,7 @@
     element.tabIndex = 0;
     element.setAttribute("aria-label", card.isGuard
       ? `守军，战力 ${card.currentAttack}，中立卡牌，技能无。`
-      : `${display.name}，战力 ${card.currentAttack}，${getCampDisplayName(display.camp)}。词条：${coreEffectTags(card).join("、") || "无"}。技能：${display.skill}。`);
+      : `${display.name}，战力 ${card.currentAttack}，${getCampDisplayName(display.camp)}。技能：${display.skill}。`);
     element.innerHTML = `
       <div class="unit-main">
         <div class="unit-identity">
@@ -1429,14 +1531,12 @@
         <span class="unit-attack" title="当前战力 ${card.currentAttack}">
           <strong>${card.currentAttack}</strong><small>战力</small>
         </span>
-      </div>
+        </div>
         <span class="unit-skill">${coreEscapeHtml(display.skill)}</span>
-        ${coreEffectTags(card).length ? `<span class="unit-effect-tags">${coreEffectTagBadges(card, "unit-effect-tag")}</span>` : ""}
-        ${card.restedTurn === game.turn ? '<span class="rested-badge">休整中</span>' : ""}
       <div class="unit-tooltip" role="tooltip">
-        <span class="unit-tooltip-label">触发时机 ${coreEffectTagBadges(card)}</span>
-        <span class="skill-effect-list">${coreSkillEffectHtml(card)}</span>
-        ${card.restedTurn === game.turn ? '<span class="unit-tooltip-state">当前状态：休整中，本回合不能主动移动。</span>' : ""}
+        <div class="tooltip-section tooltip-power"><span class="tooltip-section-label">当前战力</span><strong>${card.currentAttack}</strong></div>
+        <div class="tooltip-section"><span class="tooltip-section-label">完整技能效果</span><span class="skill-effect-list">${coreSkillEffectHtml(card)}</span></div>
+        <div class="tooltip-section tooltip-status"><span class="tooltip-section-label">当前状态</span><span class="unit-tooltip-state">${card.restedTurn === game.turn ? "休整中：本回合不能主动移动。" : "可行动：未处于休整状态。"}</span></div>
       </div>
     `;
     element.addEventListener("mouseenter", () => {
@@ -1463,8 +1563,11 @@
         <div class="card-top"><h3>${coreEscapeHtml(display.name)}</h3><strong>ATK ${card.attack}</strong></div>
         <p class="card-stats">${coreEscapeHtml(getCardTierLabel(card))} · ${coreEscapeHtml(getCampDisplayName(display.camp))}</p>
         <p class="card-effect">${coreEscapeHtml(display.skill)}</p>
-        ${coreEffectTags(card).length ? `<div class="card-tags">${coreEffectTagBadges(card, "card-tag alt")}</div>` : ""}
-        <span class="hand-skill-tooltip" role="tooltip"><strong>触发时机 ${coreEffectTagBadges(card)}</strong><span class="skill-effect-list">${coreSkillEffectHtml(card)}</span></span>
+        <span class="hand-skill-tooltip" role="tooltip">
+          <span class="tooltip-section tooltip-power"><span class="tooltip-section-label">当前战力</span><strong>${card.currentAttack ?? card.attack}</strong></span>
+          <span class="tooltip-section"><span class="tooltip-section-label">完整技能效果</span><span class="skill-effect-list">${coreSkillEffectHtml(card)}</span></span>
+          <span class="tooltip-section tooltip-status"><span class="tooltip-section-label">当前状态</span><span>手牌中：可放置。</span></span>
+        </span>
       `;
       element.addEventListener("click", () => coreHandleHandClick(card.uid));
       ui.handCards.appendChild(element);
@@ -1493,7 +1596,7 @@
     ui.actingPlayerLabel.textContent = `${active.name}${active.id === game.firstPlayerId ? "（先手）" : "（后手）"}`;
     ui.actionsLabel.textContent = `${game.actionsUsed} / ${coreActionLimit(game)}`;
     const handActionPanel = document.getElementById("hand-action-count");
-    handActionPanel?.classList.toggle("is-complete", game.actionsUsed >= coreActionLimit(game));
+    handActionPanel?.classList.toggle("is-complete", game.actionsUsed >= coreActionLimit(game) && !coreHasExecutableAction(game));
     const handActionCount = document.querySelector("#hand-action-count strong");
     if (handActionCount) handActionCount.textContent = `${game.actionsUsed} / ${coreActionLimit(game)}`;
     const controlCompare = document.getElementById("control-compare-label");
@@ -1540,8 +1643,8 @@
     ui.detailSummary.textContent = selectedCard
       ? `${getCampDisplayName(selectedDisplay.camp)} · 当前战力 ${selectedCard.currentAttack} · 基础战力 ${selectedCard.attack}`
       : "卡牌详情将在此显示。";
-    ui.detailTags.innerHTML = selectedCard ? `<span class="detail-tag">${selectedCard.isGuard ? "中立守军" : "玩家卡牌"}</span><span class="detail-tag">${selectedCard.restedTurn === game.turn ? "休整中" : "可行动"}</span>${coreEffectTagBadges(selectedCard, "detail-tag effect-tag")}` : "";
-    ui.detailLines.innerHTML = selectedCard ? `<div class="detail-line"><strong>${coreEffectTags(selectedCard).length ? `触发时机 ${coreEffectTagBadges(selectedCard)}` : "技能效果"}</strong><span class="skill-effect-list">${coreSkillEffectHtml(selectedCard)}</span></div><div class="detail-line"><strong>状态</strong><span>${selectedCard.restedTurn === game.turn ? "本回合休整，不能主动移动" : "可进行移动"}</span></div>` : "";
+    ui.detailTags.innerHTML = selectedCard ? `<span class="detail-tag">${selectedCard.isGuard ? "中立守军" : "玩家卡牌"}</span><span class="detail-tag">${selectedCard.restedTurn === game.turn ? "休整中" : "可行动"}</span>` : "";
+    ui.detailLines.innerHTML = selectedCard ? `<div class="detail-line"><strong>技能效果</strong><span class="skill-effect-list">${coreSkillEffectHtml(selectedCard)}</span></div><div class="detail-line"><strong>状态</strong><span>${selectedCard.restedTurn === game.turn ? "本回合休整，不能主动移动" : "可进行移动"}</span></div>` : "";
     ui.actionLogTurn.textContent = `第 ${game.turn} 回合`;
     ui.actionLogList.innerHTML = "";
     (game.roundLog.length ? game.roundLog : ["本回合尚无行动记录。"]).forEach((entry, index) => {
@@ -1579,12 +1682,14 @@
     const game = state.game;
     if (!game || game.isAnimating || isBrokenCell(game, row, col)) return;
     const active = corePlayer(game, game.activePlayerId);
-    if (game.actionsUsed >= coreActionLimit(game)) {
+    const target = getBoardCardAt(game, row, col);
+    const selectedCard = game.boardCards.find((item) => item.uid === game.selection.boardCardUid);
+    const actionCard = target?.ownerId === active.id ? target : selectedCard;
+    if (!coreCanUseAction(game, actionCard)) {
       showToast("行动次数已用完", "本回合不能继续行动，请结束回合。");
       coreRender();
       return;
     }
-    const target = getBoardCardAt(game, row, col);
     if (game.selection.handCardUid) {
       if (!target && corePlacementAvailability(game).cells.some((cell) => cell.row === row && cell.col === col)) {
         game.selection.targetCell = { row, col };
@@ -2034,9 +2139,10 @@
   window.resolveAttackValue = (_game, card) => (typeof card?.currentAttack === "number" ? card.currentAttack : card?.attack || 0);
   window.finishGameByTurnLimit = coreFinishTurnLimit;
   window.validateCoreV2CardData = coreValidateV2CardData;
+  window.requestBoardSizeAccess = coreRequestBoardSizeAccess;
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
-    cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill,
+    cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill, coreBuildPendingAction,
     coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card,
     coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
@@ -2067,9 +2173,9 @@
 
   function coreHasExecutableAction(game) {
     const active = corePlayer(game, game.activePlayerId);
-    if (!active || game.actionsUsed >= coreActionLimit(game)) return false;
-    if (corePlacementAvailability(game).cells.length > 0 && active.hand.length > 0) return true;
-    return game.boardCards.some((card) => card.ownerId === active.id && coreValidMoves(game, card).length > 0);
+    if (!active) return false;
+    if (coreCanUseAction(game) && corePlacementAvailability(game).cells.length > 0 && active.hand.length > 0) return true;
+    return game.boardCards.some((card) => card.ownerId === active.id && coreCanUseAction(game, card) && coreValidMoves(game, card).length > 0);
   }
 
   async function coreAnimateVictoryCells(game, winnerId) {
@@ -2099,6 +2205,7 @@
     if (!game || game.isAnimating || game.winner) return;
     const active = corePlayer(game, game.activePlayerId);
     if (!active || active.isAI || !window.confirm(`确定让 ${active.name} 认输吗？认输后将立即判负，且无法撤销。`)) return;
+    window.closeGameMenu?.();
     if (game.mode === "online") {
       if (!window.CardOnline?.send({ type: "surrender-request" })) showToast("联网未连接", "请等待联网服务连接后再认输。");
       return;

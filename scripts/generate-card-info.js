@@ -7,15 +7,16 @@ const root = path.resolve(__dirname, "..");
 const sourcePath = path.join(root, "outputs", "card-info-table-xlsx", "card_info_v2.xlsx");
 const targetPath = path.join(root, "card-info.js");
 const cardInfoSchemaVersion = "card-info-v2-display-effect-isolation-20260908";
-const expectedHeaders = ["卡牌ID", "卡牌名称", "势力", "技能名称", "基础战力", "品质", "技能效果描述", "触发词条"];
+const expectedHeaders = ["卡牌ID", "卡牌名称", "势力", "技能名称", "基础战力", "品质", "技能效果描述"];
+const legacyEffectTagHeader = "触发词条";
 const cardIdPattern = /^0[1-3][1-5]\d{2}$/;
 
 function cellText(value) {
   return value === undefined || value === null ? "" : String(value).trim();
 }
 
-function effectTags(value) {
-  return cellText(value).split(/[、,，/\s]+/).filter(Boolean);
+function effectText(value) {
+  return value === undefined || value === null ? "" : String(value);
 }
 
 function fail(message) {
@@ -27,7 +28,13 @@ const workbook = XLSX.readFile(sourcePath, { cellText: false, cellDates: false }
 const sheet = workbook.Sheets[workbook.SheetNames[0]];
 const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
 const headers = (rows.shift() || []).map(cellText);
-if (headers.length !== expectedHeaders.length || headers.some((header, index) => header !== expectedHeaders[index])) {
+const baseHeadersMatch = headers.length === expectedHeaders.length
+  && headers.every((header, index) => header === expectedHeaders[index]);
+// Accept the old workbook shape during migration, but never read its tag column.
+const legacyHeadersMatch = headers.length === expectedHeaders.length + 1
+  && headers.slice(0, expectedHeaders.length).every((header, index) => header === expectedHeaders[index])
+  && headers[expectedHeaders.length] === legacyEffectTagHeader;
+if (!baseHeadersMatch && !legacyHeadersMatch) {
   fail(`列标题不匹配：${headers.join("、")}`);
 }
 
@@ -52,8 +59,7 @@ const cards = rows.filter((row) => row.some((value) => cellText(value))).map((ro
     // The adapter maps this source value to the runtime attack field.
     attack: baseAttack,
     rarity: cellText(values[5]),
-    effect: cellText(values[6]),
-    effectTags: effectTags(values[7])
+    effect: effectText(values[6])
   };
   if (!card.name || !card.camp || !card.skill || !card.rarity || !card.effect) fail(`第 ${rowNumber} 行存在空的卡牌基础信息：${id}`);
   return card;

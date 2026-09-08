@@ -132,7 +132,6 @@ function validateActionRequest(room, playerId, action) {
   const game = parseRoomGame(room);
   if (!game || game.winner || game.activePlayerId !== playerId) return "当前不是你的行动回合。";
   const actionLimit = (Number(game.turn) === 1 ? 1 : 2) + (Number(game.extraActions) || 0);
-  if (Number(game.actionsUsed) >= actionLimit) return "本回合行动次数已用尽。";
   if (!action || !["place", "move"].includes(action.type) || action.playerId !== playerId) return "行动数据无效。";
   const size = [3, 4, 5].includes(Number(room.boardSize)) ? Number(room.boardSize) : 4;
   const cards = Array.isArray(game.boardCards) ? game.boardCards : [];
@@ -140,6 +139,7 @@ function validateActionRequest(room, playerId, action) {
   const player = players.find((entry) => Number(entry.id) === playerId);
   if (!player) return "玩家状态无效。";
   if (action.type === "place") {
+    if (Number(game.actionsUsed) >= actionLimit) return "本回合行动次数已用尽。";
     const inHand = Array.isArray(player.hand) && player.hand.some((card) => card.uid === action.cardUid);
     if (!inHand || !validCell(action.target, size)) return "放置位置或卡牌无效。";
     const broken = new Set((game.brokenCells || []).map((cell) => `${cell.row},${cell.col}`));
@@ -150,6 +150,7 @@ function validateActionRequest(room, playerId, action) {
   const card = cards.find((entry) => entry.uid === action.cardUid && Number(entry.ownerId) === playerId);
   if (!card || !validCell(action.source, size) || !validCell(action.target, size)
     || card.row !== action.source.row || card.col !== action.source.col) return "移动卡牌或位置无效。";
+  if (Number(game.actionsUsed) >= actionLimit && Number(card.freeActionTurn) !== Number(game.turn)) return "本回合行动次数已用尽。";
   if (action.source.row === action.target.row && action.source.col === action.target.col) return "移动目标必须不同于原位置。";
   const targetCard = cards.find((entry) => entry.row === action.target.row && entry.col === action.target.col);
   if (targetCard?.uid === card.uid) return "不能与自身交战。";

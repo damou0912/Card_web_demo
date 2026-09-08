@@ -45,7 +45,7 @@ const effectSources = {};
   vm.runInContext(effectSources[file], context, { filename: file });
 });
 const effectSourceViolations = Object.entries(effectSources).flatMap(([file, source]) => {
-  const matches = source.match(/CARD_INFO|CARD_LIBRARY|\.(?:name|skill|effect|effectTags|camp|rarity)\b/g) || [];
+  const matches = source.match(/CARD_INFO|CARD_LIBRARY|\.(?:name|skill|effect|camp|rarity)\b/g) || [];
   return matches.map((match) => `${file}:${match}`);
 });
 const effectGroups = ["shu", "wei", "wu"];
@@ -70,7 +70,7 @@ try {
 } catch (_error) {
   legacySchemaRejected = true;
 }
-const runtimeDisplayFields = ["name", "camp", "rarity", "quality", "skill", "effect", "effectTags", "effectTag"];
+const runtimeDisplayFields = ["name", "camp", "rarity", "quality", "skill", "effect"];
 const displayTemplate = originalLibrary.cardSlots.find((card) => card.id === "02101");
 const forgedRuntimeCard = context.__CARD_DEMO_DEBUG__.cloneCard({
   ...displayTemplate,
@@ -78,8 +78,7 @@ const forgedRuntimeCard = context.__CARD_DEMO_DEBUG__.cloneCard({
   skill: "旧技能名",
   effect: "旧技能描述",
   camp: "旧势力",
-  rarity: "旧品质",
-  effectTags: ["旧词条"]
+  rarity: "旧品质"
 });
 const runtimeDisplayFieldsAbsent = runtimeDisplayFields.every((field) => !(field in forgedRuntimeCard));
 const resolvedDisplay = context.__CARD_DEMO_DEBUG__.getCardDisplay(forgedRuntimeCard);
@@ -88,7 +87,7 @@ const displayUsesTableById = resolvedDisplay === displayTemplate
   && resolvedDisplay.skill !== "旧技能名"
   && resolvedDisplay.effect !== "旧技能描述";
 const legacyRuntimeGame = {
-  boardCards: [{ id: "02101", name: "旧卡名", skill: "旧技能", effect: "旧描述", camp: "旧势力", rarity: "旧品质", effectTags: ["旧"] }],
+  boardCards: [{ id: "02101", name: "旧卡名", skill: "旧技能", effect: "旧描述", camp: "旧势力", rarity: "旧品质" }],
   players: [{ hand: [{ id: "01101", name: "旧手牌" }], drawPile: [], deckCatalog: [] }]
 };
 context.__CARD_DEMO_CORE_V2_TEST_API__.coreStripRuntimeDisplayData(legacyRuntimeGame);
@@ -136,16 +135,12 @@ const missingIndependentEffects = [...cardIds].filter((id) => {
   const group = prefix === "01" ? "shu" : prefix === "02" ? "wei" : prefix === "03" ? "wu" : "";
   return !group || !context.CARD_EFFECTS_V2[group]?.[String(id)];
 });
-const invalidEffectTags = context.CARD_LIBRARY.cardSlots
-  .flatMap((card) => (Array.isArray(card.effectTags) ? card.effectTags : (card.effectTag ? [card.effectTag] : []))
-    .filter((tag) => [...String(tag)].length !== 2)
-    .map(() => card.id));
 const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || invalidEffectTags.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected) {
-  console.error(JSON.stringify({ validation, invalidEffectTags, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
+if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected) {
+  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);

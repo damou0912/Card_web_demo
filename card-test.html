@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>V2 Card Test</title>
-  <link rel="stylesheet" href="card-test.css?v=20260908-display-effect-isolation">
+  <link rel="stylesheet" href="card-test.css?v=20260908-gm-gate">
 </head>
 <body>
   <main class="test-shell">
@@ -77,8 +77,23 @@
     </section>
   </main>
   <div id="test-toast" class="test-toast" role="status"></div>
+  <div id="gm-test-access" class="gm-test-access visible" aria-hidden="false">
+    <section class="gm-test-access-card" role="dialog" aria-modal="true" aria-labelledby="gm-test-access-title">
+      <p class="eyebrow">GM ACCESS</p>
+      <h2 id="gm-test-access-title">验证测试台</h2>
+      <p class="gm-test-access-copy">请输入 6 位 GM 密码后继续。</p>
+      <label class="gm-test-access-label" for="gm-test-access-input">GM 密码
+        <input id="gm-test-access-input" type="password" maxlength="6" minlength="6" inputmode="text" autocomplete="off" spellcheck="false" autofocus>
+      </label>
+      <p id="gm-test-access-error" class="gm-test-access-error" aria-live="polite"></p>
+      <div class="gm-test-access-actions">
+        <button id="gm-test-access-confirm" class="primary-btn" type="button">验证并进入</button>
+        <a class="ghost-btn gm-test-access-back" href="index.html">返回主游戏</a>
+      </div>
+    </section>
+  </div>
   <script src="card-info.js?v=20260908-display-effect-isolation"></script>
   <script src="v2-card-data.js?v=20260908-display-effect-isolation"></script>
-  <script src="card-test.js?v=20260908-display-effect-isolation"></script>
+  <script src="card-test.js?v=20260908-gm-gate"></script>
 </body>
 </html>

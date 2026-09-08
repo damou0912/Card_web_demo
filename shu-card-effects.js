@@ -7,7 +7,7 @@
   };
 
   shu["01102"] = {
-    onTurnStart(ctx) { ctx.allies().forEach((target) => ctx.adjust(target, 1)); }
+    onTurnStart(ctx) { ctx.allies().forEach((target) => ctx.adjust(target, 1, true)); }
   };
 
   shu["01103"] = {
@@ -43,7 +43,7 @@
   };
 
   shu["01107"] = {
-    onTurnStart(ctx) { if (ctx.player.hand.length <= 3) ctx.draw(ctx.player); }
+    onTurnStart(ctx) { if (ctx.player.hand.length < 3) ctx.draw(ctx.player); }
   };
 
   shu["01208"] = {
@@ -56,7 +56,13 @@
 
   shu["01209"] = {
     flags: { chargeMove: true },
-    onTurnStart(ctx) { if (ctx.enemies().length) ctx.adjust(ctx.card, 2, true); }
+    onTurnStart(ctx) {
+      const enemyCount = ctx.board.filter((target) => (
+        target.ownerId !== ctx.card.ownerId
+        && (target.row === ctx.card.row || target.col === ctx.card.col)
+      )).length;
+      if (enemyCount) ctx.adjust(ctx.card, enemyCount, true);
+    }
   };
 
   shu["01210"] = {
@@ -70,26 +76,29 @@
 
   shu["01211"] = {
     onTurnStart(ctx) {
-      const ownCount = ctx.board.filter((target) => target.ownerId === ctx.card.ownerId).length;
-      const enemyCount = ctx.board.filter((target) => target.ownerId !== ctx.card.ownerId).length;
+      const counts = ctx.controlCounts();
+      const ownCount = counts[ctx.card.ownerId] || 0;
+      const enemyCount = counts[ctx.otherPlayer.id] || 0;
       if (ownCount < enemyCount) ctx.adjust(ctx.card, 2, true);
       else ctx.allies().forEach((target) => ctx.adjust(target, 1, true));
     }
   };
 
   shu["01212"] = {
-    onTurnStart(ctx) { if (ctx.enemies().length) ctx.adjust(ctx.card, 1, true); }
+    baseAttack: 2,
+    flags: { cannotMove: true },
+    onTurnStart(ctx) { ctx.adjust(ctx.card, 1); }
   };
 
   shu["01313"] = {
     onTurnStart(ctx) {
       ctx.card.v2Protected = false;
-      if (ctx.card.currentAttack < 4) ctx.setAttack(ctx.card, 4, true);
+      ctx.setAttack(ctx.card, 4, false);
     },
     onBeforeDestroy(ctx) {
       if (ctx.card.v2Protected) return;
       ctx.card.v2Protected = true;
-      ctx.setAttack(ctx.card, 1, true);
+      ctx.setAttack(ctx.card, 1, false);
       ctx.log("首次被摧毁时保留在原格，战力变为1。");
       return false;
     },
@@ -108,7 +117,7 @@
   shu["01315"] = {
     onTurnStart(ctx) {
       const ownCards = ctx.board.filter((target) => target.ownerId === ctx.card.ownerId);
-      const enemyCards = ctx.board.filter((target) => target.ownerId !== ctx.card.ownerId);
+      const enemyCards = ctx.board.filter((target) => target.ownerId === ctx.otherPlayer.id);
       if (ownCards.length < enemyCards.length) ctx.addActions(1);
       else if (ownCards.length > enemyCards.length) ownCards.forEach((target) => ctx.adjust(target, 1, true));
     }
@@ -136,26 +145,28 @@
   };
 
   shu["01519"] = {
-    onTurnStart(ctx) {
-      if (ctx.draw(ctx.player) || ctx.player.hand.length < ctx.handLimit) return;
+    onTurnStart(ctx) { ctx.draw(ctx.player); },
+    onDrawFailed(ctx) {
+      if (ctx.drawFailureReason !== "hand-full") return;
       const target = ctx.pickRandom(ctx.board.filter((ally) => ally.ownerId === ctx.card.ownerId && ally.uid !== ctx.card.uid));
       if (target) ctx.adjust(target, 2);
     }
   };
 
   shu["01520"] = {
-    onPlace(ctx) {
+    onTurnStart(ctx) {
       const cells = ctx.orthogonalCells().filter((cell) => (
         !ctx.board.some((target) => target.row === cell.row && target.col === cell.col)
         && !ctx.game.brokenCells.some((target) => target.row === cell.row && target.col === cell.col)
       ));
       ctx.replaceControlCells(cells, {
         ownerId: ctx.card.ownerId,
-        startsAtTurn: ctx.nextOwnerTurn(),
         untilTurn: Infinity,
-        persistent: true
+        retainExisting: true,
+        invalidateOnAnyEntry: true,
+        invalidateOnAnyControl: true
       });
-      if (cells.length) ctx.log("从下个己方回合起占领相邻空格。");
+      if (cells.length) ctx.log("占领相邻空格，直至其他卡牌进入或触发占领。");
     }
   };
 

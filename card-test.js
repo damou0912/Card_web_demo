@@ -1,6 +1,8 @@
 const TEST_BOARD_SIZE = 4;
 const CARD_TEST_SCENE_VERSION = 2;
 const CARD_TEST_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
+// This is a client-side GM convenience gate, not a security boundary.
+const CARD_TEST_GM_PASSWORD = "dm0912";
 const testState = { cards: [], brokenCells: [], selectedTemplate: null, selectedCardUid: null, ownerId: 1, camp: "全部" };
 
 const testUi = {
@@ -27,24 +29,56 @@ const testUi = {
 if (window.CARD_LIBRARY?.version !== CARD_TEST_DATA_VERSION || !Array.isArray(window.CARD_LIBRARY?.cardSlots)) {
   throw new Error("Card Test 无法加载当前版本的卡牌展示数据。");
 }
-const allTemplates = window.CARD_LIBRARY.cardSlots.map((card) => ({ ...card, effectTags: [...card.effectTags] }));
+const allTemplates = window.CARD_LIBRARY.cardSlots.map((card) => ({ ...card }));
+
+function initializeCardTestAccess() {
+  const gate = document.getElementById("gm-test-access");
+  const input = document.getElementById("gm-test-access-input");
+  const error = document.getElementById("gm-test-access-error");
+  const confirm = document.getElementById("gm-test-access-confirm");
+  const shell = document.querySelector(".test-shell");
+  if (!gate || !input || !error || !confirm) return;
+
+  if (shell) {
+    shell.inert = true;
+    shell.setAttribute("aria-hidden", "true");
+  }
+
+  const unlock = () => {
+    gate.classList.remove("visible");
+    gate.setAttribute("aria-hidden", "true");
+    if (shell) {
+      shell.inert = false;
+      shell.removeAttribute("aria-hidden");
+    }
+    input.blur();
+  };
+
+  const validate = () => {
+    const password = String(input.value || "").trim();
+    if (!/^[A-Za-z0-9]{6}$/.test(password)) {
+      error.textContent = "密码必须为 6 位数字或英文字母。";
+      input.focus();
+      return;
+    }
+    if (password.toLowerCase() !== CARD_TEST_GM_PASSWORD) {
+      error.textContent = "GM 密码不正确。";
+      input.select();
+      return;
+    }
+    unlock();
+  };
+
+  confirm.addEventListener("click", validate);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") validate();
+  });
+  input.focus();
+}
 
 function formatEffectText(card) {
-  if (!card || !card.effect) return "无技能效果。";
-  const lines = String(card.effect).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  return lines.map((line, index) => {
-    const normalized = line.replace(/^\d+\s*[.、)）]\s*/, "");
-    return lines.length > 1 ? `${index + 1}. ${normalized}` : normalized;
-  }).join("\n");
-}
-
-function getEffectTags(card) {
-  if (!card || card.isGuard) return [];
-  return Array.isArray(card.effectTags) ? card.effectTags.filter(Boolean) : [];
-}
-
-function getEffectTagText(card) {
-  return getEffectTags(card).join("、") || "无";
+  if (!card || card.effect === undefined || card.effect === null) return "无技能效果。";
+  return String(card.effect);
 }
 
 function makeTestCard(template, row, col, ownerId, attack = template.attack) {
@@ -55,7 +89,6 @@ function makeTestCard(template, row, col, ownerId, attack = template.attack) {
     name: template.name,
     camp: template.camp,
     skill: template.skill,
-    effectTags: [...template.effectTags],
     effect: template.effect,
     rarity,
     attack: Number(attack),
@@ -96,14 +129,14 @@ function renderFilters() {
 function renderLibrary() {
   const keyword = testUi.search.value.trim().toLowerCase();
   const list = allTemplates.filter((card) => {
-    const haystack = `${card.name} ${card.camp} ${card.skill} ${(card.effectTags || []).join(" ")} ${card.effect}`.toLowerCase();
+    const haystack = `${card.name} ${card.camp} ${card.skill} ${card.effect}`.toLowerCase();
     return (testState.camp === "全部" || card.camp === testState.camp) && (!keyword || haystack.includes(keyword));
   });
   testUi.libraryCount.textContent = `${list.length} 张`;
   testUi.library.innerHTML = list.map((card) => `
     <button class="library-card rarity-${card.rarity || "普通"} ${testState.selectedTemplate?.id === card.id ? "selected" : ""}" data-card-id="${card.id}">
       <span class="library-attack">${card.attack}</span>
-      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${getEffectTagText(card)} · ${card.skill || "无技能"}</small></span>
+      <span><p>${card.name}</p><small>${card.camp.replace("三国~", "")} · ${card.rarity} · ${card.skill || "无技能"}</small></span>
     </button>
   `).join("");
 }
@@ -133,7 +166,7 @@ function renderBoard() {
 
 function renderBoardCard(card) {
   return `<article class="test-unit player${card.ownerId} rarity-${card.rarity || "普通"} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
-    <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span>${getEffectTags(card).length ? `<span class="unit-effect-tags">${getEffectTags(card).map((tag) => `<span class="unit-effect-tag">${tag}</span>`).join("")}</span>` : ""}<span class="unit-attack">${card.attack}</span>
+    <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span><span class="unit-attack">${card.attack}</span>
   </article>`;
 }
 
@@ -144,7 +177,7 @@ function renderInspector() {
   testUi.state.textContent = card ? "正在编辑" : "未选择";
   if (!card) return;
   testUi.preview.className = `preview-card player${card.ownerId} rarity-${card.rarity || "普通"}`;
-  testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity} · ${getEffectTagText(card)}</p><p>${card.skill}</p>`;
+  testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity}</p><p>${card.skill}</p>`;
   testUi.owner.value = String(card.ownerId);
   testUi.attack.value = String(card.attack);
   testUi.effect.textContent = formatEffectText(card);
@@ -267,6 +300,8 @@ function loadDuelPreset() {
   render();
   showToast("已载入交战预设，可继续自由修改。");
 }
+
+initializeCardTestAccess();
 
 testUi.search.addEventListener("input", renderLibrary);
 testUi.campFilter.addEventListener("click", (event) => {

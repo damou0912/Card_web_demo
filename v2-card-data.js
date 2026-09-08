@@ -14,7 +14,7 @@
     const expectedCamp = allowedCamps.get(id.slice(0, 2));
     if (!/^0[1-3][1-5]\d{2}$/.test(id) || ids.has(id) || card.camp !== expectedCamp
       || !card.name || !card.skill || !card.rarity || !card.effect
-      || !Number.isInteger(baseAttack) || baseAttack < 0 || !Array.isArray(card.effectTags)) {
+      || !Number.isInteger(baseAttack) || baseAttack < 0) {
       throw new Error(`卡牌展示数据无效：${id || "<missing-id>"}`);
     }
     ids.add(id);
@@ -26,8 +26,7 @@
       baseAttack,
       attack: baseAttack,
       rarity: card.rarity,
-      effect: card.effect,
-      effectTags: Object.freeze([...card.effectTags])
+      effect: card.effect
     });
   });
 

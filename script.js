@@ -1,4 +1,4 @@
-const BOARD_SIZE = 4;
+const BOARD_SIZE = 5;
 const INITIAL_HAND_SIZE = 3;
 const HAND_LIMIT = 5;
 const MAX_TURNS = 25;
@@ -11,6 +11,14 @@ const BOARD_PULSE_FADE_MS = 260;
 const BOARD_PULSE_STEP_GAP_MS = 140;
 let destructionAnimationSequence = 0;
 
+const THEME_STORAGE_KEY = "card-demo-theme";
+const THEME_PRESETS = Object.freeze({
+  moss: "苔原灰绿",
+  mist: "雾蓝灰",
+  dawn: "暖杏灰",
+  bamboo: "竹青淡绿"
+});
+
 const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots;
 if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908" || !Array.isArray(GAME_CARD_SLOT_TEMPLATES)) {
   throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
@@ -18,11 +26,11 @@ if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-2026
 const GAME_CARD_DISPLAY_BY_ID = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
 const GUARD_CARD_DISPLAY = Object.freeze({
   name: "守军", camp: "无势力", rarity: "普通", skill: "无",
-  effect: "中立守军：双方均视为敌方卡牌。", effectTags: Object.freeze([])
+  effect: "中立守军：双方均视为敌方卡牌。"
 });
 const UNKNOWN_CARD_DISPLAY = Object.freeze({
   name: "未知卡牌", camp: "无势力", rarity: "普通", skill: "无",
-  effect: "无技能效果。", effectTags: Object.freeze([])
+  effect: "无技能效果。"
 });
 
 const ui = {
@@ -35,10 +43,22 @@ const ui = {
   phaseBanner: document.getElementById("phase-banner"),
   deckReveal: document.getElementById("deck-reveal"),
   playerIdModal: document.getElementById("player-id-modal"),
+  gameMenuBtn: document.getElementById("game-menu-btn"),
+  gameMenuModal: document.getElementById("game-menu-modal"),
+  gameMenuClose: document.getElementById("game-menu-close"),
+  themeMenuBtn: document.getElementById("theme-menu-btn"),
+  themeMenuModal: document.getElementById("theme-menu-modal"),
+  themeMenuClose: document.getElementById("theme-menu-close"),
+  themeSubmenuBtn: document.getElementById("theme-submenu-btn"),
+  themeSubmenu: document.getElementById("theme-submenu"),
+  mapSubmenuBtn: document.getElementById("map-submenu-btn"),
+  mapSubmenu: document.getElementById("map-submenu"),
   playerIdValue: document.getElementById("player-id-value"),
   editPlayerIdBtn: document.getElementById("edit-player-id-btn"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
   mapButtons: [...document.querySelectorAll(".map-btn")],
+  themeButtons: [...document.querySelectorAll(".theme-btn")],
+  themeCurrentLabels: [...document.querySelectorAll(".theme-current-label")],
   startGameBtn: document.getElementById("start-game-btn"),
   modeLabel: document.getElementById("mode-label"),
   turnLabel: document.getElementById("turn-label"),
@@ -82,7 +102,7 @@ const ui = {
 
 const state = {
   selectedMode: "pvp",
-  selectedBoardSize: 4,
+  selectedBoardSize: 5,
   playerName: "",
   selectedDecks: { 1: null, 2: null },
   game: null,
@@ -103,6 +123,13 @@ function getCardDisplayName(cardOrId) {
   return getCardDisplay(cardOrId).name;
 }
 
+function getCardRuntimeDefinition(cardOrId) {
+  const id = String(typeof cardOrId === "object" ? cardOrId?.id : cardOrId || "");
+  const prefix = id.slice(0, 2);
+  const group = prefix === "01" ? "shu" : prefix === "02" ? "wei" : prefix === "03" ? "wu" : "";
+  return group ? window.CARD_EFFECTS_V2?.[group]?.[id] || null : null;
+}
+
 function makeCardTemplate(slot) {
   return {
     id: String(slot.id),
@@ -112,7 +139,8 @@ function makeCardTemplate(slot) {
 
 function cloneCard(template) {
   const id = String(template?.id || "");
-  const attack = Math.max(0, Number(template?.attack) || 0);
+  const runtimeBaseAttack = getCardRuntimeDefinition(id)?.baseAttack;
+  const attack = Math.max(0, Number.isFinite(runtimeBaseAttack) ? runtimeBaseAttack : Number(template?.attack) || 0);
   return {
     id,
     attack,
@@ -198,10 +226,114 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function getStoredTheme() {
+  try {
+    const stored = window.localStorage?.getItem(THEME_STORAGE_KEY);
+    return Object.prototype.hasOwnProperty.call(THEME_PRESETS, stored) ? stored : "moss";
+  } catch (_error) {
+    return "moss";
+  }
+}
+
+function applyTheme(themeKey, persist = true) {
+  const nextTheme = Object.prototype.hasOwnProperty.call(THEME_PRESETS, themeKey) ? themeKey : "moss";
+  if (document.documentElement?.dataset) document.documentElement.dataset.theme = nextTheme;
+  ui.themeButtons?.forEach((button) => {
+    const selected = button.dataset.theme === nextTheme;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.title = THEME_PRESETS[button.dataset.theme] || "页面配色";
+  });
+  ui.themeCurrentLabels?.forEach((label) => {
+    label.textContent = THEME_PRESETS[nextTheme];
+  });
+  if (!persist) return;
+  try {
+    window.localStorage?.setItem(THEME_STORAGE_KEY, nextTheme);
+  } catch (_error) {
+    // Theme changes still apply for the current session when storage is unavailable.
+  }
+}
+
+function initializeTheme() {
+  applyTheme(getStoredTheme(), false);
+}
+
+function syncBoardSizeUi() {
+  const selectedSize = Number(state.selectedBoardSize) || 5;
+  ui.mapButtons?.forEach((button) => {
+    const selected = Number(button.dataset.boardSize) === selectedSize;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function switchScreen(name) {
   Object.entries(ui.screens).forEach(([key, element]) => {
     element.classList.toggle("active", key === name);
   });
+  if (ui.themeMenuBtn) {
+    const showThemeTrigger = name === "menu";
+    ui.themeMenuBtn.hidden = !showThemeTrigger;
+    ui.themeMenuBtn.setAttribute("aria-hidden", String(!showThemeTrigger));
+  }
+  if (name !== "game") closeGameMenu();
+  closeThemeMenu();
+}
+
+function setGameMenuOpen(open) {
+  if (!ui.gameMenuModal) return;
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) closeThemeMenu();
+  ui.gameMenuModal.classList.toggle("visible", shouldOpen);
+  ui.gameMenuModal.setAttribute("aria-hidden", String(!shouldOpen));
+  ui.gameMenuBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen) ui.gameMenuClose?.focus();
+  else ui.gameMenuBtn?.focus();
+}
+
+function closeGameMenu() {
+  setGameMenuOpen(false);
+}
+
+function setThemeSubmenuOpen(open) {
+  if (!ui.themeSubmenu) return;
+  const shouldOpen = Boolean(open);
+  ui.themeSubmenu.hidden = !shouldOpen;
+  ui.themeSubmenu.classList.toggle("visible", shouldOpen);
+  ui.themeSubmenuBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  ui.themeSubmenuBtn?.classList.toggle("expanded", shouldOpen);
+  if (shouldOpen) ui.themeButtons?.[0]?.focus();
+}
+
+function setMapSubmenuOpen(open) {
+  if (!ui.mapSubmenu) return;
+  const shouldOpen = Boolean(open);
+  ui.mapSubmenu.hidden = !shouldOpen;
+  ui.mapSubmenu.classList.toggle("visible", shouldOpen);
+  ui.mapSubmenuBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  ui.mapSubmenuBtn?.classList.toggle("expanded", shouldOpen);
+  if (shouldOpen) {
+    const submenuButtons = [...ui.mapSubmenu.querySelectorAll(".map-btn")];
+    const selectedButton = submenuButtons.find((button) => Number(button.dataset.boardSize) === Number(state.selectedBoardSize));
+    (selectedButton || submenuButtons[0])?.focus();
+  }
+}
+
+function setThemeMenuOpen(open) {
+  if (!ui.themeMenuModal) return;
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) closeGameMenu();
+  ui.themeMenuModal.classList.toggle("visible", shouldOpen);
+  ui.themeMenuModal.setAttribute("aria-hidden", String(!shouldOpen));
+  ui.themeMenuBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  setThemeSubmenuOpen(false);
+  setMapSubmenuOpen(false);
+  if (shouldOpen) ui.themeMenuClose?.focus();
+}
+
+function closeThemeMenu() {
+  setThemeMenuOpen(false);
 }
 
 function getAvailableDeckKeys() {
@@ -368,6 +500,7 @@ function cancelSelection() {
 }
 
 function resetToMenu() {
+  closeGameMenu();
   state.game = null;
   switchScreen("menu");
 }
@@ -803,6 +936,36 @@ function nextFrame() {
 }
 
 function bindEvents() {
+  ui.gameMenuBtn?.addEventListener("click", () => setGameMenuOpen(true));
+  ui.gameMenuClose?.addEventListener("click", closeGameMenu);
+  ui.gameMenuModal?.addEventListener("click", (event) => {
+    if (event.target === ui.gameMenuModal) closeGameMenu();
+  });
+  ui.themeMenuBtn?.addEventListener("click", () => setThemeMenuOpen(true));
+  ui.themeMenuClose?.addEventListener("click", closeThemeMenu);
+  ui.themeMenuModal?.addEventListener("click", (event) => {
+    if (event.target === ui.themeMenuModal) closeThemeMenu();
+  });
+  ui.themeSubmenuBtn?.addEventListener("click", () => {
+    const shouldOpen = Boolean(ui.themeSubmenu?.hidden);
+    if (shouldOpen) setMapSubmenuOpen(false);
+    setThemeSubmenuOpen(shouldOpen);
+  });
+  ui.mapSubmenuBtn?.addEventListener("click", () => {
+    const shouldOpen = Boolean(ui.mapSubmenu?.hidden);
+    if (shouldOpen) setThemeSubmenuOpen(false);
+    setMapSubmenuOpen(shouldOpen);
+  });
+  document.addEventListener?.("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    if (ui.themeMenuModal?.classList.contains("visible")) {
+      if (ui.mapSubmenu && !ui.mapSubmenu.hidden) setMapSubmenuOpen(false);
+      else if (ui.themeSubmenu && !ui.themeSubmenu.hidden) setThemeSubmenuOpen(false);
+      else closeThemeMenu();
+      return;
+    }
+    if (ui.gameMenuModal?.classList.contains("visible")) closeGameMenu();
+  });
   ui.modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
       state.selectedMode = button.dataset.mode;
@@ -812,9 +975,26 @@ function bindEvents() {
 
   ui.mapButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      state.selectedBoardSize = Number(button.dataset.boardSize) || 4;
-      ui.mapButtons.forEach((item) => item.classList.toggle("selected", item === button));
+      const nextSize = Number(button.dataset.boardSize) || 5;
+      const applySize = () => {
+        state.selectedBoardSize = nextSize;
+        syncBoardSizeUi();
+        setMapSubmenuOpen(false);
+      };
+      if (nextSize === 3) {
+        if (typeof window.requestBoardSizeAccess !== "function") {
+          showToast("GM 验证不可用", "请刷新页面后重试。");
+          return;
+        }
+        window.requestBoardSizeAccess(applySize);
+        return;
+      }
+      applySize();
     });
+  });
+
+  ui.themeButtons.forEach((button) => {
+    button.addEventListener("click", () => applyTheme(button.dataset.theme));
   });
 
   ui.startGameBtn.addEventListener("click", () => window.startRandomGame?.(state.selectedMode));
@@ -822,15 +1002,24 @@ function bindEvents() {
     window.submitCurrentAction?.();
   });
   ui.cancelSelectionBtn.addEventListener("click", cancelSelection);
-  ui.restartBtn.addEventListener("click", () => window.startRandomGame?.(state.game?.mode || state.selectedMode));
-  ui.backMenuBtn.addEventListener("click", () => window.resetToMenu?.());
+  ui.restartBtn.addEventListener("click", () => {
+    closeGameMenu();
+    window.startRandomGame?.(state.game?.mode || state.selectedMode);
+  });
+  ui.backMenuBtn.addEventListener("click", () => {
+    closeGameMenu();
+    window.resetToMenu?.();
+  });
   ui.resultRestartBtn.addEventListener("click", () => window.startRandomGame?.(state.game?.mode || state.selectedMode));
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
+  syncBoardSizeUi();
 }
 
 window.__CARD_DEMO_DEBUG__ = {
   state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
-  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName
+  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, applyTheme
 };
 window.resetToMenu = resetToMenu;
+window.closeGameMenu = closeGameMenu;
+initializeTheme();
 bindEvents();

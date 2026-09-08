@@ -547,20 +547,18 @@
         check("02208", "放置时仅随机弃置敌方一张手牌且空手时无效果", discardsExactlyOneEnemyCard && ownHandUntouched && emptyEnemyHandUnchanged);
       }
       {
-        const a = makeCard("02209", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), watcher = makeCard("02520", 1, 0, 0);
-        watcher.v2PermanentBonus = 2; watcher.currentAttack = watcher.attack + 2;
-        const g = makeGame([a, ally, watcher]);
+        const a = makeCard("02209", 1, 1, 1), ally = makeCard("01101", 1, 1, 2);
+        const g = makeGame([a, ally]);
         place(g, a);
         const positionsSwapped = a.row === 1 && a.col === 2 && ally.row === 1 && ally.col === 1;
         const bothPermanentlyBoosted = [a, ally].every((card) => card.currentAttack === card.attack + 1 && card.v2PermanentBonus === 1);
-        const movementEventsEmitted = watcher.currentAttack === watcher.attack + 1 && watcher.v2PermanentBonus === 1;
         coreRunV2EndSkills(g, g.players[0], []);
         const boostsSurviveTurnEnd = [a, ally].every((card) => card.currentAttack === card.attack + 1);
 
         const isolated = makeCard("02209", 1, 2, 2), diagonal = makeCard("01101", 1, 3, 3), isolatedGame = makeGame([isolated, diagonal]);
         place(isolatedGame, isolated);
         const noAdjacentAllyDoesNothing = isolated.row === 2 && isolated.col === 2 && isolated.currentAttack === isolated.attack && diagonal.currentAttack === diagonal.attack;
-        check("02209", "放置时与随机四向友军交换、双方永久加一并触发移动事件", positionsSwapped && bothPermanentlyBoosted && movementEventsEmitted && boostsSurviveTurnEnd && noAdjacentAllyDoesNothing);
+        check("02209", "放置时与随机四向友军交换且双方永久加一", positionsSwapped && bothPermanentlyBoosted && boostsSurviveTurnEnd && noAdjacentAllyDoesNothing);
       }
       {
         const protector = makeCard("02210", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([protector, ally]);
@@ -730,7 +728,32 @@
         const noTargetAllyDoesNotAttack = isolatedGame.boardCards.includes(isolatedAlly) && isolatedAlly.row === 2 && isolatedAlly.col === 3;
         check("02519", "相邻友军本回合加一并逐张自动攻击可交战敌军", allyBoostedAndAttacked && diagonalEnemyUntouched && boostExpires && noTargetAllyDoesNotAttack);
       }
-      { const a = makeCard("02520", 1, 1, 1), ally = makeCard("01101", 1, 2, 2), g = makeGame([a, ally]); coreTriggerOtherV2PlacementEffects(g, g.players[0], ally, []); coreRunV2MoveEffects(g, ally, { row: 2, col: 2 }, { row: 3, col: 2 }, true); check("02520", "相邻放置强化且成功离开相邻区域削弱", a.currentAttack === a.attack); }
+      {
+        const watcher = makeCard("02520", 1, 1, 1);
+        const ally = makeCard("01101", 1, 2, 2);
+        ally.restedTurn = 1;
+        const diagonalAlly = makeCard("01102", 1, 0, 0);
+        diagonalAlly.restedTurn = 1;
+        const enemy = makeCard("02101", 2, 0, 1);
+        enemy.restedTurn = 1;
+        const remote = makeCard("01103", 1, 3, 3);
+        remote.restedTurn = 1;
+        const g = makeGame([watcher, ally, diagonalAlly, enemy, remote]);
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], ally, []);
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], diagonalAlly, []);
+        coreTriggerOtherV2PlacementEffects(g, g.players[1], enemy, []);
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], remote, []);
+        const adjacentAlliesBoosted = ally.currentAttack === ally.attack + 1
+          && diagonalAlly.currentAttack === diagonalAlly.attack + 1
+          && ally.v2PermanentBonus === 1
+          && diagonalAlly.v2PermanentBonus === 1;
+        const adjacentAlliesNotRested = ally.restedTurn === null && diagonalAlly.restedTurn === null;
+        const enemyAndRemoteUntouched = enemy.currentAttack === enemy.attack
+          && remote.currentAttack === remote.attack
+          && enemy.restedTurn === 1
+          && remote.restedTurn === 1;
+        check("02520", "八方相邻友军永久加一且不进入休整", adjacentAlliesBoosted && adjacentAlliesNotRested && enemyAndRemoteUntouched);
+      }
 
       // Wu: V2 table effects and edge cases.
       { const a = makeCard("03101", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); destroy(g, a); check("03101", "摧毁时随机其他友军永久加一", ally.currentAttack === ally.attack + 1); }

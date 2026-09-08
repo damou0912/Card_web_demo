@@ -346,6 +346,11 @@
         coreAdjustAttack(target, delta, temporary);
         return target && target.currentAttack !== before;
       }),
+      preventRest: (target = card) => {
+        if (!target || target.restedTurn !== game.turn) return false;
+        target.restedTurn = null;
+        return true;
+      },
       setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
       draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
       drawFromEnemyDeck: (count = 1) => coreDrawFromEnemyDeck(game, card.ownerId, count, log),
@@ -1128,7 +1133,8 @@
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, card.ownerId), card, log: skillLog });
       if (skillLog.length) skillLog.forEach((entry) => coreAppendLog(game, entry));
       game.effectBoardCards = null;
-      coreAppendLog(game, `${player.name} 将 ${coreCardName(card)} 放置在 ${formatCell(card.row, card.col)}，该卡本回合进入休整。`);
+      const restMessage = card.restedTurn === game.turn ? "该卡本回合进入休整。" : "该卡本回合不进入休整。";
+      coreAppendLog(game, `${player.name} 将 ${coreCardName(card)} 放置在 ${formatCell(card.row, card.col)}，${restMessage}`);
     } else {
       const defender = getBoardCardAt(game, action.target.row, action.target.col);
       if (defender?.uid === card.uid) {

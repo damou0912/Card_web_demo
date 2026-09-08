@@ -214,14 +214,13 @@
   };
 
   wei["02520"] = {
-    flags: { movementWatcher: true },
-    onPlace(ctx) { ctx.card.v2AdjacencyWatcher = true; },
     onOtherPlaced(ctx) {
-      if (Math.abs(ctx.card.row - ctx.placedCard.row) <= 1 && Math.abs(ctx.card.col - ctx.placedCard.col) <= 1) ctx.adjust(ctx.card, 1);
-    },
-    onOtherMoved(ctx) {
-      const wasAdjacent = Math.abs(ctx.source.row - ctx.card.row) <= 1 && Math.abs(ctx.source.col - ctx.card.col) <= 1;
-      if (wasAdjacent) ctx.adjust(ctx.card, -1);
+      const placedCard = ctx.placedCard;
+      if (!placedCard || placedCard.uid === ctx.card.uid || placedCard.ownerId !== ctx.card.ownerId) return;
+      if (!ctx.eightAdjacent(ctx.card).some((target) => target.uid === placedCard.uid)) return;
+      ctx.adjust(placedCard, 1);
+      ctx.preventRest(placedCard);
+      ctx.log("使八方相邻友军永久战力+1，且本回合不进入休整。");
     }
   };
 

@@ -1023,6 +1023,10 @@ function bindEvents() {
   });
   ui.modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
+      if (button.dataset.mode === "pve-challenge") {
+        showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
+        return;
+      }
       state.selectedMode = button.dataset.mode;
       ui.modeButtons.forEach((item) => item.classList.toggle("selected", item === button));
       if (ui.modeDescription) ui.modeDescription.textContent = button.dataset.description || "";
@@ -1053,7 +1057,13 @@ function bindEvents() {
     button.addEventListener("click", () => applyTheme(button.dataset.theme));
   });
 
-  ui.startGameBtn.addEventListener("click", () => window.startRandomGame?.(state.selectedMode));
+  ui.startGameBtn.addEventListener("click", () => {
+    if (state.selectedMode === "pve-challenge") {
+      showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
+      return;
+    }
+    window.startRandomGame?.(state.selectedMode);
+  });
   ui.submitActionBtn.addEventListener("click", () => {
     window.submitCurrentAction?.();
   });

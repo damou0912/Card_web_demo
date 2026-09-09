@@ -389,6 +389,13 @@
       applyPlacementSkill: (card) => coreApplyV2PlacementSkill(game, corePlayer(game, card?.ownerId), card, log),
       cardName: (card) => coreCardName(card),
       drawCard: (player) => coreDrawOneCard(game, player, log),
+      addToDrawPile: (player, cards) => coreAddCardsToDrawPile(game, player, cards, log),
+      setPlayerState: (player, key, value) => {
+        if (!player || !key) return;
+        player.eliteTraitState ||= {};
+        player.eliteTraitState[key] = value;
+      },
+      getPlayerState: (player, key) => player?.eliteTraitState?.[key],
       drawReinforcement: () => coreDrawEliteReinforcement(game, ai, log),
       setCardState: (card, key, value) => {
         if (!card || !key) return;
@@ -682,6 +689,7 @@
       },
       setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
       draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
+      addToDrawPile: (targetPlayer, cards) => coreAddCardsToDrawPile(game, targetPlayer, cards, log),
       drawFromEnemyDeck: (count = 1) => coreDrawFromEnemyDeck(game, card.ownerId, count, log),
       discard: (targetPlayer, count = 1) => {
         if (!targetPlayer?.hand?.length) return 0;
@@ -1216,6 +1224,18 @@
     return result;
   }
 
+  function coreAddCardsToDrawPile(game, player, cards, log = []) {
+    if (!player || !Array.isArray(cards) || !cards.length) return 0;
+    cards.forEach((card) => {
+      if (!card) return;
+      card.ownerId = player.id;
+      player.drawPile.push(card);
+    });
+    const added = cards.filter(Boolean).length;
+    if (added) coreEmitV2Event(game, CORE_V2_EVENT.DRAW_PILE_CHANGED, { player, addedCount: added, log });
+    return added;
+  }
+
   function coreDrawFromEnemyDeck(game, ownerId, count, log) {
     const owner = corePlayer(game, ownerId);
     const enemy = corePlayer(game, otherPlayerId(ownerId));
@@ -1347,6 +1367,7 @@
     CARD_MOVED: "cardMoved",
     CARD_DRAWN: "cardDrawn",
     DRAW_FAILED: "drawFailed",
+    DRAW_PILE_CHANGED: "drawPileChanged",
     CARD_DESTROYED: "cardDestroyed",
     TURN_END: "turnEnd"
   });
@@ -1383,6 +1404,9 @@
       const result = coreRunV2DrawFailedEffects(game, payload.player, payload.reason, payload.log || []);
       coreApplyEliteAiTraitEvent(game, "drawFailed", { ...payload, drawFailureReason: payload.reason }, payload.log || []);
       return result;
+    }
+    if (event === CORE_V2_EVENT.DRAW_PILE_CHANGED && payload.player) {
+      return coreApplyEliteAiTraitEvent(game, "drawPileChanged", payload, payload.log || []);
     }
     if (event === CORE_V2_EVENT.CARD_DESTROYED && payload.destroyedCard) return coreApplyEliteAiTraitEvent(game, "cardDestroyed", payload, payload.log || []);
     if (event === CORE_V2_EVENT.TURN_END && payload.player) return coreRunV2EndSkills(game, payload.player, payload.log || []);
@@ -3137,7 +3161,7 @@
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
     cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
-    coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
+    coreAddCardsToDrawPile, coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,

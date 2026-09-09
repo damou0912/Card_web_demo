@@ -48,8 +48,20 @@
       handState(context) {
         if (context.player?.id !== own(context).id) return;
         context.operations.trimHandToOne();
-        if (!context.player.hand.length) context.operations.drawCard(context.player);
+        if (!context.player.hand.length) {
+          context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", !context.player.drawPile.length);
+          context.operations.drawCard(context.player);
+          if (context.player.hand.length) context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", false);
+        } else {
+          context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", false);
+        }
         context.operations.trimHandToOne();
+      },
+      onDrawPileChanged(context) {
+        const player = context.player;
+        if (player?.id !== own(context).id || !player.eliteTraitState?.waitingForDrawPileRefill || !player.drawPile.length || player.hand.length) return;
+        context.operations.drawCard(player);
+        context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
       }
     }),
     "1009": Object.freeze({

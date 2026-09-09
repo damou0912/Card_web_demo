@@ -2267,6 +2267,73 @@ button:disabled {
   color: rgba(255, 255, 255, 0.9);
 }
 
+.pulse-card-name {
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.pulse-effect-label,
+.pulse-result-label {
+  margin-top: 8px;
+  color: var(--effect-color);
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.12em;
+}
+
+.pulse-effect,
+.pulse-result {
+  display: block;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.pulse-result {
+  color: #ffffff;
+  font-weight: 850;
+}
+
+.board-pulse.turn-start {
+  z-index: 12;
+}
+
+.board-pulse.turn-start .pulse-core {
+  box-sizing: border-box;
+  width: min(360px, calc(100vw - 32px));
+  max-width: min(360px, calc(100vw - 32px));
+  align-items: flex-start;
+  padding: 12px 14px 13px 11px;
+  border-radius: 12px;
+}
+
+.board-pulse.turn-start .pulse-copy {
+  width: 100%;
+  max-height: min(250px, 36vh);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.board-pulse.turn-start .pulse-detail {
+  max-width: none;
+  overflow: visible;
+  white-space: normal;
+}
+
+.board-pulse.turn-start .pulse-glyph {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  font-size: 14px;
+}
+
 .board-pulse.visible {
   opacity: 1;
   transform: scale(1.04);

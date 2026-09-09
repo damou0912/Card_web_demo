@@ -9,6 +9,9 @@ const ACTION_IMPACT_HOLD_MS = 280;
 const BOARD_PULSE_VISIBLE_MS = 520;
 const BOARD_PULSE_FADE_MS = 260;
 const BOARD_PULSE_STEP_GAP_MS = 140;
+const TURN_START_PULSE_VISIBLE_MS = 2200;
+const TURN_START_PULSE_FADE_MS = 320;
+const TURN_START_PULSE_STEP_GAP_MS = 220;
 const POWER_CHANGE_VISIBLE_MS = 980;
 const POWER_CHANGE_FADE_MS = 300;
 let destructionAnimationSequence = 0;
@@ -747,12 +750,13 @@ async function finishCombatAnimation(game, scene, boardCards, outcome = null) {
 
 function queueBoardAnimation(game, event) {
   if (!game || !event || typeof event.row !== "number" || typeof event.col !== "number") {
-    return;
+    return null;
   }
   if (!Array.isArray(game.pendingAnimations)) {
     game.pendingAnimations = [];
   }
   game.pendingAnimations.push(event);
+  return event;
 }
 
 function queuePowerAnimation(game, card, delta, previousPower = null, currentPower = null) {
@@ -859,35 +863,50 @@ function showSkillFlowPrompt(game, prompt) {
 
 function queueSkillAnimation(game, card, detail = null, tone = "skill") {
   if (!card) {
-    return;
+    return null;
   }
   const display = getCardDisplay(card);
   const profile = getSkillAnimationProfile(card, detail, tone);
-  queueBoardAnimation(game, {
+  return queueBoardAnimation(game, {
     row: card.row,
     col: card.col,
     ownerId: card.ownerId || 1,
     kind: tone,
+    cardName: display.name || "卡牌",
     label: display.skill || "技能触发",
-    detail: detail || display.name,
+    detail,
+    fullEffect: display.effect || "无技能效果。",
+    result: "",
     flowPrompt: formatSkillFlowPrompt(game, card, detail),
     cardUid: card.uid,
     ...profile
   });
 }
 
+function escapeAnimationText(value) {
+  return String(value ?? "").replace(/[&<>\"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+  }[char]));
+}
+
 function createBoardPulse(event) {
   const pulse = document.createElement("div");
   pulse.className = `board-pulse ${event.kind || "skill"} ${event.effectType ? `skill-${event.effectType}` : ""} player${event.ownerId || 1}`;
+  const fullEffect = event.fullEffect ? `<span class="pulse-effect-label">技能效果</span><span class="pulse-effect">${escapeAnimationText(event.fullEffect)}</span>` : "";
+  const result = event.result ? `<span class="pulse-result-label">实际结果</span><span class="pulse-result">${escapeAnimationText(event.result)}</span>` : "";
+  const detail = event.detail ? `<span class="pulse-detail">${escapeAnimationText(event.detail)}</span>` : "";
   pulse.innerHTML = `
     <span class="pulse-ripple ripple-one"></span>
     <span class="pulse-ripple ripple-two"></span>
     <span class="pulse-core">
       <span class="pulse-glyph">${event.glyph || "!"}</span>
       <span class="pulse-copy">
-        <span class="pulse-tag">${event.tag || "交战"}</span>
-        <span class="pulse-title">${event.label || "技能触发"}</span>
-        ${event.detail ? `<span class="pulse-detail">${event.detail}</span>` : ""}
+        <span class="pulse-tag">${escapeAnimationText(event.tag || "交战")}</span>
+        ${event.cardName ? `<span class="pulse-card-name">${escapeAnimationText(event.cardName)}</span>` : ""}
+        <span class="pulse-title">${escapeAnimationText(event.label || "技能触发")}</span>
+        ${fullEffect}
+        ${result}
+        ${detail}
       </span>
     </span>
   `;
@@ -988,16 +1007,17 @@ async function playBoardAnimations(game, events) {
     }
     await nextFrame();
     pulse.classList.add("visible");
-    await wait(event.kind === "skill" || event.kind === "skill-warn" ? BOARD_PULSE_VISIBLE_MS + 220 : BOARD_PULSE_VISIBLE_MS);
+    const isTurnStart = event.kind === "turn-start";
+    await wait(isTurnStart ? TURN_START_PULSE_VISIBLE_MS : event.kind === "skill" || event.kind === "skill-warn" ? BOARD_PULSE_VISIBLE_MS + 220 : BOARD_PULSE_VISIBLE_MS);
     pulse.classList.add("fade");
-    await wait(BOARD_PULSE_FADE_MS);
+    await wait(isTurnStart ? TURN_START_PULSE_FADE_MS : BOARD_PULSE_FADE_MS);
     pulse.remove();
     destructionCard?.remove();
     cell.classList.remove("skill-impact", "skill-impact-danger", "skill-impact-boost", "skill-impact-weaken", "skill-impact-support", "skill-impact-tactic");
     if (sourceUnit) {
       sourceUnit.classList.remove("skill-casting", "skill-casting-danger", "skill-casting-boost", "skill-casting-weaken", "skill-casting-support", "skill-casting-tactic");
     }
-    await wait(BOARD_PULSE_STEP_GAP_MS);
+    await wait(isTurnStart ? TURN_START_PULSE_STEP_GAP_MS : BOARD_PULSE_STEP_GAP_MS);
   }
 }
 

@@ -3179,10 +3179,6 @@
     if (game && corePlayer(game, game.activePlayerId)?.isAI) coreRunAiTurn(game);
   };
   window.startRandomGame = (mode) => {
-    if (mode === "pve-challenge" && !isLocalChallengeModeEnabled()) {
-      showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
-      return;
-    }
     if (!coreRuntimeReady) {
       showToast("卡牌数据不可用", "请刷新页面以加载当前版本的卡牌数据与技能文件。");
       return;

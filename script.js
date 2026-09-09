@@ -143,11 +143,6 @@ const state = {
   online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] }
 };
 
-function isLocalChallengeModeEnabled() {
-  const hostname = String(window.location?.hostname || "").toLowerCase();
-  return !hostname || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
-}
-
 function getCampDisplayName(campKey) {
   return String(campKey || "无势力").replace("~", "·");
 }
@@ -1286,10 +1281,6 @@ function bindEvents() {
   });
   ui.modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      if (button.dataset.mode === "pve-challenge" && !isLocalChallengeModeEnabled()) {
-        showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
-        return;
-      }
       state.selectedMode = button.dataset.mode;
       ui.modeButtons.forEach((item) => item.classList.toggle("selected", item === button));
       if (ui.modeDescription) ui.modeDescription.textContent = button.dataset.description || "";
@@ -1321,10 +1312,6 @@ function bindEvents() {
   });
 
   ui.startGameBtn.addEventListener("click", () => {
-    if (state.selectedMode === "pve-challenge" && !isLocalChallengeModeEnabled()) {
-      showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
-      return;
-    }
     window.startRandomGame?.(state.selectedMode);
   });
   ui.submitActionBtn.addEventListener("click", () => {

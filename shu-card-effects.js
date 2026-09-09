@@ -106,12 +106,7 @@
   };
 
   shu["01314"] = {
-    flags: { avoidCombatWhenBehind: true },
-    onTurnStart(ctx) {
-      [...ctx.board]
-        .filter((target) => target.ownerId === ctx.card.ownerId && target.uid !== ctx.card.uid)
-        .forEach((target) => ctx.triggerTurnStart(target));
-    }
+    flags: { avoidCombatWhenBehind: true, repeatFriendlyTurnStart: true }
   };
 
   shu["01315"] = {

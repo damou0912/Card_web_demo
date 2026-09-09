@@ -56,6 +56,7 @@ const ui = {
   playerIdValue: document.getElementById("player-id-value"),
   editPlayerIdBtn: document.getElementById("edit-player-id-btn"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
+  modeDescription: document.getElementById("mode-description"),
   mapButtons: [...document.querySelectorAll(".map-btn")],
   themeButtons: [...document.querySelectorAll(".theme-btn")],
   themeCurrentLabels: [...document.querySelectorAll(".theme-current-label")],
@@ -68,10 +69,11 @@ const ui = {
   statusSubtext: document.getElementById("status-subtext"),
   actingPlayerLabel: document.getElementById("acting-player-label"),
   actionsLabel: document.getElementById("actions-label"),
-  player1Control: document.getElementById("player1-control"),
-  player2Control: document.getElementById("player2-control"),
-  player1Summary: document.getElementById("player1-summary"),
-  player2Summary: document.getElementById("player2-summary"),
+  ownPlayerControl: document.getElementById("own-player-control"),
+  opponentPlayerControl: document.getElementById("opponent-player-control"),
+  ownPlayerSummary: document.getElementById("own-player-summary"),
+  opponentPlayerSummary: document.getElementById("opponent-player-summary"),
+  opponentAiEffect: document.getElementById("opponent-ai-effect"),
   selectionSummary: document.getElementById("selection-summary"),
   detailRarity: document.getElementById("detail-rarity"),
   detailName: document.getElementById("detail-name"),
@@ -85,6 +87,8 @@ const ui = {
   boardAnimationLayer: document.getElementById("board-animation-layer"),
   board: document.getElementById("board"),
   handTitle: document.getElementById("hand-title"),
+  turnTimer: document.getElementById("turn-timer"),
+  turnTimerValue: document.getElementById("turn-timer-value"),
   handCards: document.getElementById("hand-cards"),
   submitActionBtn: document.getElementById("submit-action-btn"),
   cancelSelectionBtn: document.getElementById("cancel-selection-btn"),
@@ -92,16 +96,26 @@ const ui = {
   backMenuBtn: document.getElementById("back-menu-btn"),
   winnerTitle: document.getElementById("winner-title"),
   winnerSubtitle: document.getElementById("winner-subtitle"),
+  resultWinnerId: document.getElementById("result-winner-id"),
+  resultWinnerSlot: document.getElementById("result-winner-slot"),
+  resultScorePlayer1Label: document.getElementById("result-score-player1-label"),
+  resultScorePlayer2Label: document.getElementById("result-score-player2-label"),
+  resultScorePlayer1: document.getElementById("result-score-player1"),
+  resultScorePlayer2: document.getElementById("result-score-player2"),
+  resultScoreSummary: document.getElementById("result-score-summary"),
+  resultRoundCount: document.getElementById("result-round-count"),
   winnerControlSummary: document.getElementById("winner-control-summary"),
   winnerComparison: document.getElementById("winner-comparison"),
   deckSummaryPlayer1: document.getElementById("deck-summary-player1"),
   deckSummaryPlayer2: document.getElementById("deck-summary-player2"),
   resultRestartBtn: document.getElementById("result-restart-btn"),
+  resultNextLevelBtn: document.getElementById("result-next-level-btn"),
   resultMenuBtn: document.getElementById("result-menu-btn")
 };
 
 const state = {
   selectedMode: "pvp",
+  challengeLevel: 1,
   selectedBoardSize: 5,
   playerName: "",
   selectedDecks: { 1: null, 2: null },
@@ -458,8 +472,11 @@ function getCardAttackText(card, game = null) {
 }
 
 function renderResult(game) {
-  ui.winnerTitle.textContent = game.winner.playerId === 0 ? "本局平局" : `${playerName(game, game.winner.playerId)} 获胜`;
-  ui.winnerSubtitle.textContent = game.winner.text;
+  const winnerId = Number(game.winner?.playerId) || 0;
+  const winner = winnerId ? game.players.find((player) => player.id === winnerId) : null;
+  const displayName = (player) => player?.name || `玩家 ${player?.id || "?"}`;
+  const playerOne = game.players.find((player) => player.id === 1) || game.players[0];
+  const playerTwo = game.players.find((player) => player.id === 2) || game.players[1];
   const finalControl = game.finalControlCounts || game.players.reduce((counts, player) => {
     counts[player.id] = game.boardCards.filter((card) => !card.isGuard && card.ownerId === player.id).length;
     return counts;
@@ -467,20 +484,49 @@ function renderResult(game) {
   game.players.forEach((player) => {
     player.lastControlCount = finalControl[player.id] || 0;
   });
-  ui.winnerControlSummary.textContent = `最终占领：玩家 1 ${finalControl[1] || 0} 格：${finalControl[2] || 0} 格 玩家 2`;
+  const scoreOne = Number(finalControl[playerOne?.id || 1]) || 0;
+  const scoreTwo = Number(finalControl[playerTwo?.id || 2]) || 0;
+  const roundCount = Math.max(1, Number(game.turn) || Number(game.lastResolvedTurn) || 1);
+  const winnerDisplayId = winner
+    ? (game.mode === "online" ? displayName(winner) : winner.isAI ? "AI" : `P${winner.id}`)
+    : "—";
+
+  ui.winnerTitle.textContent = winner ? `${displayName(winner)} 获胜` : "本局平局";
+  ui.winnerSubtitle.textContent = game.winner?.text || "本局对战已结束。";
+  ui.resultWinnerId.textContent = winnerDisplayId;
+  ui.resultWinnerSlot.textContent = winner
+    ? (game.mode === "online" ? `联网对局 · 玩家 ${winner.id} 席位` : `${displayName(winner)} · ${winner.isAI ? "PVE" : "本地"}对局`)
+    : "双方没有单一获胜者";
+  ui.resultScorePlayer1Label.textContent = displayName(playerOne);
+  ui.resultScorePlayer2Label.textContent = displayName(playerTwo);
+  ui.resultScorePlayer1.textContent = String(scoreOne);
+  ui.resultScorePlayer2.textContent = String(scoreTwo);
+  const isSurrenderResult = /认输/.test(game.winner?.text || "");
+  ui.resultScoreSummary.textContent = isSurrenderResult
+    ? `${displayName(winner)} 因对方认输获胜 · 最终占领 ${scoreOne}:${scoreTwo}`
+    : winner
+      ? `${displayName(winner)} 以 ${winner.id === 1 ? `${scoreOne}:${scoreTwo}` : `${scoreTwo}:${scoreOne}`} 获胜`
+      : `双方 ${scoreOne}:${scoreTwo} 平局`;
+  ui.resultRoundCount.textContent = `${roundCount} 回合`;
+  ui.winnerControlSummary.textContent = `最终占领：${displayName(playerOne)} ${scoreOne} 格 · ${displayName(playerTwo)} ${scoreTwo} 格`;
   const power = game.players.map((player) => game.boardCards
     .filter((card) => card.ownerId === player.id)
     .reduce((sum, card) => sum + (Number(card.currentAttack) || Number(card.attack) || 0), 0));
-  const losingId = game.winner.playerId === 0 ? 0 : (power[0] < power[1] ? 1 : power[1] < power[0] ? 2 : 0);
-  ui.winnerComparison.innerHTML = `<span class="winner-power ${losingId === 1 ? "losing-power" : ""}">${power[0]}</span><span class="winner-vs">VS</span><span class="winner-power ${losingId === 2 ? "losing-power" : ""}">${power[1]}</span>`;
+  const losingId = winnerId === 0 ? 0 : (power[0] < power[1] ? 1 : power[1] < power[0] ? 2 : 0);
+  ui.winnerComparison.innerHTML = `<span class="winner-power-block"><small>${displayName(playerOne)} 战力</small><strong class="winner-power ${losingId === 1 ? "losing-power" : ""}">${power[0]}</strong></span><span class="winner-vs">VS</span><span class="winner-power-block"><small>${displayName(playerTwo)} 战力</small><strong class="winner-power ${losingId === 2 ? "losing-power" : ""}">${power[1]}</strong></span>`;
   if (losingId) {
     window.setTimeout(() => {
-      const losingPower = ui.winnerComparison.querySelector(`.winner-power:nth-of-type(${losingId === 1 ? 1 : 3})`);
+      const losingPower = ui.winnerComparison.querySelector(`.winner-power-block:nth-of-type(${losingId === 1 ? 1 : 3}) .winner-power`);
       losingPower?.classList.add("power-slashed");
     }, 520);
   }
   ui.deckSummaryPlayer1.textContent = summarizeDeck(game.players[0].deckCatalog, game.players[0].deckKey);
   ui.deckSummaryPlayer2.textContent = summarizeDeck(game.players[1].deckCatalog, game.players[1].deckKey);
+  if (ui.resultNextLevelBtn) {
+    const canAdvance = game.mode === "pve-challenge" && winnerId === 1;
+    ui.resultNextLevelBtn.hidden = !canAdvance;
+    ui.resultNextLevelBtn.textContent = `进入第 ${(Number(game.challengeLevel) || 1) + 1} 关`;
+  }
 }
 
 function summarizeDeck(deckCatalog, deckKey) {
@@ -510,6 +556,7 @@ function cancelSelection() {
 function resetToMenu() {
   closeGameMenu();
   state.game = null;
+  state.challengeLevel = 1;
   switchScreen("menu");
 }
 
@@ -978,6 +1025,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.selectedMode = button.dataset.mode;
       ui.modeButtons.forEach((item) => item.classList.toggle("selected", item === button));
+      if (ui.modeDescription) ui.modeDescription.textContent = button.dataset.description || "";
     });
   });
 
@@ -1018,7 +1066,11 @@ function bindEvents() {
     closeGameMenu();
     window.resetToMenu?.();
   });
-  ui.resultRestartBtn.addEventListener("click", () => window.startRandomGame?.(state.game?.mode || state.selectedMode));
+  ui.resultNextLevelBtn?.addEventListener("click", () => window.beginNextChallengeLevel?.());
+  ui.resultRestartBtn.addEventListener("click", () => {
+    if (state.game?.mode === "pve-challenge") state.challengeLevel = 1;
+    window.startRandomGame?.(state.game?.mode || state.selectedMode);
+  });
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
   syncBoardSizeUi();
 }

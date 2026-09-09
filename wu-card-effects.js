@@ -4,8 +4,9 @@
 
   wu["03101"] = {
     onDestroy(ctx) {
-      const target = ctx.pickRandom(ctx.otherAllies());
-      if (target) ctx.adjust(target, 1);
+      ctx.board
+        .filter((target) => target.ownerId === ctx.card.ownerId)
+        .forEach((target) => ctx.adjust(target, 1));
     }
   };
 
@@ -25,16 +26,31 @@
   };
 
   wu["03103"] = {
+    onPlace(ctx) {
+      ctx.orthogonalCells().forEach((position) => ctx.spawnNeutralGuard(position, 2));
+    },
+    onBeforeDestroy(ctx) {
+      const targets = ctx.adjacent().filter((target) => target.currentAttack < ctx.card.currentAttack);
+      if (!targets.length) return;
+      destroyLowerAdjacent(ctx, ctx.card.currentAttack);
+      ctx.log("阻止自身被摧毁，并随机摧毁一张战力低于自身的四方相邻卡牌。");
+      return false;
+    },
     onDestroy(ctx) {
-      const target = ctx.pickRandom(ctx.allies());
-      if (!target) return;
-      const position = ctx.position(target);
-      if (ctx.destroy(target)) ctx.reenter(target, position);
+      destroyLowerAdjacent(ctx, ctx.destroyedAttack ?? ctx.card.currentAttack);
     }
   };
 
+  function destroyLowerAdjacent(ctx, attack) {
+    const targets = ctx.adjacent().filter((target) => target.currentAttack < attack);
+    const target = ctx.pickRandom(targets);
+    if (!target) return false;
+    ctx.destroy(target, ctx.card);
+    return true;
+  }
+
   wu["03104"] = {
-    onDestroy(ctx) { ctx.allies().forEach((target) => ctx.adjust(target, 1)); }
+    onDestroy(ctx) { ctx.allies().forEach((target) => ctx.adjust(target, 3, true)); }
   };
 
   wu["03105"] = {
@@ -43,16 +59,20 @@
 
   wu["03106"] = {
     onPlace(ctx) {
-      ctx.replaceControlCells(ctx.orthogonalCells(), {
-        ownerId: ctx.card.ownerId,
-        untilTurn: Infinity,
-        invalidateOnEnemyEntry: true
-      });
+      const target = ctx.pickRandom(ctx.otherAllies());
+      if (target) ctx.adjust(target, 2);
+    },
+    onDestroy(ctx) {
+      const target = ctx.pickRandom(ctx.otherAllies());
+      if (target) ctx.adjust(target, 2);
     }
   };
 
   wu["03107"] = {
-    onDestroy(ctx) { ctx.discard(ctx.otherPlayer, 1); }
+    onDestroy(ctx) {
+      ctx.draw(ctx.otherPlayer);
+      ctx.discard(ctx.otherPlayer, 2);
+    }
   };
 
   wu["03208"] = {

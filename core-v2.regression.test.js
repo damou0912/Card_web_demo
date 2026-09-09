@@ -44,6 +44,10 @@ const effectSources = {};
   effectSources[file] = fs.readFileSync(path.join(__dirname, file), "utf8");
   vm.runInContext(effectSources[file], context, { filename: file });
 });
+[
+  "elite-ai-info.js",
+  "elite-ai-effects.js"
+].forEach((file) => vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file }));
 const effectSourceViolations = Object.entries(effectSources).flatMap(([file, source]) => {
   const matches = source.match(/CARD_INFO|CARD_LIBRARY|\.(?:name|skill|effect|camp|rarity)\b/g) || [];
   return matches.map((match) => `${file}:${match}`);

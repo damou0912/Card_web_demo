@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill, coreBuildPendingAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreTriggerOtherV2PlacementEffects, coreValidMoves, coreVictoryTarget, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyV2PlacementSkill, coreBuildPendingAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreFormatTurnTime, coreIsOpponentTurn, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
@@ -18,6 +18,81 @@
       ]
     });
     try {
+      const challengeTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      const challengeTraitIds = coreEliteAiTraitIds();
+      challengeTraitGame.eliteAiEffectId = "iron-command";
+      const eliteCard = makeCard("02101", 2, 0, 0);
+      challengeTraitGame.boardCards.push(eliteCard);
+      state.game = challengeTraitGame;
+      const challengeTraitLog = [];
+      coreApplyEliteAiTrait(challengeTraitGame, challengeTraitGame.players[1], challengeTraitLog);
+      const traitInfo = coreEliteAiTraitInfo(challengeTraitGame);
+      check("精英 AI 随机特性独立于卡牌描述", challengeTraitIds.includes(challengeTraitGame.eliteAiEffectId)
+        && traitInfo?.name === "铁壁军势"
+        && traitInfo?.description
+        && eliteCard.currentAttack === eliteCard.attack + 1
+        && challengeTraitLog.length === 1);
+
+      const supplyTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      supplyTraitGame.eliteAiEffectId = "supply-reserve";
+      supplyTraitGame.players[1].hand = [];
+      supplyTraitGame.players[1].drawPile = [makeCard("02102", 2, null, null)];
+      state.game = supplyTraitGame;
+      coreApplyEliteAiTrait(supplyTraitGame, supplyTraitGame.players[1], []);
+      const supplyApplied = supplyTraitGame.players[1].hand.length === 1;
+
+      const hunterTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      hunterTraitGame.eliteAiEffectId = "hunter-mark";
+      const markedEnemy = makeCard("01101", 1, 0, 0);
+      hunterTraitGame.boardCards.push(markedEnemy);
+      state.game = hunterTraitGame;
+      coreApplyEliteAiTrait(hunterTraitGame, hunterTraitGame.players[1], []);
+      const hunterApplied = markedEnemy.currentAttack === markedEnemy.attack - 1;
+
+      const reserveTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      reserveTraitGame.eliteAiEffectId = "tactical-reserve";
+      state.game = reserveTraitGame;
+      coreApplyEliteAiTrait(reserveTraitGame, reserveTraitGame.players[1], []);
+      check("精英 AI 四种特性均可执行", supplyApplied && hunterApplied && reserveTraitGame.extraActions === 1);
+
+      const previousOnlinePlayerId = state.online?.playerId;
+      const localViewGame = makeGame(); localViewGame.mode = "pvp";
+      localViewGame.activePlayerId = 2;
+      const localViewerId = coreViewerPlayerId(localViewGame);
+      const localOpponentTurn = coreIsOpponentTurn(localViewGame);
+      const onlineViewGame = makeGame(); onlineViewGame.mode = "online";
+      state.online.playerId = 2;
+      onlineViewGame.activePlayerId = 1;
+      const onlineViewerDuringOpponentTurn = coreViewerPlayerId(onlineViewGame);
+      const onlineOpponentTurn = coreIsOpponentTurn(onlineViewGame);
+      onlineViewGame.activePlayerId = 2;
+      const onlineViewerDuringOwnTurn = coreViewerPlayerId(onlineViewGame);
+      const onlineOwnTurn = !coreIsOpponentTurn(onlineViewGame);
+      state.online.playerId = previousOnlinePlayerId;
+      check("左侧玩家信息固定为本机视角", localViewerId === 1
+        && onlineViewerDuringOpponentTurn === 2
+        && onlineViewerDuringOwnTurn === 2);
+      check("行动数颜色按固定视角区分敌我回合", localOpponentTurn && onlineOpponentTurn && onlineOwnTurn);
+
+      const timerGame = makeGame();
+      const deadline = coreStartTurnTimer(timerGame, 1000);
+      check("每回合计时固定为 120 秒", CORE_TURN_TIME_LIMIT_SECONDS === 120
+        && deadline === 121000
+        && coreTurnSecondsRemaining(timerGame, 1000) === 120
+        && coreTurnSecondsRemaining(timerGame, 61000) === 60
+        && coreTurnSecondsRemaining(timerGame, 121000) === 0
+        && coreTurnSecondsRemaining({ turnDeadlineAt: null }, 121000) === null
+        && coreFormatTurnTime(120) === "02:00"
+        && coreFormatTurnTime(9) === "00:09");
+
+      const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      challengeGame.activePlayerId = 2;
+      check("PVE 挑战模式", challengeGame.challengeMode
+        && challengeGame.players[1].isAI
+        && challengeGame.players[1].name === "精英 AI"
+        && challengeGame.players[1].hand.length === 4
+        && coreActionLimit(challengeGame) === 2);
+
       const occupiedA = makeCard("01101", 1, 0, 0);
       const occupiedB = makeCard("01102", 2, 0, 1);
       const controlGame = makeGame([occupiedA, occupiedB]);
@@ -267,6 +342,13 @@
       }
       { const a = makeCard("01208", 1, 1, 1), ally = makeCard("01102", 1, 1, 2), target = makeCard("01101", 1, 1, 3), g = makeGame([a, ally, target]); place(g, a); check("01208", "放置时触发相邻友军的开始技能", target.currentAttack === target.attack + 1); }
       {
+        const placement = makeCard("01208", 1, 1, 1), watcher = makeCard("01314", 1, 1, 2);
+        const target = makeCard("01105", 1, 1, 0), enemy = makeCard("02105", 2, 0, 0);
+        const g = makeGame([placement, watcher, target, enemy]);
+        place(g, placement);
+        check("01208", "放置触发友方回合开始技能时被01314额外结算", target.currentAttack === target.attack + 2);
+      }
+      {
         const a = makeCard("01209", 1, 1, 1);
         const rowEnemy = makeCard("02105", 2, 1, 0), distantRowEnemy = makeCard("02105", 2, 1, 3);
         const guard = { uid: "guard-01209", ownerId: null, row: 1, col: 2, currentAttack: 2, attack: 2, isGuard: true };
@@ -335,7 +417,12 @@
         const nextTurnResetToFour = survivor.currentAttack === 4 && survivor.v2PermanentBonus === 4 - survivor.attack;
         check("01313", "回合开始永久设为四且首次免毁永久设为一", forcedToPermanentFour && protectedFirst && destroyedSecond && survivorProtected && oneSurvivedTurnEnd && nextTurnResetToFour);
       }
-      { const a = makeCard("01314", 1, 1, 1), ally = makeCard("01105", 1, 1, 2), enemy = makeCard("02105", 2, 1, 3), g = makeGame([a, ally, enemy]); start(g, a); check("01314", "其他友军开始技能额外结算", ally.currentAttack === ally.attack + 1); }
+      {
+        const a = makeCard("01314", 1, 1, 1), ally = makeCard("01105", 1, 1, 2), enemy = makeCard("02105", 2, 1, 3), g = makeGame([a, ally, enemy]);
+        state.game = g;
+        coreStartTurn(g);
+        check("01314", "友方回合开始技能额外结算一次", ally.currentAttack === ally.attack + 2);
+      }
       {
         const guard = { uid: "guard-01315", ownerId: null, row: 0, col: 0, currentAttack: 2, attack: 2, isGuard: true };
         const equal = makeCard("01315", 1, 1, 1), equalEnemy = makeCard("02101", 2, 3, 3);
@@ -416,9 +503,9 @@
         start(g, a);
         const nextStartReoccupies = g.v2ControlCells.some((entry) => entry.sourceUid === a.uid && entry.row === 2 && entry.col === 3);
 
-        const otherController = makeCard("03106", 1, 1, 1);
+        const otherController = makeCard("01520", 1, 1, 1);
         g.boardCards.push(otherController);
-        place(g, otherController);
+        start(g, otherController);
         const otherControlInvalidates = !g.v2ControlCells.some((entry) => (
           entry.sourceUid === a.uid
           && ((entry.row === 1 && entry.col === 2) || (entry.row === 2 && entry.col === 1))
@@ -756,13 +843,114 @@
       }
 
       // Wu: V2 table effects and edge cases.
-      { const a = makeCard("03101", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); destroy(g, a); check("03101", "摧毁时随机其他友军永久加一", ally.currentAttack === ally.attack + 1); }
-      { const a = makeCard("03102", 1, 1, 1), watcher = makeCard("03104", 1, 1, 2), ally = makeCard("01101", 1, 1, 3), g = makeGame([a, watcher, ally]); place(g, a); check("03102", "放置时虚拟触发相邻友军摧毁效果", ally.currentAttack === ally.attack + 1 && g.boardCards.includes(watcher)); }
-      { const a = makeCard("03103", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); const original = { row: ally.row, col: ally.col }; destroy(g, a); check("03103", "摧毁相邻友军并以基础战力重放到原位", g.boardCards.includes(ally) && ally.row === original.row && ally.col === original.col && ally.currentAttack === ally.attack); }
-      { const a = makeCard("03104", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); destroy(g, a); check("03104", "摧毁时四方相邻友军永久加一", ally.currentAttack === ally.attack + 1); }
-      { const a = makeCard("03105", 1, 1, 1), cause = makeCard("02101", 2, 1, 2), g = makeGame([a, cause]); destroy(g, a, cause); check("03105", "摧毁时仍在场的摧毁者本回合减二", cause.currentAttack === Math.max(0, cause.attack - 2)); }
-      { const a = makeCard("03106", 1, 1, 1), g = makeGame([a]); place(g, a); check("03106", "放置时四方相邻空格被我方占领", g.v2ControlCells.length === 4 && coreControlMap(g).counts[1] === 5); }
-      { const a = makeCard("03107", 1, 1, 1), g = makeGame([a]); g.players[1].hand = [makeCard("02101", 2, null, null)]; destroy(g, a); check("03107", "摧毁时敌方随机弃置一张手牌", g.players[1].hand.length === 0); }
+      {
+        const a = makeCard("03101", 1, 1, 1), ally = makeCard("01101", 1, 1, 2);
+        const remoteAlly = makeCard("01102", 1, 3, 3), enemy = makeCard("02101", 2, 2, 2);
+        const g = makeGame([a, ally, remoteAlly, enemy]);
+        destroy(g, a);
+        check("03101", "摧毁时我方全部在场卡牌永久加一", ally.currentAttack === ally.attack + 1
+          && remoteAlly.currentAttack === remoteAlly.attack + 1
+          && enemy.currentAttack === enemy.attack);
+      }
+      {
+        const a = makeCard("03102", 1, 1, 1), watcher = makeCard("03104", 1, 1, 2), ally = makeCard("01101", 1, 1, 3);
+        const otherDestroyWatcher = makeCard("03416", 1, 3, 3);
+        const g = makeGame([a, watcher, ally, otherDestroyWatcher]);
+        place(g, a);
+        const virtualOnDestroyRan = ally.currentAttack === ally.attack + 3;
+        const virtualTargetRemains = g.boardCards.includes(watcher);
+        const noOtherDestroyedTrigger = otherDestroyWatcher.currentAttack === otherDestroyWatcher.attack;
+
+        const protectedTarget = makeCard("03416", 1, 1, 2);
+        protectedTarget.currentAttack = 5;
+        const protectedGame = makeGame([makeCard("03102", 1, 1, 1), protectedTarget]);
+        place(protectedGame, protectedGame.boardCards[0]);
+        const beforeDestroySkipped = protectedTarget.currentAttack === 5 && protectedGame.boardCards.includes(protectedTarget);
+        check("03102", "放置时只虚拟触发相邻友军onDestroy且不实际摧毁", virtualOnDestroyRan && virtualTargetRemains && noOtherDestroyedTrigger && beforeDestroySkipped);
+      }
+      {
+        const placed = makeCard("03103", 1, 1, 1), occupied = makeCard("02101", 2, 1, 2);
+        const placementGame = makeGame([placed, occupied]);
+        placementGame.brokenCells = [{ row: 0, col: 1 }];
+        place(placementGame, placed);
+        const guards = placementGame.boardCards.filter((card) => card.isGuard);
+        const guardsFillOnlyValidEmptyCells = guards.length === 2
+          && guards.every((guard) => guard.ownerId === null && guard.attack === 2 && guard.currentAttack === 2)
+          && guards.some((guard) => guard.row === 1 && guard.col === 0)
+          && guards.some((guard) => guard.row === 2 && guard.col === 1);
+
+        const a = makeCard("03103", 1, 1, 1);
+        a.currentAttack = 4;
+        const lowAlly = makeCard("01101", 1, 1, 0); lowAlly.currentAttack = 1;
+        const lowEnemy = makeCard("02101", 2, 1, 2); lowEnemy.currentAttack = 2;
+        const lowGuard = { uid: "guard-03103", ownerId: null, row: 0, col: 1, attack: 2, currentAttack: 2, isGuard: true };
+        const equalEnemy = makeCard("02101", 2, 2, 1); equalEnemy.currentAttack = 4;
+        const destroyGame = makeGame([a, lowAlly, lowEnemy, lowGuard, equalEnemy]);
+        const destructionPrevented = !destroy(destroyGame, a) && destroyGame.boardCards.includes(a);
+        const exactlyOneLowerTargetDestroyed = [lowAlly, lowEnemy, lowGuard]
+          .filter((target) => destroyGame.boardCards.includes(target)).length === 2;
+        const equalTargetUntouched = destroyGame.boardCards.includes(equalEnemy);
+
+        const vulnerable = makeCard("03103", 1, 1, 1); vulnerable.currentAttack = 2;
+        const equal = makeCard("02101", 2, 1, 2); equal.currentAttack = 2;
+        const higher = makeCard("02101", 2, 0, 1); higher.currentAttack = 3;
+        const vulnerableGame = makeGame([vulnerable, equal, higher]);
+        const destroyedWithoutLowerTarget = destroy(vulnerableGame, vulnerable) && !vulnerableGame.boardCards.includes(vulnerable);
+        const virtualSource = makeCard("03102", 1, 1, 1), virtualTarget = makeCard("03103", 1, 1, 2);
+        virtualSource.currentAttack = 5;
+        virtualTarget.currentAttack = 4;
+        const virtualLower = makeCard("01101", 1, 1, 3); virtualLower.currentAttack = 1;
+        const virtualGame = makeGame([virtualSource, virtualTarget, virtualLower]);
+        place(virtualGame, virtualSource);
+        const onDestroyPathRan = !virtualGame.boardCards.includes(virtualLower) && virtualGame.boardCards.includes(virtualTarget);
+        check("03103", "放置生成二战力守军且摧毁逻辑在两条钩子路径执行", guardsFillOnlyValidEmptyCells
+          && destructionPrevented && exactlyOneLowerTargetDestroyed && equalTargetUntouched && destroyedWithoutLowerTarget);
+        check("03103", "虚拟触发03103的onDestroy仍会摧毁低战力相邻卡牌", onDestroyPathRan);
+      }
+      {
+        const a = makeCard("03104", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]);
+        destroy(g, a);
+        const boostedThisTurn = ally.currentAttack === ally.attack + 3 && ally.v2TempBonus === 3;
+        coreRunV2EndSkills(g, g.players[0], []);
+        check("03104", "摧毁时四方相邻友军本回合加三", boostedThisTurn && ally.currentAttack === ally.attack && ally.v2TempBonus === 0);
+      }
+      {
+        const a = makeCard("03105", 1, 1, 1), cause = makeCard("02101", 2, 1, 2), g = makeGame([a, cause]);
+        destroy(g, a, cause);
+        const reducedThisTurn = cause.currentAttack === Math.max(0, cause.attack - 2) && cause.v2TempBonus === -2;
+        coreRunV2EndSkills(g, g.players[0], []);
+        check("03105", "摧毁时仍在场的摧毁者本回合减二", reducedThisTurn && cause.currentAttack === cause.attack && cause.v2TempBonus === 0);
+      }
+      {
+        const a = makeCard("03106", 1, 1, 1), allyA = makeCard("01101", 1, 1, 2), allyB = makeCard("01102", 1, 3, 3);
+        const guard = { uid: "guard-03106", ownerId: null, row: 0, col: 0, attack: 2, currentAttack: 2, isGuard: true };
+        const enemy = makeCard("02101", 2, 2, 2);
+        const placementGame = makeGame([a, allyA, allyB, guard, enemy]);
+        place(placementGame, a);
+        const placementBoostCount = [allyA, allyB].filter((target) => target.currentAttack === target.attack + 2).length;
+        const placementTargetsScoped = a.currentAttack === a.attack && guard.currentAttack === guard.attack && enemy.currentAttack === enemy.attack;
+
+        const destroyed = makeCard("03106", 1, 1, 1), destroyedAllyA = makeCard("01101", 1, 1, 2), destroyedAllyB = makeCard("01102", 1, 3, 3);
+        const destroyGame = makeGame([destroyed, destroyedAllyA, destroyedAllyB]);
+        const destroyedCardRemoved = destroy(destroyGame, destroyed) && !destroyGame.boardCards.includes(destroyed);
+        const destroyBoostCount = [destroyedAllyA, destroyedAllyB].filter((target) => target.currentAttack === target.attack + 2).length;
+        check("03106", "放置与摧毁时随机其他友军永久加二", placementBoostCount === 1 && placementTargetsScoped
+          && destroyedCardRemoved && destroyBoostCount === 1);
+      }
+      {
+        const a = makeCard("03107", 1, 1, 1), g = makeGame([a]);
+        g.players[1].hand = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null), makeCard("02103", 2, null, null)];
+        g.players[1].drawPile = [makeCard("02104", 2, null, null)];
+        destroy(g, a);
+        const drawsThenDiscards = g.players[1].hand.length === 2 && g.players[1].drawPile.length === 0;
+
+        const full = makeCard("03107", 1, 1, 1), fullGame = makeGame([full]);
+        fullGame.players[1].hand = Array.from({ length: HAND_LIMIT }, () => makeCard("02101", 2, null, null));
+        fullGame.players[1].drawPile = [makeCard("02102", 2, null, null)];
+        destroy(fullGame, full);
+        const failedDrawStillDiscards = fullGame.players[1].hand.length === HAND_LIMIT - 2 && fullGame.players[1].drawPile.length === 1;
+        check("03107", "摧毁时敌方先抽一张再弃置两张", drawsThenDiscards && failedDrawStillDiscards);
+      }
       { const a = makeCard("03208", 1, 1, 1), enemyDeckCard = makeCard("02101", 2, null, null), g = makeGame([a]); g.players[1].drawPile = [enemyDeckCard]; place(g, a); const placedDraw = g.players[0].hand.includes(enemyDeckCard) && enemyDeckCard.ownerId === 1; const second = makeCard("03208", 1, 2, 2); g.boardCards.push(second); g.players[1].drawPile = [makeCard("02102", 2, null, null)]; destroy(g, second); check("03208", "放置与摧毁时从敌方牌库抽牌", placedDraw && g.players[0].hand.length === 2); }
       { const a = makeCard("03209", 1, 1, 1), enemyA = makeCard("02101", 2, 1, 0), guard = { uid: "guard-test", ownerId: null, row: 0, col: 1, currentAttack: 2, attack: 2, isGuard: true }, g = makeGame([a, enemyA, guard]); g.players[0].drawPile = [makeCard("01101", 1, null, null), makeCard("01102", 1, null, null)]; destroy(g, a); check("03209", "按相邻敌方卡牌含守军数量抽牌且不生成援兵", g.players[0].hand.length === 2 && g.boardCards.length === 2); }
       { const a = makeCard("03210", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), cause = makeCard("02101", 2, 1, 3), g = makeGame([a, ally, cause]); destroy(g, a, cause); check("03210", "相邻友军本回合加二并攻击摧毁者", ally.currentAttack === ally.attack + 2 && !g.boardCards.includes(cause)); }

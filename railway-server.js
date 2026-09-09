@@ -131,6 +131,8 @@ function validCell(cell, size) {
 function validateActionRequest(room, playerId, action) {
   const game = parseRoomGame(room);
   if (!game || game.winner || game.activePlayerId !== playerId) return "当前不是你的行动回合。";
+  if (game.turnDeadlineAt !== null && game.turnDeadlineAt !== undefined
+    && Number.isFinite(Number(game.turnDeadlineAt)) && Date.now() >= Number(game.turnDeadlineAt)) return "本回合行动时间已结束。";
   const actionLimit = (Number(game.turn) === 1 ? 1 : 2) + (Number(game.extraActions) || 0);
   if (!action || !["place", "move"].includes(action.type) || action.playerId !== playerId) return "行动数据无效。";
   const size = [3, 4, 5].includes(Number(room.boardSize)) ? Number(room.boardSize) : 4;

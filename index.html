@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Card Demo</title>
-  <link rel="stylesheet" href="style.css?v=20260908-settings-menu">
+  <link rel="stylesheet" href="style.css?v=20260909-elite-tooltip">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -88,13 +88,15 @@
         <p class="eyebrow">Card Demo</p>
         <h1>卡组对战 Demo</h1>
         <p class="hero-copy">
-          支持本地 1v1 与 PVE 的卡组对战原型。开局选择预设势力牌库，系统随机决定先后手；当前先验证 V2 核心对局流程。
+          支持本地 1v1、PVE 与 PVE 挑战的卡组对战原型。开局选择预设势力牌库，系统随机决定先后手；当前先验证 V2 核心对局流程。
         </p>
         <div class="menu-options">
-          <button class="mode-btn selected" data-mode="pvp">本地 1v1</button>
-          <button class="mode-btn" data-mode="pve">PVE 对战 AI</button>
-          <button class="mode-btn" data-mode="online">联网对战</button>
+          <button class="mode-btn selected" data-mode="pvp" data-description="双方使用标准规则进行本地对战。">本地 1v1</button>
+          <button class="mode-btn" data-mode="pve" data-description="与标准 AI 对战，系统随机为 AI 选择势力牌库。">PVE 对战 AI</button>
+          <button class="mode-btn" data-mode="pve-challenge" data-description="挑战精英 AI；词条分为初级、中级、高级，胜利后可进入下一关。">PVE 挑战模式</button>
+          <button class="mode-btn" data-mode="online" data-description="创建或加入房间，与另一位玩家联网对战。">联网对战</button>
         </div>
+        <p id="mode-description" class="mode-description" aria-live="polite">双方使用标准规则进行本地对战。</p>
         <div class="player-id-bar" aria-label="当前玩家 ID">
           <span>玩家 ID</span>
           <strong id="player-id-value">未设置</strong>
@@ -134,6 +136,10 @@
         <div>
           <p class="meta-label">回合</p>
           <p id="turn-label" class="meta-value"></p>
+        </div>
+        <div id="challenge-level-meta" hidden>
+          <p class="meta-label">关卡</p>
+          <p id="challenge-level-label" class="meta-value"></p>
         </div>
         <div>
           <p class="meta-label">阶段</p>
@@ -183,9 +189,10 @@
           <div class="panel-card">
             <div class="panel-head">
               <h2>对方玩家</h2>
-              <span id="player2-control" class="badge"></span>
+              <span id="opponent-player-control" class="badge"></span>
             </div>
-            <p id="player2-summary" class="panel-copy"></p>
+            <div id="opponent-player-summary" class="player-summary" aria-live="polite"></div>
+            <div id="opponent-ai-effect" class="ai-effect-panel" hidden></div>
           </div>
           <div class="panel-card detail-card">
             <div class="panel-head">
@@ -201,9 +208,9 @@
           <div class="panel-card">
             <div class="panel-head">
               <h2>我方玩家</h2>
-              <span id="player1-control" class="badge"></span>
+              <span id="own-player-control" class="badge"></span>
             </div>
-            <p id="player1-summary" class="panel-copy"></p>
+            <div id="own-player-summary" class="player-summary" aria-live="polite"></div>
             <p id="selection-summary" class="panel-copy">选择手牌放置，或选择己方场上卡牌移动。</p>
           </div>
         </aside>
@@ -225,6 +232,10 @@
       <section class="hand-section">
         <div class="hand-header">
           <h2 id="hand-title">手牌区</h2>
+          <div id="turn-timer" class="turn-timer" role="timer" aria-label="本回合剩余时间" hidden>
+            <span>回合剩余</span>
+            <strong id="turn-timer-value">02:00</strong>
+          </div>
           <div id="hand-action-count" class="hand-action-count" aria-live="polite">
             <span>本回合行动</span>
             <strong>0 / 0</strong>
@@ -244,6 +255,27 @@
         <p class="eyebrow">对局结果</p>
         <h2 id="winner-title"></h2>
         <p id="winner-subtitle" class="hero-copy"></p>
+        <div class="result-key-stats" aria-label="对局核心结果">
+          <div class="result-stat result-stat-winner">
+            <span class="result-stat-label">获胜者 ID</span>
+            <strong id="result-winner-id" class="result-stat-value"></strong>
+            <span id="result-winner-slot" class="result-stat-note"></span>
+          </div>
+          <div class="result-stat result-stat-score">
+            <span class="result-stat-label">获胜比分</span>
+            <div id="result-scoreline" class="result-scoreline" aria-label="最终占领比分">
+              <span class="result-score-player"><small id="result-score-player1-label">玩家 1</small><strong id="result-score-player1">0</strong></span>
+              <span class="result-score-divider" aria-hidden="true">:</span>
+              <span class="result-score-player"><small id="result-score-player2-label">玩家 2</small><strong id="result-score-player2">0</strong></span>
+            </div>
+            <span id="result-score-summary" class="result-stat-note">最终占领比分</span>
+          </div>
+          <div class="result-stat">
+            <span class="result-stat-label">回合数</span>
+            <strong id="result-round-count" class="result-stat-value"></strong>
+            <span class="result-stat-note">本局结束时的回合</span>
+          </div>
+        </div>
         <div id="winner-control-summary" class="winner-control-summary" aria-live="polite"></div>
         <div class="result-columns">
           <div>
@@ -257,6 +289,7 @@
         </div>
         <div id="winner-comparison" class="winner-comparison" aria-live="polite"></div>
         <div class="action-buttons centered">
+          <button id="result-next-level-btn" class="primary-btn" hidden>进入下一关</button>
           <button id="result-restart-btn" class="primary-btn">再来一局</button>
           <button id="result-menu-btn" class="secondary-btn">返回主菜单</button>
         </div>
@@ -266,11 +299,13 @@
 
   <script src="card-info.js?v=20260908-display-effect-isolation"></script>
   <script src="v2-card-data.js?v=20260908-display-effect-isolation"></script>
-  <script src="script.js?v=20260908-settings-menu"></script>
+  <script src="script.js?v=20260909-challenge-levels"></script>
   <script src="online-client.js?v=20260908-display-effect-isolation"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wu-card-effects.js?v=20260908-display-effect-isolation"></script>
-  <script src="core-v2.js?v=20260908-display-effect-isolation"></script>
+  <script src="elite-ai-info.js?v=20260909-challenge-levels"></script>
+  <script src="elite-ai-effects.js?v=20260909-challenge-levels"></script>
+  <script src="core-v2.js?v=20260909-elite-tooltip"></script>
 </body>
 </html>

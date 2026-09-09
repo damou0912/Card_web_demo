@@ -4,12 +4,16 @@
   const CORE_MAX_TURNS = 30;
   const CORE_FIRST_TURN_ACTIONS = 1;
   const CORE_STANDARD_ACTIONS = 2;
+  const CORE_TURN_TIME_LIMIT_SECONDS = 120;
+  const CORE_TURN_TIME_LIMIT_MS = CORE_TURN_TIME_LIMIT_SECONDS * 1000;
+  const CORE_TIMER_TICK_MS = 250;
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
   const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260908";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
   let coreRuntimeReady = true;
+  let coreTimerEndingTurn = false;
   const coreUi = {
     endTurnBtn: document.getElementById("end-turn-btn"),
     surrenderBtn: document.getElementById("surrender-btn")
@@ -107,6 +111,54 @@
     return game.players.find((player) => player.id === playerId) || null;
   }
 
+  function coreViewerPlayerId(game) {
+    const onlinePlayerId = Number(state.online?.playerId);
+    return game?.mode === "online" && [1, 2].includes(onlinePlayerId) ? onlinePlayerId : 1;
+  }
+
+  function coreIsOpponentTurn(game) {
+    return Boolean(game && game.activePlayerId !== coreViewerPlayerId(game));
+  }
+
+  function coreStartTurnTimer(game, now = Date.now()) {
+    if (!game || game.winner) return null;
+    game.turnDeadlineAt = Number(now) + CORE_TURN_TIME_LIMIT_MS;
+    return game.turnDeadlineAt;
+  }
+
+  function coreTurnSecondsRemaining(game, now = Date.now()) {
+    if (game?.turnDeadlineAt === null || game?.turnDeadlineAt === undefined) return null;
+    const deadline = Number(game?.turnDeadlineAt);
+    if (!Number.isFinite(deadline)) return null;
+    return Math.max(0, Math.ceil((deadline - Number(now)) / 1000));
+  }
+
+  function coreFormatTurnTime(seconds) {
+    const safeSeconds = Math.max(0, Number(seconds) || 0);
+    const minutes = Math.floor(safeSeconds / 60);
+    const remainder = safeSeconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+  }
+
+  function coreTimerIsAuthority(game) {
+    return game?.mode !== "online" || Boolean(state.online?.host);
+  }
+
+  function coreUpdateTurnTimerUi(game, now = Date.now()) {
+    if (!ui.turnTimer || !ui.turnTimerValue) return;
+    const seconds = coreTurnSecondsRemaining(game, now);
+    const isRunning = Boolean(game && !game.winner && game.currentPhase === "行动阶段" && seconds !== null);
+    ui.turnTimer.hidden = !isRunning;
+    if (!isRunning) return;
+    const active = corePlayer(game, game.activePlayerId);
+    const opponentTurn = coreIsOpponentTurn(game);
+    ui.turnTimerValue.textContent = coreFormatTurnTime(seconds);
+    ui.turnTimer.classList.toggle("is-opponent-turn", opponentTurn);
+    ui.turnTimer.classList.toggle("is-warning", seconds <= 30 && seconds > 10);
+    ui.turnTimer.classList.toggle("is-critical", seconds <= 10);
+    ui.turnTimer.setAttribute("aria-label", `${active?.name || "当前玩家"}本回合剩余 ${seconds} 秒`);
+  }
+
   function coreEscapeHtml(value) {
     return String(value || "").replace(/[&<>\"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
   }
@@ -168,7 +220,14 @@
   }
 
   function coreSerializeOnlineGame(game) {
-    return JSON.stringify(coreStripRuntimeDisplayData(game), (_key, value) => value instanceof Set ? { __coreSet: [...value] } : value);
+    const previousSnapshotAt = game.turnTimerSnapshotAt;
+    game.turnTimerSnapshotAt = Date.now();
+    try {
+      return JSON.stringify(coreStripRuntimeDisplayData(game), (_key, value) => value instanceof Set ? { __coreSet: [...value] } : value);
+    } finally {
+      if (previousSnapshotAt === undefined) delete game.turnTimerSnapshotAt;
+      else game.turnTimerSnapshotAt = previousSnapshotAt;
+    }
   }
 
   function coreDeserializeOnlineGame(serialized) {
@@ -177,6 +236,13 @@
       || game.runtimeSchemaVersion !== CORE_RUNTIME_SCHEMA_VERSION) {
       throw new Error("旧版对局状态与当前卡牌运行时不兼容。");
     }
+    const hasDeadline = game.turnDeadlineAt !== null && game.turnDeadlineAt !== undefined;
+    const deadline = Number(game.turnDeadlineAt);
+    const snapshotAt = Number(game.turnTimerSnapshotAt);
+    if (hasDeadline && Number.isFinite(deadline) && Number.isFinite(snapshotAt)) {
+      game.turnDeadlineAt = Date.now() + Math.max(0, deadline - snapshotAt);
+    }
+    delete game.turnTimerSnapshotAt;
     return coreStripRuntimeDisplayData(game);
   }
 
@@ -244,8 +310,108 @@
     return coreValidatePlayerId(name).valid;
   }
 
+  function coreIsPveMode(modeOrGame) {
+    const mode = typeof modeOrGame === "string" ? modeOrGame : modeOrGame?.mode;
+    return mode === "pve" || mode === "pve-challenge";
+  }
+
+  function coreIsPveChallenge(modeOrGame) {
+    const mode = typeof modeOrGame === "string" ? modeOrGame : modeOrGame?.mode;
+    return mode === "pve-challenge";
+  }
+
+  function coreEliteAiTraitIds() {
+    const effects = window.ELITE_AI_EFFECTS_V2 || {};
+    const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
+    return Object.keys(effects).filter((id) => info[id]);
+  }
+
+  function coreEliteAiTraitInfo(game) {
+    const id = typeof game === "string" ? game : game?.eliteAiEffectId;
+    return id ? window.ELITE_AI_EFFECT_INFO_V2?.[id] || null : null;
+  }
+
+  function coreEliteAiTraitInfos(game) {
+    const ids = game?.eliteAiEffectId && (!Array.isArray(game?.eliteAiEffectIds) || !game.eliteAiEffectIds.length || game.eliteAiEffectId !== game.eliteAiEffectIds[0])
+      ? [game.eliteAiEffectId]
+      : game?.eliteAiEffectIds || [];
+    return ids.map((id) => window.ELITE_AI_EFFECT_INFO_V2?.[id]).filter(Boolean);
+  }
+
+  function coreChallengeTraitPlan(level = 1) {
+    const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+    const plan = [];
+    const highCount = Math.floor(safeLevel / 3);
+    for (let index = 0; index < highCount; index += 1) plan.push("advanced");
+    const remainder = safeLevel % 3;
+    if (remainder === 1) plan.push("beginner");
+    if (remainder === 2) plan.push("intermediate");
+    return plan.length ? plan : ["advanced"];
+  }
+
+  function corePickChallengeTraits(level = 1) {
+    const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
+    const ids = coreEliteAiTraitIds();
+    const selected = [];
+    coreChallengeTraitPlan(level).forEach((tier) => {
+      const candidates = ids.filter((id) => info[id]?.level === tier && !selected.includes(id));
+      const fallback = ids.filter((id) => info[id]?.level === tier);
+      const pool = candidates.length ? candidates : fallback;
+      if (pool.length) selected.push(pool[randomInt(0, pool.length - 1)]);
+    });
+    return selected;
+  }
+
+  function coreEliteAiTraitMarkup(traits) {
+    return traits.map((trait) => {
+      const name = coreEscapeHtml(trait.name);
+      const level = coreEscapeHtml(trait.levelLabel || "");
+      const description = coreEscapeHtml(trait.description);
+      return `<div class="ai-effect-item" tabindex="0" title="${description}" data-tooltip="${description}"><strong class="elite-tier-${coreEscapeHtml(trait.color || "blue")}">${name} <small>${level}</small></strong></div>`;
+    }).join("");
+  }
+
+  function coreApplyEliteAiTrait(game, ai, log = []) {
+    if (!coreIsPveChallenge(game) || !ai?.isAI) return;
+    const ids = game.eliteAiEffectId && (!Array.isArray(game.eliteAiEffectIds) || !game.eliteAiEffectIds.length || game.eliteAiEffectId !== game.eliteAiEffectIds[0])
+      ? [game.eliteAiEffectId]
+      : game.eliteAiEffectIds || [];
+    if (!ids.length) return;
+    const previousGame = state.game;
+    state.game = game;
+    try {
+      ids.forEach((id) => {
+        const effect = window.ELITE_AI_EFFECTS_V2?.[id];
+        if (typeof effect?.onTurnStart !== "function") return;
+        effect.onTurnStart({
+          game,
+          ai,
+          boardCards: game.boardCards,
+          log,
+          operations: {
+            adjustTemporary: (card, amount) => coreAdjustAttack(card, amount, true),
+            addActions: (count = 1) => { game.extraActions = (Number(game.extraActions) || 0) + count; },
+            cardName: (card) => coreCardName(card),
+            drawCard: (player) => coreDrawOneCard(game, player, log)
+          }
+        });
+      });
+    } finally {
+      state.game = previousGame;
+    }
+  }
+
+  function coreModeLabel(mode) {
+    if (mode === "pve-challenge") return "PVE 挑战";
+    if (mode === "pve") return "PVE";
+    if (mode === "online") return "联网";
+    return "本地 1v1";
+  }
+
   function coreActionLimit(game) {
-    return (game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS) + (Number(game.extraActions) || 0);
+    const base = game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS;
+    const challengeBonus = coreIsPveChallenge(game) && game.activePlayerId === 2 ? 1 : 0;
+    return base + challengeBonus + (Number(game.extraActions) || 0);
   }
 
   function coreHasFreeAction(game, card) {
@@ -253,6 +419,7 @@
   }
 
   function coreCanUseAction(game, card = null) {
+    if (coreTurnSecondsRemaining(game) === 0) return false;
     return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card);
   }
 
@@ -420,6 +587,7 @@
         game.brokenCells.push({ row: position.row, col: position.col });
         return true;
       },
+      spawnNeutralGuard: (position, attack = 2) => coreSpawnNeutralGuard(game, position, attack),
       addActions: (count = 1) => { game.extraActions = (game.extraActions || 0) + count; },
       triggerTurnStart: (target) => {
         const startContext = game.v2StartContext;
@@ -467,6 +635,26 @@
     game.v2PlacementLocks = (game.v2PlacementLocks || []).filter((entry) => coreIsV2TimedEntryActive(game, entry));
   }
 
+  function coreCreateNeutralGuard(row, col, attack = 2) {
+    const power = Math.max(0, Number(attack) || 0);
+    return {
+      uid: `guard-${row}-${col}-${Math.random().toString(36).slice(2, 8)}`,
+      id: "guard", attack: power, currentAttack: power,
+      v2PermanentBonus: 0, v2TempBonus: 0,
+      ownerId: null, row, col, isGuard: true, restedTurn: null, lastMovedTurn: null
+    };
+  }
+
+  function coreSpawnNeutralGuard(game, position, attack = 2) {
+    if (!position || !coreIsInsideBoard(position.row, position.col, game)
+      || isBrokenCell(game, position.row, position.col)
+      || getBoardCardAt(game, position.row, position.col)) return null;
+    const guard = coreCreateNeutralGuard(position.row, position.col, attack);
+    game.boardCards.push(guard);
+    coreInvalidateControlCellOnEntry(game, guard);
+    return guard;
+  }
+
   function corePickGuards(boardSize = CORE_BOARD_SIZE) {
     const guards = [];
     while (guards.length < 2) {
@@ -474,28 +662,29 @@
       const col = randomInt(0, boardSize - 1);
       if (!guards.some((card) => card.row === row && card.col === col)) {
         const attack = Math.random() < 0.5 ? 2 : 3;
-        guards.push({
-          uid: `guard-${row}-${col}-${Math.random().toString(36).slice(2, 8)}`,
-          id: "guard", attack, currentAttack: attack,
-          ownerId: null, row, col, isGuard: true, restedTurn: null, lastMovedTurn: null
-        });
+        guards.push(coreCreateNeutralGuard(row, col, attack));
       }
     }
     return guards;
   }
 
-  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null) {
+  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null, challengeLevel = state.challengeLevel || 1) {
     const selectedSize = Number(boardSize);
     const size = Number.isInteger(selectedSize) && selectedSize >= 3 && selectedSize <= 5 ? selectedSize : CORE_BOARD_SIZE;
     const playerOneCatalog = buildCampDeck(selectedDecks[1]);
     const playerTwoCatalog = buildCampDeck(selectedDecks[2]);
-    const playerTwoName = mode === "pve" ? "AI" : "玩家 2";
+    const challengeMode = coreIsPveChallenge(mode);
+    const playerTwoName = coreIsPveMode(mode) ? (challengeMode ? "精英 AI" : "AI") : "玩家 2";
     const firstPlayerId = [1, 2].includes(Number(firstPlayerIdOverride)) ? Number(firstPlayerIdOverride) : (Math.random() < 0.5 ? 1 : 2);
     const game = {
       ruleset: "core-v2",
       cardDataVersion: CORE_CARD_DATA_VERSION,
       runtimeSchemaVersion: CORE_RUNTIME_SCHEMA_VERSION,
       mode,
+      challengeMode,
+      challengeLevel: challengeMode ? Math.max(1, Math.floor(Number(challengeLevel) || 1)) : 0,
+      eliteAiEffectId: null,
+      eliteAiEffectIds: [],
       turn: 1,
       currentPhase: "开局展示",
       boardSize: size,
@@ -509,12 +698,13 @@
       v2PlacementLocks: [],
       players: [
         createPlayer(1, "玩家 1", selectedDecks[1], playerOneCatalog, false),
-        createPlayer(2, playerTwoName, selectedDecks[2], playerTwoCatalog, mode === "pve")
+        createPlayer(2, playerTwoName, selectedDecks[2], playerTwoCatalog, coreIsPveMode(mode))
       ],
       firstPlayerId,
       activePlayerId: firstPlayerId,
       activePlannerIndex: firstPlayerId - 1,
       actionsUsed: 0,
+      turnDeadlineAt: null,
       selection: resetSelection(),
       winner: null,
       isAnimating: false,
@@ -528,8 +718,14 @@
       lastResolution: "卡组已确定，等待展示先后手。"
     };
 
+    if (challengeMode) {
+      game.eliteAiEffectIds = corePickChallengeTraits(game.challengeLevel);
+      game.eliteAiEffectId = game.eliteAiEffectIds[0] || null;
+    }
+
     game.players.forEach((player) => {
-      const openingHand = player.id === firstPlayerId ? 2 : 3;
+      const openingHand = (player.id === firstPlayerId ? 2 : 3)
+        + (challengeMode && player.isAI ? 1 : 0);
       for (let index = 0; index < openingHand; index += 1) {
         drawOneCard(game, player);
       }
@@ -572,8 +768,16 @@
     game.roundLog = [`${active.name} 的${game.turn === 1 ? "第一个" : "本"}回合开始。`];
     const drawLog = coreDrawAtTurnStart(game, active);
     game.roundLog.push(drawLog);
-    const wonAtStart = coreRunStartSkills(game, active);
+    let wonAtStart = coreRunStartSkills(game, active);
+    if (!wonAtStart && active.isAI) {
+      const eliteTraitLog = [];
+      coreApplyEliteAiTrait(game, active, eliteTraitLog);
+      eliteTraitLog.forEach((entry) => coreAppendLog(game, entry));
+      wonAtStart = coreCheckVictory(game);
+    }
     game.currentPhase = wonAtStart ? "胜负结算" : "行动阶段";
+    if (wonAtStart) game.turnDeadlineAt = null;
+    else coreStartTurnTimer(game);
     game.lastResolvedTurn = game.turn;
     game.lastResolution = wonAtStart ? game.winner.text : `${active.name} 行动中：本回合可执行 ${coreActionLimit(game)} 次行动。`;
     return wonAtStart;
@@ -591,7 +795,7 @@
       startContext.pendingExtras.delete(card.uid);
       for (let index = 0; index < count; index += 1) {
         if (!game.boardCards.includes(card)) break;
-        coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player: active, card });
+        coreEmitV2Event(game, CORE_V2_EVENT.TURN_START, { player: active, card, skipDuplicateWatchers: true });
       }
     };
     try {
@@ -666,7 +870,16 @@
     return true;
   }
 
-  function coreRunV2StartSkill(game, player, card) {
+  function coreQueueV2StartSkillExtra(game, card) {
+    const startContext = game.v2StartContext;
+    if (!startContext || startContext.processed.has(card.uid)) {
+      return coreRunV2StartSkill(game, corePlayer(game, card.ownerId), card, { skipDuplicateWatchers: true });
+    }
+    startContext.pendingExtras.set(card.uid, (startContext.pendingExtras.get(card.uid) || 0) + 1);
+    return null;
+  }
+
+  function coreRunV2StartSkill(game, player, card, options = {}) {
     const resolvingStartSkills = game.v2ResolvingStartSkills || new Set();
     game.v2ResolvingStartSkills = resolvingStartSkills;
     if (resolvingStartSkills.has(card.uid)) return;
@@ -679,6 +892,12 @@
     } finally {
       resolvingStartSkills.delete(card.uid);
     }
+    if (options.skipDuplicateWatchers || !game.boardCards?.includes(card)) return;
+    game.boardCards
+      .filter((watcher) => watcher.uid !== card.uid
+        && watcher.ownerId === card.ownerId
+        && coreCardEffectHasFlag(watcher, "repeatFriendlyTurnStart"))
+      .forEach(() => coreQueueV2StartSkillExtra(game, card));
   }
 
   function corePickRandom(items) {
@@ -806,7 +1025,11 @@
   });
 
   function coreEmitV2Event(game, event, payload = {}) {
-    if (event === CORE_V2_EVENT.TURN_START && payload.card && payload.player) return coreRunV2StartSkill(game, payload.player, payload.card);
+    if (event === CORE_V2_EVENT.TURN_START && payload.card && payload.player) {
+      return coreRunV2StartSkill(game, payload.player, payload.card, {
+        skipDuplicateWatchers: Boolean(payload.skipDuplicateWatchers)
+      });
+    }
     if (event === CORE_V2_EVENT.CARD_PLACED && payload.card && payload.player) return coreTriggerOtherV2PlacementEffects(game, payload.player, payload.card, payload.log || []);
     if (event === CORE_V2_EVENT.CARD_MOVED && payload.card && payload.source && payload.target) return coreRunV2MoveEffects(game, payload.card, payload.source, payload.target, payload.successful !== false);
     if (event === CORE_V2_EVENT.DRAW_FAILED && payload.player) return coreRunV2DrawFailedEffects(game, payload.player, payload.reason, payload.log || []);
@@ -1258,6 +1481,8 @@
     if (!game || game.isAnimating || game.winner) {
       return;
     }
+    game.turnDeadlineAt = null;
+    coreUpdateTurnTimerUi(game);
     const active = corePlayer(game, game.activePlayerId);
     if (!automatic) {
       coreAppendLog(game, `${active.name} 主动结束回合，放弃剩余 ${coreActionLimit(game) - game.actionsUsed} 次行动。`);
@@ -1303,6 +1528,39 @@
     coreOnlineSendState(game);
   }
 
+  async function coreTickTurnTimer(now = Date.now()) {
+    const game = state.game;
+    coreUpdateTurnTimerUi(game, now);
+    if (!game || game.winner || game.currentPhase !== "行动阶段"
+      || coreTurnSecondsRemaining(game, now) !== 0
+      || !coreTimerIsAuthority(game) || game.isAnimating || coreTimerEndingTurn) return false;
+    const active = corePlayer(game, game.activePlayerId);
+    if (!active) return false;
+    coreTimerEndingTurn = true;
+    game.turnDeadlineAt = null;
+    const message = `${active.name} 的 120 秒行动时间已用尽，系统自动结束回合。`;
+    coreAppendLog(game, message);
+    game.lastResolution = message;
+    coreRender();
+    showToast("回合超时", message);
+    try {
+      await coreEndTurn(game, true);
+    } finally {
+      coreTimerEndingTurn = false;
+    }
+    return true;
+  }
+
+  function coreScheduleTurnTimerTick() {
+    window.setTimeout(async () => {
+      try {
+        await coreTickTurnTimer();
+      } finally {
+        coreScheduleTurnTimerTick();
+      }
+    }, CORE_TIMER_TICK_MS);
+  }
+
   async function coreSurrender(game = state.game) {
     if (!game || game.isAnimating || game.winner) return;
     const active = corePlayer(game, game.activePlayerId);
@@ -1316,6 +1574,7 @@
       text: `${active.name} 已认输，${winner.name} 获胜。`
     };
     game.currentPhase = "胜负结算";
+    game.turnDeadlineAt = null;
     game.lastResolution = game.winner.text;
     game.selection = resetSelection();
     coreRender();
@@ -1594,40 +1853,64 @@
     const game = state.game;
     if (!game) return;
     const active = corePlayer(game, game.activePlayerId);
+    const ownPlayer = corePlayer(game, coreViewerPlayerId(game)) || game.players[0];
+    const opponentPlayer = corePlayer(game, otherPlayerId(ownPlayer.id)) || game.players.find((player) => player.id !== ownPlayer.id);
+    const opponentTurn = coreIsOpponentTurn(game);
     const handOwner = game.mode === "online"
-      ? corePlayer(game, state.online?.playerId) || active
+      ? ownPlayer
       : active;
     const control = coreControlMap(game);
     const target = coreVictoryTarget(game);
-    ui.modeLabel.textContent = `${game.mode === "pve" ? "PVE" : "本地 1v1"} · ${game.boardSize}x${game.boardSize}`;
+    ui.modeLabel.textContent = `${coreModeLabel(game.mode)} · ${game.boardSize}x${game.boardSize}`;
     ui.turnLabel.textContent = `第 ${game.turn} / ${CORE_MAX_TURNS} 回合`;
+    const levelLabel = document.getElementById("challenge-level-label");
+    if (levelLabel) {
+      if (levelLabel.parentElement) levelLabel.parentElement.hidden = !coreIsPveChallenge(game);
+      levelLabel.textContent = coreIsPveChallenge(game) ? `第 ${game.challengeLevel} 关` : "";
+    }
     ui.phaseLabel.textContent = game.currentPhase;
     ui.deckLabel.textContent = `P1 ${game.players[0].drawPile.length} / P2 ${game.players[1].drawPile.length}`;
     ui.statusMessage.textContent = game.flowPrompt || game.lastResolution;
     ui.statusSubtext.textContent = game.isAnimating
       ? "正在展示本次行动与交战结果。"
-      : `占领 ${target} 格即可立即获胜；当前行动位 ${game.actionsUsed}/${coreActionLimit(game)}。`;
+      : `${coreIsPveChallenge(game) ? "挑战规则：精英 AI 每回合额外获得 1 次行动。 " : ""}占领 ${target} 格即可立即获胜；当前行动位 ${game.actionsUsed}/${coreActionLimit(game)}。`;
     ui.actingPlayerLabel.textContent = `${active.name}${active.id === game.firstPlayerId ? "（先手）" : "（后手）"}`;
     ui.actionsLabel.textContent = `${game.actionsUsed} / ${coreActionLimit(game)}`;
+    ui.actionsLabel.classList.toggle("is-opponent-turn", opponentTurn);
     const handActionPanel = document.getElementById("hand-action-count");
     handActionPanel?.classList.toggle("is-complete", game.actionsUsed >= coreActionLimit(game) && !coreHasExecutableAction(game));
+    handActionPanel?.classList.toggle("is-opponent-turn", opponentTurn);
     const handActionCount = document.querySelector("#hand-action-count strong");
     if (handActionCount) handActionCount.textContent = `${game.actionsUsed} / ${coreActionLimit(game)}`;
+    coreUpdateTurnTimerUi(game);
     const controlCompare = document.getElementById("control-compare-label");
     if (controlCompare) {
       controlCompare.querySelector(".control-player-one .control-player-score").textContent = control.counts[1];
       controlCompare.querySelector(".control-player-two .control-player-score").textContent = control.counts[2];
     }
-    game.players.forEach((player) => {
-      const copy = `${getCampDisplayName(player.deckKey)} · 占领 ${control.counts[player.id]} 格 · 手牌 ${player.hand.length}/${HAND_LIMIT} · 牌库 ${player.drawPile.length}`;
-      if (player.id === 1) {
-        ui.player1Control.textContent = `${control.counts[1]} / ${target} 格`;
-        ui.player1Summary.textContent = copy;
-      } else {
-        ui.player2Control.textContent = `${control.counts[2]} / ${target} 格`;
-        ui.player2Summary.textContent = copy;
-      }
-    });
+    const renderPlayerPanel = (player, controlElement, summaryElement) => {
+      if (!player) return;
+      const campName = getCampDisplayName(player.deckKey);
+      controlElement.textContent = `${control.counts[player.id]} / ${target} 格`;
+      summaryElement.setAttribute("aria-label", `${player.name}，${campName}，手牌 ${player.hand.length}/${HAND_LIMIT}，牌库 ${player.drawPile.length}`);
+      summaryElement.innerHTML = `
+        <span class="player-summary-name">${coreEscapeHtml(player.name)}</span>
+        <span class="player-summary-camp">${coreEscapeHtml(campName)}</span>
+        <span class="player-resource-row">
+          <span class="player-resource"><small>手牌</small><strong>${player.hand.length} / ${HAND_LIMIT}</strong></span>
+          <span class="player-resource"><small>牌库</small><strong>${player.drawPile.length}</strong></span>
+        </span>
+      `;
+    };
+    renderPlayerPanel(opponentPlayer, ui.opponentPlayerControl, ui.opponentPlayerSummary);
+    renderPlayerPanel(ownPlayer, ui.ownPlayerControl, ui.ownPlayerSummary);
+    if (ui.opponentAiEffect) {
+      const traits = opponentPlayer?.isAI && coreIsPveChallenge(game) ? coreEliteAiTraitInfos(game) : [];
+      ui.opponentAiEffect.hidden = !traits.length;
+      ui.opponentAiEffect.innerHTML = traits.length
+        ? `<span class="ai-effect-label">本关精英词条</span>${coreEliteAiTraitMarkup(traits)}`
+        : "";
+    }
     ui.handTitle.textContent = `${handOwner.name} 的手牌`;
     ui.submitActionBtn.hidden = true;
     ui.submitActionBtn.disabled = true;
@@ -2017,11 +2300,11 @@
         <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">Core Rules V2</p>
         <h2 class="deck-reveal-title">选择本局势力牌库</h2>
-        <p class="deck-reveal-copy">${state.selectedBoardSize || CORE_BOARD_SIZE}x${state.selectedBoardSize || CORE_BOARD_SIZE} 战场；当前使用每个势力预设的 20 张牌库，卡牌技能按 V2 规则自动结算。</p>
+        <p class="deck-reveal-copy">${state.selectedBoardSize || CORE_BOARD_SIZE}x${state.selectedBoardSize || CORE_BOARD_SIZE} 战场；当前使用每个势力预设的 20 张牌库，卡牌技能按 V2 规则自动结算。${coreIsPveChallenge(mode) ? "挑战模式：精英 AI 开局多 1 张手牌，且每回合额外行动 1 次。" : ""}</p>
         <div class="deck-reveal-matchup">
           <label class="deck-reveal-side"><span class="label">玩家 1</span><select id="core-deck-p1">${optionMarkup}</select></label>
           <div class="deck-reveal-versus">VS</div>
-          <label class="deck-reveal-side"><span class="label">${mode === "pve" ? "AI（随机）" : "玩家 2"}</span>${mode === "pve" ? "<p>系统将在开始时随机选择</p>" : `<select id="core-deck-p2">${optionMarkup}</select>`}</label>
+          <label class="deck-reveal-side"><span class="label">${coreIsPveMode(mode) ? (coreIsPveChallenge(mode) ? "精英 AI（随机）" : "AI（随机）") : "玩家 2"}</span>${coreIsPveMode(mode) ? "<p>系统将在开始时随机选择</p>" : `<select id="core-deck-p2">${optionMarkup}</select>`}</label>
         </div>
         <button id="core-deck-confirm" class="primary-btn">确认卡组</button>
       </section>
@@ -2030,7 +2313,7 @@
     coreAttachOverlayClose();
     document.getElementById("core-deck-confirm").addEventListener("click", () => {
       const playerOneDeck = document.getElementById("core-deck-p1").value;
-      const playerTwoDeck = mode === "pve" ? getRandomDeckKey() : document.getElementById("core-deck-p2").value;
+      const playerTwoDeck = coreIsPveMode(mode) ? getRandomDeckKey() : document.getElementById("core-deck-p2").value;
       state.selectedDecks = { 1: playerOneDeck, 2: playerTwoDeck };
       coreBeginGame();
     });
@@ -2104,6 +2387,21 @@
     coreShowOpeningReveal(state.game);
   }
 
+  function coreBeginNextChallengeLevel() {
+    const previous = state.game;
+    if (!previous || !coreIsPveChallenge(previous) || Number(previous.winner?.playerId) !== 1) return false;
+    state.challengeLevel = Math.max(1, Number(previous.challengeLevel) || 1) + 1;
+    state.selectedMode = "pve-challenge";
+    state.selectedDecks = {
+      1: previous.players?.find((player) => player.id === 1)?.deckKey || state.selectedDecks[1] || getRandomDeckKey(),
+      2: getRandomDeckKey()
+    };
+    state.game = coreCreateGame("pve-challenge", state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel);
+    switchScreen("game");
+    coreShowOpeningReveal(state.game);
+    return true;
+  }
+
   function coreShowOpeningReveal(game) {
     const first = corePlayer(game, game.firstPlayerId);
     const second = corePlayer(game, otherPlayerId(game.firstPlayerId));
@@ -2112,13 +2410,14 @@
         <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">Opening Order</p>
         <h2 class="deck-reveal-title">${first.name} 获得先手</h2>
-        <p class="deck-reveal-copy">${game.boardSize}x${game.boardSize} 战场；先手初始 2 张手牌；后手 ${second.name} 初始 3 张手牌。全局第 1 回合仅有 1 次行动，其余回合有 2 次行动。</p>
+        <p class="deck-reveal-copy">${game.boardSize}x${game.boardSize} 战场；${first.name} 初始 ${first.hand.length} 张手牌；${second.name} 初始 ${second.hand.length} 张手牌。${coreIsPveChallenge(game) ? "挑战模式中精英 AI 每回合额外获得 1 次行动。" : "全局第 1 回合仅有 1 次行动，其余回合有 2 次行动。"}</p>
+        ${(() => { const traits = coreEliteAiTraitInfos(game); return traits.length ? `<div class="elite-trait-reveal"><span class="ai-effect-label">第 ${game.challengeLevel} 关精英词条</span>${coreEliteAiTraitMarkup(traits)}</div>` : ""; })()}
         <div class="deck-reveal-matchup">
           <article class="deck-reveal-side"><p class="label">${first.name} · 先手</p><h3>${getCampDisplayName(first.deckKey)}</h3><p>${summarizeDeck(first.deckCatalog, first.deckKey)}</p></article>
           <div class="deck-reveal-versus">VS</div>
           <article class="deck-reveal-side"><p class="label">${second.name} · 后手</p><h3>${getCampDisplayName(second.deckKey)}</h3><p>${summarizeDeck(second.deckCatalog, second.deckKey)}</p></article>
         </div>
-        ${game.mode === "online" ? "" : '<button id="core-opening-start" class="primary-btn">开始第 1 回合</button>'}
+        ${game.mode === "online" ? "" : `<button id="core-opening-start" class="primary-btn">开始第 ${game.challengeLevel || 1} 关</button>`}
       </section>
     `;
     ui.deckReveal.classList.add("visible");
@@ -2156,12 +2455,13 @@
   window.requestBoardSizeAccess = coreRequestBoardSizeAccess;
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
-    cloneCard, coreAdjustAttack, coreAiPlacementScore, coreApplyV2PlacementSkill, coreBuildPendingAction,
+    cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyV2PlacementSkill, coreBuildPendingAction,
     coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card,
-    coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
+    coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
+    coreFormatTurnTime, coreIsOpponentTurn, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
-    coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreValidMoves,
-    coreVictoryTarget, HAND_LIMIT, state
+    coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
+    coreVictoryTarget, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
   });
   window.render = coreRender;
   window.renderBoard = coreRenderBoard;
@@ -2179,10 +2479,12 @@
       return;
     }
     state.selectedMode = mode;
+    if (mode === "pve-challenge" && !state.challengeLevel) state.challengeLevel = 1;
     state.game = null;
     coreShowDeckSelector(mode);
   };
   window.beginGame = coreBeginGame;
+  window.beginNextChallengeLevel = coreBeginNextChallengeLevel;
   window.loadCardTestSetupForCore = coreLoadCardTestSetup;
 
   function coreHasExecutableAction(game) {
@@ -2227,6 +2529,7 @@
     await coreSurrender(game);
   });
   ui.editPlayerIdBtn?.addEventListener("click", () => coreShowPlayerIdModal(false));
+  coreScheduleTurnTimerTick();
   coreInitializePlayerIdentity();
   const coreDataValidation = coreValidateV2CardData();
   coreRuntimeReady = coreDataValidation.cardDataVersion === CORE_CARD_DATA_VERSION

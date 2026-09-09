@@ -1,6 +1,7 @@
 /* Generate the browser card information module from the unified XLSX table. */
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const XLSX = require("xlsx");
 
 const root = path.resolve(__dirname, "..");
@@ -76,4 +77,13 @@ const output = [
 ].join("\n");
 
 fs.writeFileSync(targetPath, output, "utf8");
+const cacheVersion = `card-info-${crypto.createHash("sha1").update(output).digest("hex").slice(0, 12)}`;
+for (const htmlName of ["index.html", "card-test.html"]) {
+  const htmlPath = path.join(root, htmlName);
+  let html = fs.readFileSync(htmlPath, "utf8");
+  html = html
+    .replace(/card-info\.js\?v=[^"']+/g, `card-info.js?v=${cacheVersion}`)
+    .replace(/v2-card-data\.js\?v=[^"']+/g, `v2-card-data.js?v=${cacheVersion}`);
+  fs.writeFileSync(htmlPath, html, "utf8");
+}
 console.log(`Generated ${path.relative(root, targetPath)} from ${path.relative(root, sourcePath)}: ${cards.length} cards`);

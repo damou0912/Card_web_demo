@@ -29,7 +29,9 @@ const testUi = {
 if (window.CARD_LIBRARY?.version !== CARD_TEST_DATA_VERSION || !Array.isArray(window.CARD_LIBRARY?.cardSlots)) {
   throw new Error("Card Test 无法加载当前版本的卡牌展示数据。");
 }
-const allTemplates = window.CARD_LIBRARY.cardSlots.map((card) => ({ ...card }));
+// Keep the table as the only source of display fields. Test cards store only
+// their ID and editable runtime state, so a rerender cannot show stale text.
+const allTemplates = window.CARD_LIBRARY.cardSlots;
 
 function initializeCardTestAccess() {
   const gate = document.getElementById("gm-test-access");
@@ -76,21 +78,32 @@ function initializeCardTestAccess() {
   input.focus();
 }
 
+function getTemplateById(id) {
+  return allTemplates.find((card) => String(card.id) === String(id)) || null;
+}
+
+function getCardDisplay(cardOrId) {
+  const id = typeof cardOrId === "object" ? cardOrId?.id : cardOrId;
+  return getTemplateById(id) || {
+    id: String(id || ""),
+    name: "未知卡牌",
+    camp: "无势力",
+    skill: "无",
+    baseAttack: 0,
+    attack: 0,
+    rarity: "普通",
+    effect: "无技能效果。"
+  };
+}
+
 function formatEffectText(card) {
-  if (!card || card.effect === undefined || card.effect === null) return "无技能效果。";
-  return String(card.effect);
+  return String(getCardDisplay(card).effect || "无技能效果。");
 }
 
 function makeTestCard(template, row, col, ownerId, attack = template.attack) {
-  const rarity = template.rarity || "普通";
   return {
     id: template.id,
     uid: `${template.id}-${Math.random().toString(36).slice(2, 9)}`,
-    name: template.name,
-    camp: template.camp,
-    skill: template.skill,
-    effect: template.effect,
-    rarity,
     attack: Number(attack),
     ownerId,
     row,
@@ -100,10 +113,6 @@ function makeTestCard(template, row, col, ownerId, attack = template.attack) {
 
 function getSelectedCard() {
   return testState.cards.find((card) => card.uid === testState.selectedCardUid) || null;
-}
-
-function getTemplateById(id) {
-  return allTemplates.find((card) => String(card.id) === String(id));
 }
 
 function isBroken(row, col) {
@@ -165,8 +174,9 @@ function renderBoard() {
 }
 
 function renderBoardCard(card) {
-  return `<article class="test-unit player${card.ownerId} rarity-${card.rarity || "普通"} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
-    <span class="unit-camp">${card.camp.replace("三国~", "")}</span><strong class="unit-name">${card.name}</strong><span class="unit-skill">${card.skill}</span><span class="unit-attack">${card.attack}</span>
+  const display = getCardDisplay(card);
+  return `<article class="test-unit player${card.ownerId} rarity-${display.rarity || "普通"} ${card.uid === testState.selectedCardUid ? "selected" : ""}" draggable="true" data-card-uid="${card.uid}">
+    <span class="unit-camp">${display.camp.replace("三国~", "")}</span><strong class="unit-name">${display.name}</strong><span class="unit-skill">${display.skill}</span><span class="unit-attack">${card.attack}</span>
   </article>`;
 }
 
@@ -176,8 +186,9 @@ function renderInspector() {
   testUi.content.hidden = !card;
   testUi.state.textContent = card ? "正在编辑" : "未选择";
   if (!card) return;
-  testUi.preview.className = `preview-card player${card.ownerId} rarity-${card.rarity || "普通"}`;
-  testUi.preview.innerHTML = `<h2>${card.name} <small>${card.attack}</small></h2><p>${card.camp} · ${card.rarity}</p><p>${card.skill}</p>`;
+  const display = getCardDisplay(card);
+  testUi.preview.className = `preview-card player${card.ownerId} rarity-${display.rarity || "普通"}`;
+  testUi.preview.innerHTML = `<h2>${display.name} <small>${card.attack}</small></h2><p>${display.camp} · ${display.rarity}</p><p>${display.skill}</p>`;
   testUi.owner.value = String(card.ownerId);
   testUi.attack.value = String(card.attack);
   testUi.effect.textContent = formatEffectText(card);
@@ -256,10 +267,11 @@ function getSceneIssues() {
   testState.cards.forEach((card) => {
     const key = `${card.row},${card.col}`;
     const valid = Number.isInteger(card.row) && Number.isInteger(card.col) && card.row >= 0 && card.row < TEST_BOARD_SIZE && card.col >= 0 && card.col < TEST_BOARD_SIZE;
-    if (!valid) issues.push(`${card.name} 位于战场外。`);
+    const display = getCardDisplay(card);
+    if (!valid) issues.push(`${display.name} 位于战场外。`);
     else if (occupied.has(key)) issues.push(`${formatTestCell(card.row, card.col)} 有多张卡牌重叠。`);
     else occupied.add(key);
-    if (broken.has(key)) issues.push(`${card.name} 位于破坏格。`);
+    if (broken.has(key)) issues.push(`${display.name} 位于破坏格。`);
   });
   return [...new Set(issues)];
 }

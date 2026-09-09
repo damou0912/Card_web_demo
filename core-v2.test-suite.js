@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyV2PlacementSkill, coreBuildPendingAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
@@ -17,43 +17,54 @@
         { id: 1, hand: [], drawPile: [], lastControlCount: 0 }, { id: 2, hand: [], drawPile: [], lastControlCount: 0 }
       ]
     });
+    const traitGame = (id, boardCards = []) => {
+      const game = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      game.eliteAiEffectIds = [String(id)];
+      game.eliteAiEffectId = String(id);
+      game.eliteAiFirstPlacementClaims = {};
+      game.boardCards = boardCards;
+      game.activePlayerId = 2;
+      game.players.forEach((player) => { player.hand = []; player.drawPile = []; });
+      state.game = game;
+      return game;
+    };
     try {
-      const challengeTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
       const challengeTraitIds = coreEliteAiTraitIds();
-      challengeTraitGame.eliteAiEffectId = "iron-command";
-      const eliteCard = makeCard("02101", 2, 0, 0);
-      challengeTraitGame.boardCards.push(eliteCard);
-      state.game = challengeTraitGame;
-      const challengeTraitLog = [];
-      coreApplyEliteAiTrait(challengeTraitGame, challengeTraitGame.players[1], challengeTraitLog);
-      const traitInfo = coreEliteAiTraitInfo(challengeTraitGame);
-      check("精英 AI 随机特性独立于卡牌描述", challengeTraitIds.includes(challengeTraitGame.eliteAiEffectId)
-        && traitInfo?.name === "铁壁军势"
-        && traitInfo?.description
-        && eliteCard.currentAttack === eliteCard.attack + 1
-        && challengeTraitLog.length === 1);
+      const expectedNames = ["鼓舞", "冷箭", "厚葬", "军备", "援军", "当先", "慎行", "断粮", "野望", "急奔", "无言", "战鼓擂", "羽林列", "烽火起", "关山急", "鸿门宴", "丹书诏", "古道尘", "城下盟", "振奋人心", "虚弱无力", "灵动迅捷", "凤鸣九霄", "勇冠三军", "破釜沉舟", "关山暮雪", "暗度陈仓"];
+      check("Excel 中的 27 个数字词条 ID 均已载入", challengeTraitIds.length === 27
+        && challengeTraitIds.every((id) => /^\d{4}$/.test(id))
+        && expectedNames.every((name) => Object.values(window.ELITE_AI_EFFECT_INFO_V2).some((trait) => trait.name === name))
+        && Object.keys(window.ELITE_AI_EFFECT_ID_ALIASES_V2).length === 0);
 
-      const supplyTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
-      supplyTraitGame.eliteAiEffectId = "supply-reserve";
-      supplyTraitGame.players[1].hand = [];
-      supplyTraitGame.players[1].drawPile = [makeCard("02102", 2, null, null)];
-      state.game = supplyTraitGame;
-      coreApplyEliteAiTrait(supplyTraitGame, supplyTraitGame.players[1], []);
-      const supplyApplied = supplyTraitGame.players[1].hand.length === 1;
+      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("1001", [ally]); coreApplyEliteAiTrait(game, game.players[1], []); check("1001 鼓舞", ally.currentAttack === ally.attack + 1); }
+      { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1002", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1002 冷箭", enemy.currentAttack === Math.max(0, enemy.attack - 1)); }
+      { const dead = makeCard("02101", 2, 0, 0); const game = traitGame("1003", [dead]); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreDestroyV2Card(game, dead, []); check("1003 厚葬", game.players[1].hand.length === 1); }
+      { const game = traitGame("1004"); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreApplyEliteAiTrait(game, game.players[1], []); check("1004 军备", game.players[1].hand.length === 1); }
+      { const game = traitGame("1005"); coreDrawOneCard(game, game.players[1], []); check("1005 援军", game.players[1].hand.length === 1 && game.players[1].hand[0].customName === "援兵" && game.players[1].hand[0].currentAttack === 1); }
+      { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
+      { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
+      { const game = traitGame("1008"); game.players[1].hand = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null), makeCard("02103", 2, null, null)]; coreMaintainEliteAiHand(game); const trimmed = game.players[1].hand.length === 1; game.players[1].hand = []; game.players[1].drawPile = [makeCard("02104", 2, null, null)]; coreMaintainEliteAiHand(game); check("1008 断粮", trimmed && game.players[1].hand.length === 1); }
+      { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1009", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1009 野望", enemy.currentAttack === Math.max(0, enemy.attack - 1) && enemy.v2TempBonus === -1); }
+      { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1010", [placed]); placed.restedTurn = 1; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1010 急奔", placed.restedTurn === null); }
+      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("1011", [ally]); coreApplyEliteAiTrait(game, game.players[1], []); check("1011 无言", ally.currentAttack === ally.attack); }
 
-      const hunterTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
-      hunterTraitGame.eliteAiEffectId = "hunter-mark";
-      const markedEnemy = makeCard("01101", 1, 0, 0);
-      hunterTraitGame.boardCards.push(markedEnemy);
-      state.game = hunterTraitGame;
-      coreApplyEliteAiTrait(hunterTraitGame, hunterTraitGame.players[1], []);
-      const hunterApplied = markedEnemy.currentAttack === markedEnemy.attack - 1;
+      { const low = makeCard("02101", 2, 0, 0), high = makeCard("02102", 2, 1, 0); high.currentAttack += 2; const game = traitGame("2001", [low, high]); coreApplyEliteAiTrait(game, game.players[1], []); check("2001 战鼓擂", low.currentAttack === low.attack + 2 && high.currentAttack === high.attack + 2); }
+      { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("2002", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("2002 羽林列", placed.currentAttack === placed.attack + 1); }
+      { const starter = makeCard("01107", 1, 0, 0); const game = traitGame("2003", [starter]); game.players[0].drawPile = [makeCard("01101", 1, null, null)]; coreRunV2StartSkill(game, game.players[0], starter); check("2003 烽火起", game.players[0].hand.length === 0); }
+      { const ally = makeCard("02101", 2, 0, 0), enemy = makeCard("01101", 1, 1, 0); ally.currentAttack = 0; enemy.currentAttack = 8; const game = traitGame("2004", [ally, enemy]); coreEnforceElitePowerBounds(game); check("2004 关山急", ally.currentAttack === 2 && enemy.currentAttack === 5); }
+      { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("2005", [enemy]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[0], card: enemy }, []); const placed = enemy.currentAttack === enemy.attack + 1; coreApplyEliteAiTrait(game, game.players[1], []); check("2005 鸿门宴", placed && enemy.currentAttack === enemy.attack); }
+      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("2006", [ally]); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreApplyEliteAiTraitEvent(game, "cardDrawn", { player: game.players[0], card: makeCard("01101", 1, null, null) }, []); const drew = game.players[1].hand.length === 1; game.players[1].hand = Array.from({ length: HAND_LIMIT }, () => makeCard("02103", 2, null, null)); coreApplyEliteAiTraitEvent(game, "cardDrawn", { player: game.players[0], card: makeCard("01102", 1, null, null) }, []); check("2006 丹书诏", drew && ally.currentAttack === ally.attack + 1); }
+      { const highA = makeCard("01101", 1, 1, 1), highB = makeCard("01102", 1, 2, 2), low = makeCard("01103", 1, 3, 3); highA.currentAttack = 5; highB.currentAttack = 5; low.currentAttack = 2; const game = traitGame("2007", [highA, highB, low]); game.activePlayerId = 1; check("2007 古道尘", coreValidMoves(game, highA).length === 0 && coreValidMoves(game, highB).length === 0 && coreValidMoves(game, low).length > 0); }
+      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("2008", [ally]); game.activePlayerId = 2; check("2008 城下盟", !coreDestroyV2Card(game, ally, []) && game.boardCards.includes(ally)); }
 
-      const reserveTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
-      reserveTraitGame.eliteAiEffectId = "tactical-reserve";
-      state.game = reserveTraitGame;
-      coreApplyEliteAiTrait(reserveTraitGame, reserveTraitGame.players[1], []);
-      check("精英 AI 四种特性均可执行", supplyApplied && hunterApplied && reserveTraitGame.extraActions === 1);
+      { const a = makeCard("02101", 2, 0, 0), b = makeCard("02102", 2, 1, 0); const game = traitGame("3001", [a, b]); coreApplyEliteAiTrait(game, game.players[1], []); check("3001 振奋人心", a.currentAttack === a.attack + 1 && b.currentAttack === b.attack + 1); }
+      { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("3002", [enemy]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[0], card: enemy }, []); check("3002 虚弱无力", enemy.currentAttack === Math.max(0, enemy.attack - 2)); }
+      { const game = traitGame("3003"); check("3003 灵动迅捷", coreActionLimit(game) === 3); }
+      { const placed = makeCard("02101", 2, null, null); const game = traitGame("3004"); game.players[1].hand = [placed]; game.actionsUsed = coreActionLimit(game); const allowed = coreCanUseAction(game, placed); placed.row = 0; placed.col = 0; game.boardCards.push(placed); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("3004 凤鸣九霄", allowed && placed.currentAttack === placed.attack + 3 && coreHasFreeAction(game, placed)); }
+      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("3005", [ally]); coreApplyEliteAiTraitEvent(game, "cardMoved", { card: ally, source: { row: 0, col: 0 }, target: { row: 0, col: 1 } }, []); check("3005 勇冠三军", ally.currentAttack === ally.attack + 2); }
+      { const dead = makeCard("02101", 2, 0, 0), ally = makeCard("02102", 2, 1, 0); const game = traitGame("3006", [dead, ally]); coreDestroyV2Card(game, dead, []); check("3006 破釜沉舟", ally.currentAttack === ally.attack + 1); }
+      { const weak = makeCard("01101", 1, null, null), valid = makeCard("01102", 1, null, null); weak.currentAttack = 0; valid.currentAttack = 1; const game = traitGame("3007"); check("3007 关山暮雪", !coreCanPlaceCard(game, weak) && coreCanPlaceCard(game, valid)); }
+      { const placed = makeCard("01101", 1, 0, 0); const handA = makeCard("02101", 2, null, null), handB = makeCard("02102", 2, null, null); const game = traitGame("3008", [placed]); game.players[1].hand = [handA, handB]; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[0], card: placed }, []); check("3008 暗度陈仓", handA.currentAttack === handA.attack + 1 && handB.currentAttack === handB.attack + 1); }
 
       const previousOnlinePlayerId = state.online?.playerId;
       const localViewGame = makeGame(); localViewGame.mode = "pvp";
@@ -90,7 +101,7 @@
       check("PVE 挑战模式", challengeGame.challengeMode
         && challengeGame.players[1].isAI
         && challengeGame.players[1].name === "精英 AI"
-        && challengeGame.players[1].hand.length === 4
+        && challengeGame.players[1].hand.length === (challengeGame.eliteAiEffectIds.includes("1008") ? 1 : 4)
         && coreActionLimit(challengeGame) === 2);
 
       const occupiedA = makeCard("01101", 1, 0, 0);

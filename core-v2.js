@@ -99,7 +99,7 @@
     try {
       const lastRoom = JSON.parse(window.localStorage?.getItem("cardDemoOnlineRoom") || "null");
       if (lastRoom?.roomCode && state.playerName && window.CardOnline) {
-        state.online = { playerId: null, roomCode: lastRoom.roomCode, playerName: state.playerName, host: false };
+        state.online = { playerId: null, roomCode: lastRoom.roomCode, playerName: state.playerName, host: false, role: "player", rooms: [] };
         state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
         window.CardOnline.connect();
         window.setTimeout(() => window.CardOnline.resumeRoom(lastRoom.roomCode, state.playerName, lastRoom.sessionToken), 250);
@@ -114,6 +114,16 @@
   function coreViewerPlayerId(game) {
     const onlinePlayerId = Number(state.online?.playerId);
     return game?.mode === "online" && [1, 2].includes(onlinePlayerId) ? onlinePlayerId : 1;
+  }
+
+  function coreIsSpectator() {
+    return state.online?.role === "spectator";
+  }
+
+  function coreCanViewerInteract(game) {
+    if (!game) return false;
+    if (game.mode !== "online") return true;
+    return !coreIsSpectator() && coreViewerPlayerId(game) === game.activePlayerId;
   }
 
   function coreIsOpponentTurn(game) {
@@ -379,15 +389,16 @@
     const ai = coreEliteAiTraitOwner(game);
     const operations = {
       handLimit: HAND_LIMIT,
-      adjust: (card, amount, temporary = false) => {
+      adjust: (card, amount, temporary = false, isolated = true) => {
         const previous = state.game;
         state.game = game;
-        try { coreAdjustAttack(card, amount, temporary, true); } finally { state.game = previous; }
+        try { coreAdjustAttack(card, amount, temporary, isolated); } finally { state.game = previous; }
       },
-      adjustScoped: (card, amount) => {
+      adjustScoped: (card, amount, isolated = true) => {
         if (!card) return;
         card.eliteTraitTempBonusUntilOwnTurn = (Number(card.eliteTraitTempBonusUntilOwnTurn) || 0) + amount;
-        operations.adjust(card, amount, true);
+        card.eliteTraitTempBonusAffectedByCards = card.eliteTraitTempBonusAffectedByCards || !isolated;
+        operations.adjust(card, amount, true, isolated);
       },
       addActions: (count = 1) => { game.extraActions = (Number(game.extraActions) || 0) + count; },
       applyPlacementSkill: (card) => coreApplyV2PlacementSkill(game, corePlayer(game, card?.ownerId), card, log),
@@ -510,8 +521,10 @@
       if (!amount) return;
       const previous = state.game;
       state.game = game;
-      try { coreAdjustAttack(card, -amount, true, true); } finally { state.game = previous; }
+      const isolated = !card.eliteTraitTempBonusAffectedByCards;
+      try { coreAdjustAttack(card, -amount, true, isolated); } finally { state.game = previous; }
       delete card.eliteTraitTempBonusUntilOwnTurn;
+      delete card.eliteTraitTempBonusAffectedByCards;
     });
   }
 
@@ -1920,17 +1933,17 @@
     }, CORE_TIMER_TICK_MS);
   }
 
-  async function coreSurrender(game = state.game) {
+  async function coreSurrender(game = state.game, surrenderingPlayerId = game?.activePlayerId) {
     if (!game || game.isAnimating || game.winner) return;
-    const active = corePlayer(game, game.activePlayerId);
-    const winner = active && corePlayer(game, otherPlayerId(active.id));
-    if (!active || !winner) return;
+    const surrenderingPlayer = corePlayer(game, Number(surrenderingPlayerId));
+    const winner = surrenderingPlayer && corePlayer(game, otherPlayerId(surrenderingPlayer.id));
+    if (!surrenderingPlayer || !winner) return;
     const control = coreControlMap(game);
     game.players.forEach((player) => { player.lastControlCount = control.counts[player.id]; });
     game.finalControlCounts = { ...control.counts };
     game.winner = {
       playerId: winner.id,
-      text: `${active.name} 已认输，${winner.name} 获胜。`
+      text: `${surrenderingPlayer.name} 已认输，${winner.name} 获胜。`
     };
     game.currentPhase = "胜负结算";
     game.turnDeadlineAt = null;
@@ -2086,9 +2099,10 @@
   function coreRenderBoard(game, active, controlMap) {
     ui.board.innerHTML = "";
     ui.boardAnimationLayer.innerHTML = "";
-    const selectedHand = active.hand.find((card) => card.uid === game.selection.handCardUid) || null;
+    const canInteract = coreCanViewerInteract(game);
+    const selectedHand = canInteract ? active.hand.find((card) => card.uid === game.selection.handCardUid) || null : null;
     const placeTargets = selectedHand ? corePlacementAvailability(game).cells : [];
-    const selectedBoard = game.boardCards.find((card) => card.uid === game.selection.boardCardUid) || null;
+    const selectedBoard = canInteract ? game.boardCards.find((card) => card.uid === game.selection.boardCardUid) || null : null;
     const moveTargets = selectedBoard ? coreValidMoves(game, selectedBoard) : [];
 
     const boardSize = coreBoardSize(game);
@@ -2101,7 +2115,7 @@
         cell.className = "cell";
         cell.dataset.row = String(row);
         cell.dataset.col = String(col);
-        cell.disabled = game.isAnimating;
+        cell.disabled = game.isAnimating || !canInteract;
         if (isBrokenCell(game, row, col)) {
           cell.classList.add("blocked");
         }
@@ -2184,12 +2198,19 @@
 
   function coreRenderHand(game, active) {
     ui.handCards.innerHTML = "";
+    if (coreIsSpectator()) {
+      const notice = document.createElement("div");
+      notice.className = "spectator-hand-notice";
+      notice.innerHTML = "<strong>观战模式</strong><span>双方手牌不可见，当前为只读视角。</span>";
+      ui.handCards.appendChild(notice);
+      return;
+    }
     active.hand.forEach((card) => {
       const display = coreCardDisplay(card);
       const element = document.createElement("button");
       element.type = "button";
       element.className = `card rarity-${display.rarity || "普通"}`;
-      element.disabled = game.isAnimating;
+      element.disabled = game.isAnimating || !coreCanViewerInteract(game);
       if (game.selection.handCardUid === card.uid) element.classList.add("selected");
       element.innerHTML = `
         <div class="card-top"><h3>${coreEscapeHtml(display.name)}</h3><strong>ATK ${coreCardBaseAttack(card)}</strong></div>
@@ -2212,8 +2233,9 @@
     const game = state.game;
     if (!game) return;
     const active = corePlayer(game, game.activePlayerId);
-    const ownPlayer = corePlayer(game, coreViewerPlayerId(game)) || game.players[0];
-    const opponentPlayer = corePlayer(game, otherPlayerId(ownPlayer.id)) || game.players.find((player) => player.id !== ownPlayer.id);
+    const spectator = coreIsSpectator();
+    const ownPlayer = spectator ? corePlayer(game, 1) : corePlayer(game, coreViewerPlayerId(game)) || game.players[0];
+    const opponentPlayer = spectator ? corePlayer(game, 2) : corePlayer(game, otherPlayerId(ownPlayer.id)) || game.players.find((player) => player.id !== ownPlayer.id);
     const opponentTurn = coreIsOpponentTurn(game);
     const handOwner = game.mode === "online"
       ? ownPlayer
@@ -2263,6 +2285,8 @@
     };
     renderPlayerPanel(opponentPlayer, ui.opponentPlayerControl, ui.opponentPlayerSummary);
     renderPlayerPanel(ownPlayer, ui.ownPlayerControl, ui.ownPlayerSummary);
+    if (ui.opponentPlayerTitle) ui.opponentPlayerTitle.textContent = spectator ? "玩家 2" : "对方玩家";
+    if (ui.ownPlayerTitle) ui.ownPlayerTitle.textContent = spectator ? "玩家 1" : "我方玩家";
     if (ui.opponentAiEffect) {
       const traits = opponentPlayer?.isAI && coreIsPveChallenge(game) ? coreEliteAiTraitInfos(game) : [];
       ui.opponentAiEffect.hidden = !traits.length;
@@ -2270,16 +2294,25 @@
         ? `<span class="ai-effect-label">本关精英词条</span>${coreEliteAiTraitMarkup(traits)}`
         : "";
     }
-    ui.handTitle.textContent = `${handOwner.name} 的手牌`;
+    ui.handTitle.textContent = spectator ? "观战视角" : `${handOwner.name} 的手牌`;
     ui.submitActionBtn.hidden = true;
     ui.submitActionBtn.disabled = true;
-    ui.cancelSelectionBtn.disabled = game.isAnimating;
-    coreUi.endTurnBtn.disabled = game.isAnimating;
-    coreUi.endTurnBtn.classList.toggle("is-highlighted", !game.isAnimating && !game.winner && !coreHasExecutableAction(game));
-    if (coreUi.surrenderBtn) coreUi.surrenderBtn.disabled = game.isAnimating || Boolean(game.winner) || active.isAI;
+    ui.cancelSelectionBtn.hidden = spectator;
+    ui.cancelSelectionBtn.disabled = game.isAnimating || !coreCanViewerInteract(game);
+    coreUi.endTurnBtn.hidden = spectator;
+    coreUi.endTurnBtn.disabled = game.isAnimating || !coreCanViewerInteract(game);
+    coreUi.endTurnBtn.classList.toggle("is-highlighted", !spectator && coreCanViewerInteract(game) && !game.isAnimating && !game.winner && !coreHasExecutableAction(game));
+    if (coreUi.surrenderBtn) {
+      coreUi.surrenderBtn.hidden = spectator;
+      coreUi.surrenderBtn.disabled = game.isAnimating || Boolean(game.winner) || (game.mode !== "online" && active.isAI);
+    }
+    ui.restartBtn.hidden = spectator;
     ui.restartBtn.disabled = game.isAnimating;
     ui.backMenuBtn.disabled = game.isAnimating;
-    if (game.selection.handCardUid) {
+    ui.backMenuBtn.textContent = spectator ? "退出观战" : "返回主菜单";
+    if (spectator) {
+      ui.selectionSummary.textContent = "观战模式为只读视角，不可操作卡牌或棋盘。";
+    } else if (game.selection.handCardUid) {
       const availability = corePlacementAvailability(game);
       ui.selectionSummary.textContent = availability.cells.length > 0 ? "已选中手牌，请选择一个空格放置。" : `当前无法放置：${availability.reason}`;
     } else if (game.selection.boardCardUid) {
@@ -2317,7 +2350,7 @@
 
   function coreHandleHandClick(cardUid) {
     const game = state.game;
-    if (!game || game.isAnimating) return;
+    if (!game || game.isAnimating || !coreCanViewerInteract(game)) return;
     const active = corePlayer(game, game.activePlayerId);
     if (game.actionsUsed >= coreActionLimit(game)) {
       showToast("行动次数已用完", "本回合不能继续放置卡牌，请结束回合。");
@@ -2336,7 +2369,7 @@
 
   function coreHandleBoardClick(row, col) {
     const game = state.game;
-    if (!game || game.isAnimating || isBrokenCell(game, row, col)) return;
+    if (!game || game.isAnimating || !coreCanViewerInteract(game) || isBrokenCell(game, row, col)) return;
     const active = corePlayer(game, game.activePlayerId);
     const target = getBoardCardAt(game, row, col);
     const selectedCard = game.boardCards.find((item) => item.uid === game.selection.boardCardUid);
@@ -2397,7 +2430,7 @@
 
   async function coreSubmitAction() {
     const game = state.game;
-    if (!game || game.isAnimating || game.winner) return;
+    if (!game || game.isAnimating || game.winner || !coreCanViewerInteract(game)) return;
     const action = coreBuildPendingAction(game);
     if (!action) {
       showToast("请选择行动", "请先选择一张手牌与落点，或选择一张可移动的己方卡牌与目标格。");
@@ -2410,6 +2443,84 @@
       return;
     }
     await coreResolveAction(game, action);
+  }
+
+  function coreValidatedOnlinePlayerName() {
+    const playerName = state.playerName;
+    if (corePlayerNameIsValid(playerName)) return playerName;
+    showToast("玩家 ID 无效", "请输入 1-6 个中文字符，或 1-12 个英文字母。");
+    return null;
+  }
+
+  function coreRoomStatusLabel(room) {
+    if (room.ended) return "已结束";
+    if (room.started) return "对局中";
+    if (room.playerCount >= room.playerCapacity) return "等待开局";
+    return "等待玩家";
+  }
+
+  function coreRenderRoomList(rooms = state.online?.rooms || []) {
+    const list = document.getElementById("online-room-list");
+    const count = document.getElementById("online-room-count");
+    if (!list) return;
+    if (count) count.textContent = `${rooms.length} 个房间`;
+    if (!rooms.length) {
+      list.innerHTML = '<p class="online-room-empty">暂无公开房间，可先创建一个房间。</p>';
+      return;
+    }
+    list.innerHTML = rooms.map((room) => {
+      const roomCode = coreEscapeHtml(room.roomCode);
+      const names = [room.names?.[1], room.names?.[2]].filter(Boolean).map(coreEscapeHtml).join(" vs ") || "等待玩家";
+      const action = room.canJoin
+        ? `<button class="secondary-btn online-room-action" type="button" data-room-action="join" data-room-code="${roomCode}">加入对局</button>`
+        : room.canSpectate
+          ? `<button class="primary-btn online-room-action" type="button" data-room-action="spectate" data-room-code="${roomCode}">进入观战</button>`
+          : `<button class="secondary-btn online-room-action" type="button" disabled>${room.ended ? "对局已结束" : room.spectatorCount >= room.spectatorCapacity ? "观战已满" : "暂不可加入"}</button>`;
+      const boardSize = Number(room.boardSize) || 4;
+      return `
+        <div class="online-room-row">
+          <div class="online-room-identity"><strong>${roomCode}</strong><span>${names}</span></div>
+          <span class="online-room-state state-${room.ended ? "ended" : room.started ? "playing" : "waiting"}">${coreRoomStatusLabel(room)}</span>
+          <span class="online-room-map">${boardSize}x${boardSize}</span>
+          <span class="online-room-seats"><small>玩家</small><strong>${Number(room.playerCount) || 0}/${Number(room.playerCapacity) || 2}</strong></span>
+          <span class="online-room-seats"><small>观战</small><strong>${Number(room.spectatorCount) || 0}/${Number(room.spectatorCapacity) || 2}</strong></span>
+          ${action}
+        </div>
+      `;
+    }).join("");
+    list.querySelectorAll("[data-room-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const playerName = coreValidatedOnlinePlayerName();
+        if (!playerName) return;
+        const roomCode = button.dataset.roomCode;
+        const sent = button.dataset.roomAction === "spectate"
+          ? window.CardOnline.joinSpectator(roomCode, playerName)
+          : window.CardOnline.joinRoom(roomCode, playerName);
+        if (!sent) showToast("联网未连接", "请稍候再加入房间。");
+      });
+    });
+  }
+
+  function coreShowSpectatorWaiting(roomState = state.online?.roomState || {}) {
+    const names = roomState.names || {};
+    const spectators = Object.values(roomState.spectatorNames || {}).filter(Boolean).map(coreEscapeHtml);
+    const boardSize = Number(roomState.boardSize || state.selectedBoardSize) || 4;
+    ui.deckReveal.innerHTML = `
+      <section class="deck-reveal-card online-room-card" role="dialog" aria-modal="true" aria-label="观战等待">
+        <button id="spectator-leave-room" class="overlay-close" type="button" aria-label="退出观战">退出观战</button>
+        <p class="phase-banner-eyebrow">SPECTATOR</p>
+        <h2 class="deck-reveal-title">观战房间 ${coreEscapeHtml(state.online?.roomCode)}</h2>
+        <p class="deck-reveal-copy">${roomState.started ? "正在载入对局状态……" : "玩家正在准备，开局后将自动进入观战。"}</p>
+        <div class="online-room-players">
+          <div><small>玩家 1</small><strong>${coreEscapeHtml(names[1] || "等待玩家")}</strong></div>
+          <div><small>玩家 2</small><strong>${coreEscapeHtml(names[2] || "等待玩家")}</strong></div>
+        </div>
+        <p class="spectator-readonly-note">只读观战 · ${boardSize}x${boardSize} 地图 · 观战席 ${Number(roomState.spectatorCount) || spectators.length}/2</p>
+        <p class="deck-reveal-copy">${spectators.length ? `当前观战：${spectators.join("、")}` : ""}</p>
+      </section>
+    `;
+    ui.deckReveal.classList.add("visible");
+    document.getElementById("spectator-leave-room")?.addEventListener("click", () => window.resetToMenu?.());
   }
 
   function coreShowOnlineWaiting(roomState = state.online.roomState || {}) {
@@ -2432,15 +2543,14 @@
         <label class="online-deck-choice">我的势力牌库<select id="online-deck-choice" ${ownReady ? "disabled" : ""}>${deckOptions}</select></label>
         <button id="online-ready-btn" class="primary-btn" type="button">${ownReady ? "取消准备" : "准备"}</button>
         <p id="online-room-status" class="deck-reveal-copy">${roomState.hasPlayers?.[2] ? "等待双方准备……" : "等待玩家 2 加入……"}</p>
+        <p class="spectator-capacity-note">观战席 ${Number(roomState.spectatorCount) || 0}/${Number(roomState.spectatorCapacity) || 2}</p>
       </section>
     `;
     ui.deckReveal.classList.add("visible");
     document.getElementById("online-leave-room")?.addEventListener("click", () => {
       if (!window.confirm("确定退出房间吗？")) return;
-      window.CardOnline?.send({ type: "leave-room" });
       coreCloseOverlay();
-      state.online = { playerId: null, roomCode: null, host: false };
-      switchScreen("menu");
+      window.resetToMenu?.();
     });
     document.getElementById("online-deck-choice")?.addEventListener("change", (event) => {
       state.online.deckKey = event.target.value;
@@ -2479,21 +2589,46 @@
 
   function coreHandleOnlineMessage(message) {
     if (!message) return;
+    if (message.type === "connected") {
+      const status = document.getElementById("online-lobby-status");
+      if (status) status.textContent = "已连接，房间列表会自动更新。";
+      window.CardOnline?.listRooms?.();
+      return;
+    }
+    if (message.type === "disconnected") {
+      const status = document.getElementById("online-lobby-status");
+      if (status) status.textContent = "联网服务已断开，请重新打开联网对战。";
+      return;
+    }
+    if (message.type === "room-list") {
+      state.online.rooms = Array.isArray(message.rooms) ? message.rooms : [];
+      coreRenderRoomList(state.online.rooms);
+      return;
+    }
     if (message.type === "room-created") {
-      state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: true };
+      state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: true, role: "player" };
       try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken })); } catch (_error) { /* ignore */ }
       coreStartOnlineHost();
-      state.game.players[0].name = message.playerName;
       return;
     }
     if (message.type === "room-joined") {
-      state.online = { ...state.online, playerId: 2, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: false };
+      const playerId = Number(message.playerId) || 2;
+      state.online = { ...state.online, playerId, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: playerId === 1, role: "player" };
       try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken })); } catch (_error) { /* ignore */ }
       coreCloseOverlay();
       state.selectedBoardSize = message.boardSize || state.selectedBoardSize;
       state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
-      showToast("已加入房间", `你已加入 ${message.opponentName || "玩家 1"} 创建的房间。`);
-      coreShowOnlineWaiting({ roomCode: message.roomCode, boardSize: state.selectedBoardSize, names: { 1: message.opponentName, 2: state.playerName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: true } });
+      showToast("已加入房间", `你已加入 ${message.opponentName || "另一位玩家"} 所在的房间。`);
+      coreShowOnlineWaiting({ roomCode: message.roomCode, boardSize: state.selectedBoardSize, names: { [playerId]: state.playerName, [otherPlayerId(playerId)]: message.opponentName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: true } });
+      return;
+    }
+    if (message.type === "spectator-joined") {
+      state.online = { ...state.online, playerId: null, roomCode: message.roomCode, spectatorId: message.spectatorId, playerName: message.spectatorName, host: false, role: "spectator", roomState: message.roomState };
+      state.selectedBoardSize = Number(message.boardSize) || state.selectedBoardSize;
+      state.game = null;
+      try { window.localStorage?.removeItem("cardDemoOnlineRoom"); } catch (_error) { /* storage may be unavailable */ }
+      coreShowSpectatorWaiting(message.roomState);
+      showToast("已进入观战", "观战席为只读状态，可随时退出。");
       return;
     }
     if (message.type === "peer-joined" && state.online.host) {
@@ -2502,16 +2637,25 @@
     }
     if (message.type === "room-state") {
       state.online.roomState = message.state;
-      if (!state.online.roomCode || !state.game || state.game.currentPhase === "开局展示") coreShowOnlineWaiting(message.state);
+      if (coreIsSpectator()) {
+        if (!state.game) coreShowSpectatorWaiting(message.state);
+      } else if (!state.online.roomCode || !state.game || state.game.currentPhase === "开局展示") {
+        coreShowOnlineWaiting(message.state);
+      }
       return;
     }
     if (message.type === "match-start") {
       showToast("双方已准备", "对局即将开始。");
-      coreStartOnlineMatch(message);
+      if (coreIsSpectator()) {
+        state.online.roomState = { ...(state.online.roomState || {}), started: true, names: message.names, boardSize: message.boardSize };
+        coreShowSpectatorWaiting(state.online.roomState);
+      } else {
+        coreStartOnlineMatch(message);
+      }
       return;
     }
     if (message.type === "room-resumed") {
-      state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, sessionToken: message.sessionToken, host: message.playerId === 1 };
+      state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, sessionToken: message.sessionToken, host: message.playerId === 1, role: "player" };
       if (message.started && message.state) {
         try {
           state.game = coreDeserializeOnlineGame(message.state);
@@ -2549,7 +2693,7 @@
       }
       return;
     }
-    if (message.type === "state-sync" && !state.online.host && message.state) {
+    if (message.type === "state-sync" && (coreIsSpectator() || !state.online.host) && message.state) {
       try {
         state.game = coreDeserializeOnlineGame(message.state);
       } catch (_error) {
@@ -2558,9 +2702,28 @@
         showToast("对局数据不兼容", "收到的对局仍使用旧版卡牌数据，请重新进入房间。");
         return;
       }
+      if (coreIsSpectator()) coreCloseOverlay();
       switchScreen("game");
       coreRender();
       if (state.game.winner) showResult();
+      return;
+    }
+    if (message.type === "spectator-read-only") {
+      showToast("观战模式", message.message || "观战席不能执行对局操作。");
+      return;
+    }
+    if (message.type === "spectator-session-ended") {
+      if (state.game?.mode === "online") {
+        state.game.winner = { playerId: Number(message.winnerId) || 0, text: message.message || "本次观战已结束。" };
+        state.game.finalControlCounts = coreControlMap(state.game).counts;
+        state.game.currentPhase = "胜负结算";
+        state.game.lastResolution = state.game.winner.text;
+        coreRender();
+        showResult();
+      } else {
+        window.resetToMenu?.();
+        showToast("观战已结束", message.message || "本次观战已结束。");
+      }
       return;
     }
     if (message.type === "action-request" && state.online.host && state.game && message.playerId === state.game.activePlayerId) {
@@ -2571,8 +2734,8 @@
       coreEndTurn(state.game);
       return;
     }
-    if (message.type === "surrender-request" && state.online.host && state.game && message.playerId === state.game.activePlayerId) {
-      coreSurrender(state.game);
+    if (message.type === "surrender-request" && state.online.host && state.game && [1, 2].includes(Number(message.playerId))) {
+      coreSurrender(state.game, Number(message.playerId));
       return;
     }
     if (message.type === "action-rejected") {
@@ -2608,42 +2771,45 @@
       showToast("联网不可用", "当前页面没有加载联网客户端。");
       return;
     }
-    window.CardOnline.connect();
     state.online?.unsubscribe?.();
-    state.online = { playerId: null, roomCode: null, playerName: "", host: false };
+    state.online = { playerId: null, roomCode: null, playerName: state.playerName, host: false, role: null, rooms: [] };
     state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
     ui.deckReveal.innerHTML = `
-      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="联网对战房间">
+      <section class="deck-reveal-card online-lobby-card" role="dialog" aria-modal="true" aria-label="联网对战房间">
         <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">ONLINE MATCH</p>
         <h2 class="deck-reveal-title">联网对战</h2>
-        <p class="deck-reveal-copy">先设定玩家 ID，再创建房间或输入其他玩家提供的房间码加入。</p>
+        <p class="deck-reveal-copy">创建新房间，或从列表中加入玩家席与观战席。</p>
         <div class="online-lobby-actions">
           <button id="online-create-room" class="primary-btn">创建房间</button>
           <label>房间码<input id="online-room-code" maxlength="6" autocomplete="off" placeholder="例如 A1B2C3"></label>
           <button id="online-join-room" class="secondary-btn">加入房间</button>
         </div>
         <p id="online-lobby-status" class="deck-reveal-copy">正在连接联网服务……</p>
+        <div class="online-room-list-head">
+          <div><strong>公开房间</strong><span id="online-room-count">0 个房间</span></div>
+          <button id="online-refresh-rooms" class="secondary-btn" type="button">刷新</button>
+        </div>
+        <div id="online-room-list" class="online-room-list" aria-live="polite"></div>
       </section>
     `;
     ui.deckReveal.classList.add("visible");
     coreAttachOverlayClose();
-    const getPlayerName = () => state.playerName;
-    const validatePlayerName = () => {
-      const playerName = getPlayerName();
-      if (corePlayerNameIsValid(playerName)) return playerName;
-      showToast("玩家 ID 无效", "请输入 1-6 个中文字符，或 1-12 个英文字母。");
-      return null;
-    };
     document.getElementById("online-create-room").addEventListener("click", () => {
-      const playerName = validatePlayerName();
+      const playerName = coreValidatedOnlinePlayerName();
       if (playerName && !window.CardOnline.createRoom(playerName, state.selectedBoardSize)) showToast("联网未连接", "请稍候再创建房间。");
     });
     document.getElementById("online-join-room").addEventListener("click", () => {
       const roomCode = document.getElementById("online-room-code").value;
-      const playerName = validatePlayerName();
+      const playerName = coreValidatedOnlinePlayerName();
       if (playerName && !window.CardOnline.joinRoom(roomCode, playerName)) showToast("联网未连接", "请稍候再加入房间。");
     });
+    document.getElementById("online-refresh-rooms").addEventListener("click", () => {
+      if (!window.CardOnline.listRooms()) showToast("联网未连接", "请稍候再刷新房间列表。");
+    });
+    coreRenderRoomList([]);
+    window.CardOnline.connect();
+    window.CardOnline.listRooms();
   }
 
   function coreShowDeckSelector(mode) {
@@ -2822,10 +2988,10 @@
   window.requestBoardSizeAccess = coreRequestBoardSizeAccess;
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
-    cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
+    cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
     coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreMaintainEliteAiHand,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
-    coreFormatTurnTime, coreIsOpponentTurn, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
+    coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
     coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
     coreVictoryTarget, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
@@ -2880,7 +3046,7 @@
 
   coreUi.endTurnBtn.addEventListener("click", () => {
     const game = state.game;
-    if (!game || game.isAnimating || game.winner) return;
+    if (!game || game.isAnimating || game.winner || !coreCanViewerInteract(game)) return;
     if (coreHasExecutableAction(game) && !window.confirm("本回合仍有可执行操作，确定要结束回合吗？")) return;
     if (game.mode === "online") {
       if (!window.CardOnline?.send({ type: "end-turn-request" })) showToast("联网未连接", "请等待联网服务连接后再结束回合。");
@@ -2890,15 +3056,15 @@
   });
   coreUi.surrenderBtn?.addEventListener("click", async () => {
     const game = state.game;
-    if (!game || game.isAnimating || game.winner) return;
-    const active = corePlayer(game, game.activePlayerId);
-    if (!active || active.isAI || !window.confirm(`确定让 ${active.name} 认输吗？认输后将立即判负，且无法撤销。`)) return;
+    if (!game || game.isAnimating || game.winner || coreIsSpectator()) return;
+    const surrenderingPlayer = game.mode === "online" ? corePlayer(game, coreViewerPlayerId(game)) : corePlayer(game, game.activePlayerId);
+    if (!surrenderingPlayer || surrenderingPlayer.isAI || !window.confirm(`确定让 ${surrenderingPlayer.name} 认输吗？认输后将立即判负，且无法撤销。`)) return;
     window.closeGameMenu?.();
     if (game.mode === "online") {
       if (!window.CardOnline?.send({ type: "surrender-request" })) showToast("联网未连接", "请等待联网服务连接后再认输。");
       return;
     }
-    await coreSurrender(game);
+    await coreSurrender(game, surrenderingPlayer.id);
   });
   ui.editPlayerIdBtn?.addEventListener("click", () => coreShowPlayerIdModal(false));
   coreScheduleTurnTimerTick();

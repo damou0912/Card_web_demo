@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
@@ -43,6 +43,7 @@
       { const game = traitGame("1005"); coreDrawOneCard(game, game.players[1], []); check("1005 援军", game.players[1].hand.length === 1 && game.players[1].hand[0].customName === "援兵" && game.players[1].hand[0].currentAttack === 1); }
       { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
+      { const watcher = makeCard("02315", 2, 1, 0), placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [watcher, placed]); coreApplyV2PlacementSkill(game, game.players[1], watcher, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const amplified = placed.currentAttack === placed.attack + 4 && placed.v2PermanentBonus === 1 && placed.v2TempBonus === 3; game.turn = 2; coreStartTurn(game); check("1007 慎行可受卡牌效果放大", amplified && placed.currentAttack === placed.attack + 1); }
       { const game = traitGame("1008"); game.players[1].hand = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null), makeCard("02103", 2, null, null)]; coreMaintainEliteAiHand(game); const trimmed = game.players[1].hand.length === 1; game.players[1].hand = []; game.players[1].drawPile = [makeCard("02104", 2, null, null)]; coreMaintainEliteAiHand(game); check("1008 断粮", trimmed && game.players[1].hand.length === 1); }
       { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1009", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1009 野望", enemy.currentAttack === Math.max(0, enemy.attack - 1) && enemy.v2TempBonus === -1); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1010", [placed]); placed.restedTurn = 1; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1010 急奔", placed.restedTurn === null); }
@@ -67,6 +68,7 @@
       { const placed = makeCard("01101", 1, 0, 0); const handA = makeCard("02101", 2, null, null), handB = makeCard("02102", 2, null, null); const game = traitGame("3008", [placed]); game.players[1].hand = [handA, handB]; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[0], card: placed }, []); check("3008 暗度陈仓", handA.currentAttack === handA.attack + 1 && handB.currentAttack === handB.attack + 1); }
 
       const previousOnlinePlayerId = state.online?.playerId;
+      const previousOnlineRole = state.online?.role;
       const localViewGame = makeGame(); localViewGame.mode = "pvp";
       localViewGame.activePlayerId = 2;
       const localViewerId = coreViewerPlayerId(localViewGame);
@@ -79,11 +81,19 @@
       onlineViewGame.activePlayerId = 2;
       const onlineViewerDuringOwnTurn = coreViewerPlayerId(onlineViewGame);
       const onlineOwnTurn = !coreIsOpponentTurn(onlineViewGame);
+      state.online.role = "player";
+      const playerCanActOnOwnTurn = coreCanViewerInteract(onlineViewGame);
+      onlineViewGame.activePlayerId = 1;
+      const playerCannotActOnOpponentTurn = !coreCanViewerInteract(onlineViewGame);
+      state.online.role = "spectator";
+      const spectatorIsReadOnly = coreIsSpectator() && !coreCanViewerInteract(onlineViewGame);
       state.online.playerId = previousOnlinePlayerId;
+      state.online.role = previousOnlineRole;
       check("左侧玩家信息固定为本机视角", localViewerId === 1
         && onlineViewerDuringOpponentTurn === 2
         && onlineViewerDuringOwnTurn === 2);
       check("行动数颜色按固定视角区分敌我回合", localOpponentTurn && onlineOpponentTurn && onlineOwnTurn);
+      check("观战模式始终为只读", playerCanActOnOwnTurn && playerCannotActOnOpponentTurn && spectatorIsReadOnly);
 
       const timerGame = makeGame();
       const deadline = coreStartTurnTimer(timerGame, 1000);

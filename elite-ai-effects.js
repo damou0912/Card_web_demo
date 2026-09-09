@@ -38,7 +38,7 @@
       onCardPlaced(context) {
         const card = context.card;
         if (context.player?.id !== own(context).id || !card || !context.operations.claimFirstPlacement("1007")) return;
-        context.operations.adjustScoped(card, 3);
+        context.operations.adjustScoped(card, 3, false);
       }
     }),
     "1008": Object.freeze({

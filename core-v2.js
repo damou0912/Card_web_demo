@@ -4,7 +4,7 @@
   const CORE_MAX_TURNS = 30;
   const CORE_FIRST_TURN_ACTIONS = 1;
   const CORE_STANDARD_ACTIONS = 2;
-  const CORE_TURN_TIME_LIMIT_SECONDS = 120;
+  const CORE_TURN_TIME_LIMIT_SECONDS = 300;
   const CORE_TURN_TIME_LIMIT_MS = CORE_TURN_TIME_LIMIT_SECONDS * 1000;
   const CORE_TIMER_TICK_MS = 250;
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
@@ -1789,7 +1789,7 @@
     if (!active) return false;
     coreTimerEndingTurn = true;
     game.turnDeadlineAt = null;
-    const message = `${active.name} 的 120 秒行动时间已用尽，系统自动结束回合。`;
+    const message = `${active.name} 的 ${CORE_TURN_TIME_LIMIT_SECONDS} 秒行动时间已用尽，系统自动结束回合。`;
     coreAppendLog(game, message);
     game.lastResolution = message;
     coreRender();

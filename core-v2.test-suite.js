@@ -87,13 +87,13 @@
 
       const timerGame = makeGame();
       const deadline = coreStartTurnTimer(timerGame, 1000);
-      check("每回合计时固定为 120 秒", CORE_TURN_TIME_LIMIT_SECONDS === 120
-        && deadline === 121000
-        && coreTurnSecondsRemaining(timerGame, 1000) === 120
-        && coreTurnSecondsRemaining(timerGame, 61000) === 60
-        && coreTurnSecondsRemaining(timerGame, 121000) === 0
-        && coreTurnSecondsRemaining({ turnDeadlineAt: null }, 121000) === null
-        && coreFormatTurnTime(120) === "02:00"
+      check("每回合计时固定为 300 秒", CORE_TURN_TIME_LIMIT_SECONDS === 300
+        && deadline === 301000
+        && coreTurnSecondsRemaining(timerGame, 1000) === 300
+        && coreTurnSecondsRemaining(timerGame, 241000) === 60
+        && coreTurnSecondsRemaining(timerGame, 301000) === 0
+        && coreTurnSecondsRemaining({ turnDeadlineAt: null }, 301000) === null
+        && coreFormatTurnTime(300) === "05:00"
         && coreFormatTurnTime(9) === "00:09");
 
       const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);

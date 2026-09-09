@@ -364,11 +364,6 @@
       .filter(Boolean);
   }
 
-  function coreEliteAiHasTrait(game, id) {
-    const wanted = coreNormalizeEliteAiTraitId(id);
-    return coreEliteAiTraitIdsForGame(game).includes(wanted);
-  }
-
   function coreEliteAiPlayer(game) {
     return game?.players?.find((player) => player.isAI) || null;
   }
@@ -379,11 +374,9 @@
   }
 
   function coreHandLimitForPlayer(game, player) {
-    return coreIsPveChallenge(game)
-      && player?.id === coreEliteAiTraitOwner(game)?.id
-      && coreEliteAiHasTrait(game, "1008")
-      ? 1
-      : HAND_LIMIT;
+    if (!coreIsPveChallenge(game) || !player) return HAND_LIMIT;
+    const limits = coreResolveEliteAiRule(game, "handLimit", { player });
+    return Math.max(1, Math.min(HAND_LIMIT, limits.reduce((limit, value) => Number.isFinite(Number(value)) ? Math.min(limit, Number(value)) : limit, HAND_LIMIT)));
   }
 
   function coreEliteAiTraitIdsForGame(game) {
@@ -396,7 +389,7 @@
   function coreEliteAiTraitContext(game, event, payload, log) {
     const ai = coreEliteAiTraitOwner(game);
     const operations = {
-      handLimit: coreHandLimitForPlayer(game, ai),
+      handLimit: event === "handLimit" ? HAND_LIMIT : coreHandLimitForPlayer(game, ai),
       adjust: (card, amount, temporary = false, isolated = true) => {
         const previous = state.game;
         state.game = game;
@@ -413,19 +406,42 @@
       cardName: (card) => coreCardName(card),
       drawCard: (player) => coreDrawOneCard(game, player, log),
       drawReinforcement: () => coreDrawEliteReinforcement(game, ai, log),
-      markFreePlacement: (card) => { if (card) card.eliteFreePlacementTurn = game.turn; },
+      setCardState: (card, key, value) => {
+        if (!card || !key) return;
+        card.eliteTraitState ||= {};
+        card.eliteTraitState[key] = value;
+      },
+      getCardState: (card, key) => card?.eliteTraitState?.[key],
       claimFirstPlacement: (key) => {
         game.eliteAiFirstPlacementClaims ||= {};
         if (game.eliteAiFirstPlacementClaims[key] === game.turn) return false;
         game.eliteAiFirstPlacementClaims[key] = game.turn;
         return true;
       },
+      hasFirstPlacementClaim: (key) => game.eliteAiFirstPlacementClaims?.[key] === game.turn,
       pickRandom: (cards) => corePickRandom(cards || []),
       preventRest: (card) => { if (card && card.restedTurn === game.turn) card.restedTurn = null; },
       trimHandToOne: () => coreTrimEliteAiHand(game),
       logMessage: (message) => log.push(message)
     };
     return { game, event, ai, player: payload.player || null, card: payload.card || null, boardCards: game.boardCards, log, operations, ...payload };
+  }
+
+  function coreResolveEliteAiRule(game, hook, payload = {}, log = []) {
+    if (!coreIsPveChallenge(game)) return [];
+    const context = coreEliteAiTraitContext(game, hook, payload, log);
+    return coreEliteAiTraitIdsForGame(game).map((id) => {
+      const handler = window.ELITE_AI_EFFECTS_V2?.[id]?.[hook];
+      return typeof handler === "function" ? handler(context) : undefined;
+    });
+  }
+
+  function coreEliteAiRuleAllows(game, hook, payload = {}, log = []) {
+    return coreResolveEliteAiRule(game, hook, payload, log).every((result) => result !== false);
+  }
+
+  function coreEliteAiRuleAny(game, hook, payload = {}, log = []) {
+    return coreResolveEliteAiRule(game, hook, payload, log).some((result) => result === true);
   }
 
   function coreApplyEliteAiTraitEvent(game, event, payload = {}, log = []) {
@@ -482,7 +498,7 @@
 
   function coreTrimEliteAiHand(game, owner = coreEliteAiTraitOwner(game)) {
     const ai = owner;
-    if (!ai || !coreEliteAiHasTrait(game, "1008")) return 0;
+    if (!ai) return 0;
     let removed = 0;
     while (ai.hand.length > 1) {
       ai.hand.splice(randomInt(0, ai.hand.length - 1), 1);
@@ -507,7 +523,7 @@
   }
 
   function coreDrawEliteReinforcement(game, ai, log = []) {
-    if (!ai || ai.hand.length >= coreHandLimitForPlayer(game, ai) || !coreEliteAiHasTrait(game, "1005")) return { status: "not-created" };
+    if (!ai || ai.hand.length >= coreHandLimitForPlayer(game, ai)) return { status: "not-created" };
     const card = coreCreateEliteReinforcementCard(ai);
     ai.hand.push(card);
     log.push(`精英特性【援军】使 ${ai.name || "词条持有者"} 抽出 1 张战力为 1 的援兵。`);
@@ -515,12 +531,8 @@
   }
 
   function coreMaintainEliteAiHand(game, ai = coreEliteAiTraitOwner(game), log = []) {
-    if (!ai || !coreEliteAiHasTrait(game, "1008")) return;
-    coreTrimEliteAiHand(game, ai);
-    if (ai.hand.length > 0) return;
-    const result = coreDrawOneCard(game, ai, log);
-    if (result.status === "deck-empty" && ai.hand.length === 0) coreDrawEliteReinforcement(game, ai, log);
-    coreTrimEliteAiHand(game, ai);
+    if (!ai) return;
+    coreResolveEliteAiRule(game, "handState", { player: ai }, log);
   }
 
   function coreExpireEliteScopedBonuses(game) {
@@ -537,15 +549,7 @@
   }
 
   function coreEnforceElitePowerBounds(game) {
-    if (!coreEliteAiHasTrait(game, "2004")) return;
-    const ai = coreEliteAiTraitOwner(game);
-    if (!ai) return;
-    game.boardCards.forEach((card) => {
-      if (card.isGuard) return;
-      const current = Number(card.currentAttack ?? card.attack) || 0;
-      if (card.ownerId === ai.id && current < 2) card.currentAttack = 2;
-      if (card.ownerId !== ai.id && card.ownerId && current > 5) card.currentAttack = 5;
-    });
+    coreResolveEliteAiRule(game, "powerBounds");
   }
 
   function coreModeLabel(mode) {
@@ -557,26 +561,23 @@
 
   function coreActionLimit(game) {
     const base = game.turn === 1 ? CORE_FIRST_TURN_ACTIONS : CORE_STANDARD_ACTIONS;
-    const traitOwnerId = coreEliteAiTraitOwner(game)?.id;
-    const agileBonus = coreIsPveChallenge(game) && game.activePlayerId === traitOwnerId && coreEliteAiHasTrait(game, "3003") ? 1 : 0;
-    return base + agileBonus + (Number(game.extraActions) || 0);
+    const bonus = coreResolveEliteAiRule(game, "actionLimit", { player: corePlayer(game, game.activePlayerId) })
+      .reduce((total, value) => total + (Number(value) || 0), 0);
+    return base + bonus + (Number(game.extraActions) || 0);
   }
 
   function coreHasFreeAction(game, card) {
     return Boolean(card && (
       (coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn)
       || (coreCardEffectHasFlag(card, "freeMove") && game.boardCards?.includes(card))
-      || card.eliteFreePlacementTurn === game.turn
     ));
   }
 
   function coreCanUseAction(game, card = null) {
     if (coreTurnSecondsRemaining(game) === 0) return false;
-    const traitOwnerId = coreEliteAiTraitOwner(game)?.id;
-    const firstElitePlacement = coreIsPveChallenge(game) && game.activePlayerId === traitOwnerId
-      && coreEliteAiHasTrait(game, "3004") && card?.ownerId === traitOwnerId && !game.boardCards?.includes(card)
-      && !game.eliteAiFirstPlacementClaims?.["3004"];
-    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card) || firstElitePlacement;
+    const activePlayer = corePlayer(game, game.activePlayerId);
+    const traitFreeAction = coreEliteAiRuleAny(game, "freeAction", { player: activePlayer, card });
+    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card) || traitFreeAction;
   }
 
   function coreBoardSize(game) {
@@ -1136,7 +1137,7 @@
     resolvingStartSkills.add(card.uid);
     try {
       const effectDefinition = coreCardEffectDefinition(card);
-      const eliteSuppressed = coreEliteAiHasTrait(game, "2003") && card.ownerId !== coreEliteAiTraitOwner(game)?.id;
+      const eliteSuppressed = !coreEliteAiRuleAllows(game, "allowCardStartSkill", { player, card });
       if (typeof effectDefinition?.onTurnStart === "function") {
         const log = game.roundLog || (game.roundLog = []);
         const logStart = log.length;
@@ -1146,8 +1147,7 @@
           : null;
         let result;
         if (eliteSuppressed) {
-          const traitName = window.ELITE_AI_EFFECT_INFO_V2?.["2003"]?.name || "烽火起";
-          result = `本回合未触发：被精英词条【${traitName}】压制。`;
+          result = "本回合未触发：被精英词条压制。";
         } else {
           effectDefinition.onTurnStart(coreCreateCardEffectContext(game, player, card, log));
           result = coreBuildStartSkillResult(game, card, snapshot, log, logStart);
@@ -1556,21 +1556,14 @@
 
   function coreCanPlaceCard(game, card) {
     if (!card) return false;
-    const ai = coreEliteAiTraitOwner(game);
-    if (!ai || !coreEliteAiHasTrait(game, "3007") || card.ownerId === ai.id) return true;
-    return (Number(card.currentAttack ?? card.attack) || 0) >= 1;
+    return coreEliteAiRuleAllows(game, "allowPlacement", { card });
   }
 
   function coreValidMoves(game, card) {
     if (!card || card.isGuard || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || card.lastMovedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
       return [];
     }
-    const ai = coreEliteAiTraitOwner(game);
-    if (ai && coreEliteAiHasTrait(game, "2007") && card.ownerId !== ai.id) {
-      const enemyCards = game.boardCards.filter((target) => target.ownerId === card.ownerId && !target.isGuard);
-      const highest = Math.max(...enemyCards.map((target) => Number(target.currentAttack ?? target.attack) || 0), -Infinity);
-      if ((Number(card.currentAttack ?? card.attack) || 0) === highest) return [];
-    }
+    if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) return [];
     const cells = [];
     const directions = [{ row: -1, col: 0 }, { row: 1, col: 0 }, { row: 0, col: -1 }, { row: 0, col: 1 }];
     const canUseLongMove = coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed;
@@ -1782,9 +1775,8 @@
     coreEnforceElitePowerBounds(game);
     syncPlayerBoardIds(game);
     if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
-    const consumesAction = action.type === "place"
-      ? card.eliteFreePlacementTurn !== game.turn
-      : !coreHasFreeAction(game, card);
+    const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
+    const consumesAction = traitConsumesAction && (action.type === "place" || !coreHasFreeAction(game, card));
     if (consumesAction) game.actionsUsed += 1;
     const won = coreCheckVictory(game);
     game.isAnimating = false;

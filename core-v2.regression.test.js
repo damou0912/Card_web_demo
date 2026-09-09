@@ -133,6 +133,8 @@ context.CARD_LIBRARY = originalLibrary;
 const validation = context.validateCoreV2CardData();
 const result = context.runCoreV2RegressionTests();
 const boundary = context.runCoreV2CardBoundaryTests();
+const coreSource = fs.readFileSync(path.join(__dirname, "core-v2.js"), "utf8");
+const hardcodedTraitIds = [...coreSource.matchAll(/["']((?:100[1-9]|101[01]|200[1-8]|300[1-8]))["']/g)].map((match) => match[1]);
 const cardIds = new Set(context.CARD_LIBRARY.cardSlots.map((card) => card.id));
 const missingIndependentEffects = [...cardIds].filter((id) => {
   const prefix = String(id).slice(0, 2);
@@ -143,14 +145,15 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected) {
-  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
+if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected) {
+  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);
   console.log(`V2 card boundary tests passed: ${boundary.passed}/${boundary.results.length}`);
   console.log(`V2 card test coverage: ${coverage.testedCards}/${cardIds.size}`);
   console.log(`Independent card effects loaded: ${effectIds.size}/${cardIds.size}`);
+  console.log("Trait runtime isolation: passed");
   console.log(`Display deletion isolation: ${effectsSurviveDisplayDeletion ? "passed" : "failed"}`);
   console.log(`Display-free effect execution: ${boundaryWithoutDisplayFields.passed}/${boundaryWithoutDisplayFields.results.length}`);
   console.log(`Runtime/display boundary: ${runtimeDisplayFieldsAbsent && displayUsesTableById && legacyRuntimeDisplayRemoved && onlineRuntimeDisplayRemoved ? "passed" : "failed"}`);

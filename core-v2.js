@@ -382,7 +382,7 @@
       adjust: (card, amount, temporary = false) => {
         const previous = state.game;
         state.game = game;
-        try { coreAdjustAttack(card, amount, temporary); } finally { state.game = previous; }
+        try { coreAdjustAttack(card, amount, temporary, true); } finally { state.game = previous; }
       },
       adjustScoped: (card, amount) => {
         if (!card) return;
@@ -510,7 +510,7 @@
       if (!amount) return;
       const previous = state.game;
       state.game = game;
-      try { coreAdjustAttack(card, -amount, true); } finally { state.game = previous; }
+      try { coreAdjustAttack(card, -amount, true, true); } finally { state.game = previous; }
       delete card.eliteTraitTempBonusUntilOwnTurn;
     });
   }
@@ -964,7 +964,6 @@
     }
     const won = coreCheckVictory(game);
     game.effectBoardCards = null;
-    if (typeof flushPendingAnimations === "function" && game.pendingAnimations?.length) flushPendingAnimations(game);
     return won;
   }
 
@@ -992,11 +991,11 @@
     }
   }
 
-  function coreAdjustAttack(card, delta, temporary = false) {
+  function coreAdjustAttack(card, delta, temporary = false, isolated = false) {
     if (!card || !delta) return;
     const game = state.game;
     const previous = Number(card.currentAttack ?? card.attack) || 0;
-    if (delta < 0 && !coreCanReduceAttack(game, card)) return;
+    if (delta < 0 && !isolated && !coreCanReduceAttack(game, card)) return;
     if (temporary) card.v2TempBonus = (Number(card.v2TempBonus) || 0) + delta;
     else card.v2PermanentBonus = (Number(card.v2PermanentBonus) || 0) + delta;
     card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0) + (Number(card.v2TempBonus) || 0));
@@ -1005,7 +1004,7 @@
     if (game && actualDelta && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
       queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
     }
-    if (card.currentAttack > previous) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
+    if (card.currentAttack > previous && !isolated) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
   }
 
   function coreSetAttack(game, card, nextAttack, temporary = true) {
@@ -1037,6 +1036,76 @@
     return null;
   }
 
+  function coreCaptureStartSkillState(game) {
+    const cards = new Map((game.boardCards || []).map((item) => [item.uid, {
+      name: coreCardName(item),
+      attack: Number(item.currentAttack ?? item.attack) || 0,
+      row: item.row,
+      col: item.col
+    }]));
+    const players = new Map((game.players || []).map((player) => [player.id, {
+      name: player.name || `玩家 ${player.id}`,
+      hand: Array.isArray(player.hand) ? player.hand.length : 0,
+      drawPile: Array.isArray(player.drawPile) ? player.drawPile.length : 0
+    }]));
+    let control = { 1: 0, 2: 0 };
+    try { control = { ...control, ...(coreControlMap(game).counts || {}) }; } catch (_error) { /* partial test games may omit board metadata */ }
+    return {
+      cards,
+      players,
+      control,
+      extraActions: Number(game.extraActions) || 0,
+      controlCells: Array.isArray(game.v2ControlCells) ? game.v2ControlCells.length : 0
+    };
+  }
+
+  function coreBuildStartSkillResult(game, card, snapshot, log, logStart) {
+    const messages = [];
+    const append = (message) => {
+      const value = String(message || "").trim();
+      if (value && !messages.includes(value)) messages.push(value);
+    };
+    (log || []).slice(logStart).forEach(append);
+    const currentCards = new Map((game.boardCards || []).map((item) => [item.uid, item]));
+    snapshot.cards.forEach((before, uid) => {
+      const after = currentCards.get(uid);
+      if (!after) {
+        append(`${before.name}${uid === card.uid ? "已被摧毁" : "被摧毁"}。`);
+        return;
+      }
+      const attack = Number(after.currentAttack ?? after.attack) || 0;
+      if (attack !== before.attack) {
+        const delta = attack - before.attack;
+        append(`${before.name} 战力 ${before.attack} → ${attack}（${delta > 0 ? "+" : ""}${delta}）。`);
+      }
+      if (after.row !== before.row || after.col !== before.col) {
+        append(`${before.name} 移动至 ${Number(after.row) + 1}-${Number(after.col) + 1}。`);
+      }
+    });
+    (game.players || []).forEach((player) => {
+      const before = snapshot.players.get(player.id);
+      if (!before) return;
+      const handDelta = (Array.isArray(player.hand) ? player.hand.length : 0) - before.hand;
+      if (handDelta) append(`${before.name} 手牌 ${handDelta > 0 ? "+" : ""}${handDelta}。`);
+      const deckDelta = (Array.isArray(player.drawPile) ? player.drawPile.length : 0) - before.drawPile;
+      if (deckDelta) append(`${before.name} 牌库 ${deckDelta > 0 ? "+" : ""}${deckDelta}。`);
+    });
+    let control = { 1: 0, 2: 0 };
+    try { control = { ...control, ...(coreControlMap(game).counts || {}) }; } catch (_error) { /* ignore incomplete metadata */ }
+    [1, 2].forEach((ownerId) => {
+      const delta = (control[ownerId] || 0) - (snapshot.control[ownerId] || 0);
+      if (delta) append(`玩家 ${ownerId} 占领区域 ${delta > 0 ? "+" : ""}${delta} 格。`);
+    });
+    const actionDelta = (Number(game.extraActions) || 0) - snapshot.extraActions;
+    if (actionDelta) append(`本回合额外行动 ${actionDelta > 0 ? "+" : ""}${actionDelta}。`);
+    const controlCellDelta = (Array.isArray(game.v2ControlCells) ? game.v2ControlCells.length : 0) - snapshot.controlCells;
+    if (controlCellDelta && !messages.some((message) => message.includes("占领区域"))) {
+      append(`新增 ${controlCellDelta} 个临时占领格。`);
+    }
+    if (!messages.length) append("条件未满足，本次未产生场面变化。");
+    return messages.join(" ");
+  }
+
   function coreRunV2StartSkill(game, player, card, options = {}) {
     const resolvingStartSkills = game.v2ResolvingStartSkills || new Set();
     game.v2ResolvingStartSkills = resolvingStartSkills;
@@ -1045,8 +1114,31 @@
     try {
       const effectDefinition = coreCardEffectDefinition(card);
       const eliteSuppressed = coreEliteAiHasTrait(game, "2003") && card.ownerId !== coreEliteAiTraitOwner(game)?.id;
-      if (!eliteSuppressed && typeof effectDefinition?.onTurnStart === "function") {
-        effectDefinition.onTurnStart(coreCreateCardEffectContext(game, player, card, game.roundLog || []));
+      if (typeof effectDefinition?.onTurnStart === "function") {
+        const log = game.roundLog || (game.roundLog = []);
+        const logStart = log.length;
+        const snapshot = coreCaptureStartSkillState(game);
+        const visualEvent = typeof queueSkillAnimation === "function"
+          ? queueSkillAnimation(game, card, null, "turn-start")
+          : null;
+        let result;
+        if (eliteSuppressed) {
+          const traitName = window.ELITE_AI_EFFECT_INFO_V2?.["2003"]?.name || "烽火起";
+          result = `本回合未触发：被精英词条【${traitName}】压制。`;
+        } else {
+          effectDefinition.onTurnStart(coreCreateCardEffectContext(game, player, card, log));
+          result = coreBuildStartSkillResult(game, card, snapshot, log, logStart);
+        }
+        if (visualEvent) {
+          visualEvent.fullEffect = coreSkillEffectText(card);
+          visualEvent.result = result;
+          visualEvent.flowPrompt = `${coreCardName(card)}：${coreCardDisplay(card).skill}。${result}`;
+          if (eliteSuppressed) {
+            visualEvent.effectType = "danger";
+            visualEvent.glyph = "×";
+            visualEvent.tag = "已压制";
+          }
+        }
       }
     } finally {
       resolvingStartSkills.delete(card.uid);
@@ -1728,6 +1820,23 @@
     game.extraActions = 0;
   }
 
+  async function coreStartTurnWithAnimations(game) {
+    if (!game) return false;
+    game.isAnimating = true;
+    game.flowPrompt = `第 ${game.turn} 回合开始：正在依次结算卡牌技能。`;
+    let wonAtStart = false;
+    try {
+      wonAtStart = coreStartTurn(game);
+      coreRender();
+      if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
+      game.flowPrompt = "";
+      return wonAtStart;
+    } finally {
+      game.isAnimating = false;
+      coreRender();
+    }
+  }
+
   async function coreEndTurn(game = state.game, automatic = false) {
     if (!game || game.isAnimating || game.winner) {
       return;
@@ -1765,8 +1874,7 @@
     }
     game.turn += 1;
     game.activePlayerId = otherPlayerId(game.activePlayerId);
-    const wonAtStart = coreStartTurn(game);
-    coreRender();
+    const wonAtStart = await coreStartTurnWithAnimations(game);
     if (wonAtStart) {
       await coreAnimateVictoryCells(game, game.winner.playerId);
       showResult();
@@ -2360,11 +2468,10 @@
     state.game.players[1].name = message.names?.[2] || "玩家 2";
     switchScreen("game");
     coreShowOpeningReveal(state.game);
-    window.setTimeout(() => {
+    window.setTimeout(async () => {
       if (!state.game || state.game.currentPhase !== "开局展示") return;
       coreCloseOverlay();
-      const wonAtStart = coreStartTurn(state.game);
-      coreRender();
+      const wonAtStart = await coreStartTurnWithAnimations(state.game);
       if (wonAtStart) showResult();
       else coreOnlineSendState(state.game);
     }, 5000);
@@ -2685,10 +2792,9 @@
     coreAttachOverlayClose();
     document.getElementById("core-opening-start")?.addEventListener("click", () => {
       ui.deckReveal.classList.remove("visible");
-      window.setTimeout(() => {
+      window.setTimeout(async () => {
         ui.deckReveal.innerHTML = "";
-        const wonAtStart = coreStartTurn(game);
-        coreRender();
+        const wonAtStart = await coreStartTurnWithAnimations(game);
         if (wonAtStart) {
           coreAnimateVictoryCells(game, game.winner.playerId).then(() => showResult());
           return;

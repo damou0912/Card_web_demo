@@ -2459,6 +2459,59 @@
     return "等待玩家";
   }
 
+  function coreFallbackCopyText(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      return document.execCommand("copy");
+    } finally {
+      textarea.remove();
+    }
+  }
+
+  async function coreCopyRoomCode(roomCode) {
+    const code = String(roomCode || "").trim();
+    if (!code) {
+      showToast("复制失败", "当前没有可复制的房间码。");
+      return false;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(code);
+      } else if (!coreFallbackCopyText(code)) {
+        throw new Error("Clipboard API unavailable");
+      }
+      showToast("房间码已复制", coreEscapeHtml(code));
+      return true;
+    } catch (_error) {
+      try {
+        if (coreFallbackCopyText(code)) {
+          showToast("房间码已复制", coreEscapeHtml(code));
+          return true;
+        }
+      } catch (_fallbackError) { /* clipboard access may be blocked */ }
+      showToast("复制失败", "请手动复制房间码。");
+      return false;
+    }
+  }
+
+  function coreAttachRoomCopyButtons(root = document) {
+    root.querySelectorAll("[data-copy-room-code]").forEach((button) => {
+      button.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        await coreCopyRoomCode(button.dataset.copyRoomCode);
+      });
+    });
+  }
+
   function coreRenderRoomList(rooms = state.online?.rooms || []) {
     const list = document.getElementById("online-room-list");
     const count = document.getElementById("online-room-count");
@@ -2479,7 +2532,13 @@
       const boardSize = Number(room.boardSize) || 4;
       return `
         <div class="online-room-row">
-          <div class="online-room-identity"><strong>${roomCode}</strong><span>${names}</span></div>
+          <div class="online-room-identity">
+            <div class="online-room-code-line">
+              <strong>${roomCode}</strong>
+              <button class="online-room-copy-btn" type="button" data-copy-room-code="${roomCode}" aria-label="复制房间码 ${roomCode}" title="复制房间码">复制</button>
+            </div>
+            <span>${names}</span>
+          </div>
           <span class="online-room-state state-${room.ended ? "ended" : room.started ? "playing" : "waiting"}">${coreRoomStatusLabel(room)}</span>
           <span class="online-room-map">${boardSize}x${boardSize}</span>
           <span class="online-room-seats"><small>玩家</small><strong>${Number(room.playerCount) || 0}/${Number(room.playerCapacity) || 2}</strong></span>
@@ -2488,6 +2547,7 @@
         </div>
       `;
     }).join("");
+    coreAttachRoomCopyButtons(list);
     list.querySelectorAll("[data-room-action]").forEach((button) => {
       button.addEventListener("click", () => {
         const playerName = coreValidatedOnlinePlayerName();
@@ -2505,11 +2565,15 @@
     const names = roomState.names || {};
     const spectators = Object.values(roomState.spectatorNames || {}).filter(Boolean).map(coreEscapeHtml);
     const boardSize = Number(roomState.boardSize || state.selectedBoardSize) || 4;
+    const roomCode = coreEscapeHtml(state.online?.roomCode);
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card online-room-card" role="dialog" aria-modal="true" aria-label="观战等待">
         <button id="spectator-leave-room" class="overlay-close" type="button" aria-label="退出观战">退出观战</button>
         <p class="phase-banner-eyebrow">SPECTATOR</p>
-        <h2 class="deck-reveal-title">观战房间 ${coreEscapeHtml(state.online?.roomCode)}</h2>
+        <div class="online-room-heading">
+          <h2 class="deck-reveal-title">观战房间 ${roomCode}</h2>
+          <button class="online-room-copy-btn" type="button" data-copy-room-code="${roomCode}" aria-label="复制房间码 ${roomCode}" title="复制房间码">复制</button>
+        </div>
         <p class="deck-reveal-copy">${roomState.started ? "正在载入对局状态……" : "玩家正在准备，开局后将自动进入观战。"}</p>
         <div class="online-room-players">
           <div><small>玩家 1</small><strong>${coreEscapeHtml(names[1] || "等待玩家")}</strong></div>
@@ -2520,11 +2584,12 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachRoomCopyButtons(ui.deckReveal);
     document.getElementById("spectator-leave-room")?.addEventListener("click", () => window.resetToMenu?.());
   }
 
   function coreShowOnlineWaiting(roomState = state.online.roomState || {}) {
-    const roomCode = state.online.roomCode;
+    const roomCode = coreEscapeHtml(state.online.roomCode);
     const ownId = state.online.playerId;
     const ownDeck = state.online.deckKey || "三国~蜀";
     const deckOptions = getAvailableDeckKeys().map((deck) => `<option value="${deck}" ${deck === ownDeck ? "selected" : ""}>${getCampDisplayName(deck)}</option>`).join("");
@@ -2534,7 +2599,10 @@
       <section class="deck-reveal-card online-room-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
         <button id="online-leave-room" class="overlay-close" type="button" aria-label="退出房间">退出房间</button>
         <p class="phase-banner-eyebrow">ONLINE MATCH</p>
-        <h2 class="deck-reveal-title">房间 ${roomCode}</h2>
+        <div class="online-room-heading">
+          <h2 class="deck-reveal-title">房间 ${roomCode}</h2>
+          <button class="online-room-copy-btn" type="button" data-copy-room-code="${roomCode}" aria-label="复制房间码 ${roomCode}" title="复制房间码">复制</button>
+        </div>
         <p class="deck-reveal-copy">地图：${roomState.boardSize || state.selectedBoardSize}x${roomState.boardSize || state.selectedBoardSize}。请将房间号发送给另一位玩家。</p>
         <div class="online-room-players">
           <div><strong>${roomState.names?.[1] || (ownId === 1 ? state.playerName : "等待玩家")}</strong><span>${readyText(1)}</span></div>
@@ -2547,6 +2615,7 @@
       </section>
     `;
     ui.deckReveal.classList.add("visible");
+    coreAttachRoomCopyButtons(ui.deckReveal);
     document.getElementById("online-leave-room")?.addEventListener("click", () => {
       if (!window.confirm("确定退出房间吗？")) return;
       coreCloseOverlay();
@@ -2636,6 +2705,7 @@
       return;
     }
     if (message.type === "room-state") {
+      if (!state.online.roomCode || message.state?.roomCode !== state.online.roomCode) return;
       state.online.roomState = message.state;
       if (coreIsSpectator()) {
         if (!state.game) coreShowSpectatorWaiting(message.state);
@@ -2645,6 +2715,7 @@
       return;
     }
     if (message.type === "match-start") {
+      if (!state.online.roomCode || (message.roomCode && message.roomCode !== state.online.roomCode)) return;
       showToast("双方已准备", "对局即将开始。");
       if (coreIsSpectator()) {
         state.online.roomState = { ...(state.online.roomState || {}), started: true, names: message.names, boardSize: message.boardSize };
@@ -2693,7 +2764,9 @@
       }
       return;
     }
-    if (message.type === "state-sync" && (coreIsSpectator() || !state.online.host) && message.state) {
+    if (message.type === "state-sync" && state.online.roomCode
+      && (!message.roomCode || message.roomCode === state.online.roomCode)
+      && (coreIsSpectator() || !state.online.host) && message.state) {
       try {
         state.game = coreDeserializeOnlineGame(message.state);
       } catch (_error) {

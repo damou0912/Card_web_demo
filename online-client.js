@@ -10,11 +10,23 @@
   function connect() {
     if (socket && socket.readyState <= 1) return;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    socket = new WebSocket(`${protocol}//${window.location.host}`);
-    socket.addEventListener("open", () => { connected = true; notify({ type: "connected" }); });
-    socket.addEventListener("close", () => { connected = false; notify({ type: "disconnected" }); });
-    socket.addEventListener("error", () => notify({ type: "error", message: "无法连接联网服务。" }));
-    socket.addEventListener("message", (event) => {
+    const nextSocket = new WebSocket(`${protocol}//${window.location.host}`);
+    socket = nextSocket;
+    nextSocket.addEventListener("open", () => {
+      if (socket !== nextSocket) return;
+      connected = true;
+      notify({ type: "connected" });
+    });
+    nextSocket.addEventListener("close", () => {
+      if (socket !== nextSocket) return;
+      connected = false;
+      notify({ type: "disconnected" });
+    });
+    nextSocket.addEventListener("error", () => {
+      if (socket === nextSocket) notify({ type: "error", message: "无法连接联网服务。" });
+    });
+    nextSocket.addEventListener("message", (event) => {
+      if (socket !== nextSocket) return;
       try { notify(JSON.parse(event.data)); } catch (_error) { notify({ type: "error", message: "服务器消息格式无效。" }); }
     });
   }
@@ -31,12 +43,21 @@
     return true;
   }
 
+  function leaveRoom() {
+    const sent = send({ type: "leave-room" });
+    disconnect();
+    return sent;
+  }
+
   window.CardOnline = {
     connect,
     disconnect,
     createRoom: (playerName, boardSize) => send({ type: "create-room", playerName, boardSize }),
     joinRoom: (roomCode, playerName) => send({ type: "join-room", roomCode, playerName }),
+    joinSpectator: (roomCode, spectatorName) => send({ type: "join-spectator", roomCode, spectatorName }),
     resumeRoom: (roomCode, playerName, sessionToken) => send({ type: "resume-room", roomCode, playerName, sessionToken }),
+    listRooms: () => send({ type: "list-rooms" }),
+    leaveRoom,
     send,
     on(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     get connected() { return connected; }

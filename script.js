@@ -74,6 +74,8 @@ const ui = {
   statusSubtext: document.getElementById("status-subtext"),
   actingPlayerLabel: document.getElementById("acting-player-label"),
   actionsLabel: document.getElementById("actions-label"),
+  ownPlayerTitle: document.getElementById("own-player-title"),
+  opponentPlayerTitle: document.getElementById("opponent-player-title"),
   ownPlayerControl: document.getElementById("own-player-control"),
   opponentPlayerControl: document.getElementById("opponent-player-control"),
   ownPlayerSummary: document.getElementById("own-player-summary"),
@@ -126,7 +128,7 @@ const state = {
   selectedDecks: { 1: null, 2: null },
   pendingChallengeTraitIds: null,
   game: null,
-  online: { playerId: null, roomCode: null, host: false }
+  online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] }
 };
 
 function isLocalChallengeModeEnabled() {
@@ -541,6 +543,9 @@ function renderResult(game) {
     ui.resultNextLevelBtn.hidden = !canAdvance;
     ui.resultNextLevelBtn.textContent = `进入第 ${(Number(game.challengeLevel) || 1) + 1} 关`;
   }
+  const isSpectator = state.online?.role === "spectator";
+  ui.resultRestartBtn.hidden = isSpectator;
+  ui.resultMenuBtn.textContent = isSpectator ? "退出观战" : "返回主菜单";
 }
 
 function summarizeDeck(deckCatalog, deckKey) {
@@ -569,10 +574,18 @@ function cancelSelection() {
 
 function resetToMenu() {
   closeGameMenu();
+  if (state.game?.mode === "online" || state.online?.roomCode) leaveOnlineSession();
   state.game = null;
   state.challengeLevel = 1;
   state.pendingChallengeTraitIds = null;
   switchScreen("menu");
+}
+
+function leaveOnlineSession() {
+  if (state.online?.roomCode) window.CardOnline?.leaveRoom?.();
+  try { window.localStorage?.removeItem("cardDemoOnlineRoom"); } catch (_error) { /* storage may be unavailable */ }
+  const unsubscribe = state.online?.unsubscribe;
+  state.online = { playerId: null, roomCode: null, host: false, role: null, rooms: [], unsubscribe };
 }
 
 function getBoardCellElement(row, col) {
@@ -1222,6 +1235,7 @@ function bindEvents() {
   });
   ui.resultNextLevelBtn?.addEventListener("click", () => window.beginNextChallengeLevel?.());
   ui.resultRestartBtn.addEventListener("click", () => {
+    if (state.online?.role === "spectator") return;
     if (state.game?.mode === "pve-challenge") state.challengeLevel = 1;
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });
@@ -1234,6 +1248,7 @@ window.__CARD_DEMO_DEBUG__ = {
   getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack, applyTheme
 };
 window.resetToMenu = resetToMenu;
+window.leaveOnlineSession = leaveOnlineSession;
 window.closeGameMenu = closeGameMenu;
 initializeTheme();
 bindEvents();

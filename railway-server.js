@@ -8,6 +8,8 @@ const root = __dirname;
 const port = Number(process.env.PORT) || 4173;
 const host = process.env.HOST || "0.0.0.0";
 const rooms = new Map();
+const SPECTATOR_CAPACITY = 2;
+const PLAYER_ID_ALLOWED = /^[A-Za-z0-9_\-\.\!\?@#\+=\u3400-\u9fff]+$/;
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -25,10 +27,8 @@ function normalizePlayerName(value) {
 
 function isValidPlayerName(value) {
   const name = normalizePlayerName(value);
-  const chineseCount = (name.match(/[\u3400-\u9fff]/g) || []).length;
-  const latinCount = (name.match(/[A-Za-z]/g) || []).length;
-  const otherCount = [...name].length - chineseCount - latinCount;
-  return name.length > 0 && otherCount === 0 && (chineseCount === name.length ? chineseCount <= 6 : latinCount === name.length && latinCount <= 12);
+  const units = [...name].reduce((total, character) => total + (/^[\u3400-\u9fff]$/.test(character) ? 2 : 1), 0);
+  return Boolean(name) && PLAYER_ID_ALLOWED.test(name) && units <= 12;
 }
 
 function send(socket, message) {
@@ -45,15 +45,72 @@ function makeSessionToken() {
   return crypto.randomBytes(24).toString("base64url");
 }
 
+function roomSockets(room) {
+  return [room.players[1], room.players[2], ...Object.values(room.spectators || {})].filter(Boolean);
+}
+
 function broadcast(room, message, except = null) {
-  [room.players[1], room.players[2]].forEach((socket) => {
+  roomSockets(room).forEach((socket) => {
     if (socket && socket !== except) send(socket, message);
   });
 }
 
+function connectedPlayerCount(room) {
+  return [room.players[1], room.players[2]].filter(Boolean).length;
+}
+
+function spectatorCount(room) {
+  return Object.values(room.spectators || {}).filter(Boolean).length;
+}
+
+function publicRoomState(room) {
+  const playerCount = connectedPlayerCount(room);
+  const watchers = spectatorCount(room);
+  return {
+    roomCode: room.code,
+    boardSize: room.boardSize,
+    names: room.names,
+    playerCount,
+    playerCapacity: 2,
+    spectatorCount: watchers,
+    spectatorCapacity: SPECTATOR_CAPACITY,
+    started: room.started,
+    ended: Boolean(room.ended),
+    createdAt: room.createdAt,
+    canJoin: !room.started && playerCount < 2,
+    canSpectate: !room.ended && (room.started || playerCount === 2) && watchers < SPECTATOR_CAPACITY
+  };
+}
+
+function publicRoomList() {
+  return [...rooms.values()]
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .map(publicRoomState);
+}
+
+function sendRoomList(socket) {
+  send(socket, { type: "room-list", rooms: publicRoomList() });
+}
+
+function broadcastRoomList() {
+  const message = { type: "room-list", rooms: publicRoomList() };
+  websocket.clients.forEach((socket) => send(socket, message));
+}
+
 function removeSocket(socket) {
+  if (socket.roomRemovalHandled) return;
+  socket.roomRemovalHandled = true;
   const room = rooms.get(socket.roomCode);
   if (!room) return;
+  if (socket.role === "spectator") {
+    if (room.spectators?.[socket.spectatorId] === socket) {
+      room.spectators[socket.spectatorId] = null;
+      room.spectatorNames[socket.spectatorId] = null;
+    }
+    broadcast(room, { type: "room-state", state: roomState(room) }, socket);
+    broadcastRoomList();
+    return;
+  }
   if (room.players[socket.playerId] === socket) room.players[socket.playerId] = null;
   if (!room.started) {
     room.ready[socket.playerId] = false;
@@ -68,13 +125,21 @@ function removeSocket(socket) {
         const loserId = room.disconnectedAt[1] === firstDrop ? 1 : 2;
         const winner = room.players[loserId === 1 ? 2 : 1];
         if (winner) send(winner, { type: "auto-surrender", loserId, message: "对方断线超过 5 分钟，视为自动认输。" });
-        [room.players[1], room.players[2]].forEach((peer) => peer?.close());
+        Object.values(room.spectators || {}).forEach((watcher) => {
+          if (watcher) send(watcher, { type: "spectator-session-ended", winnerId: loserId === 1 ? 2 : 1, message: "有玩家断线超时，本次观战已结束。" });
+        });
+        roomSockets(room).forEach((peer) => peer?.close());
         rooms.delete(room.code);
+        broadcastRoomList();
       }, 5 * 60 * 1000);
     }
   }
   broadcast(room, { type: "peer-left", playerId: socket.playerId }, socket);
-  if (!room.players[1] && !room.players[2] && !room.started) rooms.delete(socket.roomCode);
+  if (!room.players[1] && !room.players[2] && !room.started) {
+    Object.values(room.spectators || {}).forEach((watcher) => watcher?.close());
+    rooms.delete(socket.roomCode);
+  }
+  broadcastRoomList();
 }
 
 function roomState(room) {
@@ -84,7 +149,11 @@ function roomState(room) {
     names: room.names,
     ready: room.ready,
     hasPlayers: { 1: Boolean(room.players[1]), 2: Boolean(room.players[2]) },
+    spectatorNames: room.spectatorNames,
+    spectatorCount: spectatorCount(room),
+    spectatorCapacity: SPECTATOR_CAPACITY,
     started: room.started,
+    ended: Boolean(room.ended),
     disconnectedAt: room.disconnectedAt
   };
 }
@@ -120,7 +189,8 @@ function stateForViewer(state, viewerId) {
 }
 
 function sendGameState(socket, state) {
-  send(socket, { type: "state-sync", state: stateForViewer(state, socket.playerId) });
+  const viewerId = socket.role === "spectator" ? null : socket.playerId;
+  send(socket, { type: "state-sync", roomCode: socket.roomCode, state: stateForViewer(state, viewerId) });
 }
 
 function validCell(cell, size) {
@@ -191,32 +261,39 @@ const server = http.createServer((request, response) => {
 
 const websocket = new WebSocketServer({ server });
 websocket.on("connection", (socket) => {
+  sendRoomList(socket);
   socket.on("message", (raw) => {
     let message;
     try { message = JSON.parse(String(raw)); } catch (_error) { return send(socket, { type: "error", message: "消息格式无效。" }); }
+    if (message.type === "list-rooms") {
+      sendRoomList(socket);
+      return;
+    }
     if (message.type === "create-room") {
       if (socket.roomCode) return;
-      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
+      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 格式无效或超过 12 个字符单位。" });
       const playerName = normalizePlayerName(message.playerName);
       const roomCode = makeRoomCode();
       const boardSize = [3, 4, 5].includes(Number(message.boardSize)) ? Number(message.boardSize) : 4;
       const sessionToken = makeSessionToken();
-      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null } };
+      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, ended: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null }, spectators: { 1: null, 2: null }, spectatorNames: { 1: null, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
+      socket.role = "player";
       socket.sessionToken = sessionToken;
       send(socket, { type: "room-created", roomCode, playerId: 1, playerName, boardSize, sessionToken });
       send(socket, { type: "room-state", state: roomState(room) });
+      broadcastRoomList();
       return;
     }
     if (message.type === "join-room") {
       const roomCode = String(message.roomCode || "").trim().toUpperCase();
       const room = rooms.get(roomCode);
       const joinId = room && !room.players[1] ? 1 : 2;
-      if (!room || room.players[joinId]) return send(socket, { type: "error", message: "房间不存在或已满。" });
+      if (!room || room.started || room.players[joinId]) return send(socket, { type: "error", message: "房间不存在、已开始或玩家席已满。" });
       if (socket.roomCode) return;
-      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 需为 1-6 个中文字符或 1-12 个英文字母。" });
+      if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 格式无效或超过 12 个字符单位。" });
       const playerName = normalizePlayerName(message.playerName);
       const sessionToken = makeSessionToken();
       room.players[joinId] = socket;
@@ -224,11 +301,36 @@ websocket.on("connection", (socket) => {
       room.tokens[joinId] = sessionToken;
       socket.roomCode = roomCode;
       socket.playerId = joinId;
+      socket.role = "player";
       socket.sessionToken = sessionToken;
       send(socket, { type: "room-joined", roomCode, playerId: joinId, playerName, opponentName: room.names[joinId === 1 ? 2 : 1], boardSize: room.boardSize, sessionToken });
       if (room.state) sendGameState(socket, room.state);
       broadcast(room, { type: "peer-joined", playerId: joinId, playerName }, socket);
       broadcast(room, { type: "room-state", state: roomState(room) });
+      broadcastRoomList();
+      return;
+    }
+    if (message.type === "join-spectator") {
+      const roomCode = String(message.roomCode || "").trim().toUpperCase();
+      const room = rooms.get(roomCode);
+      if (!room) return send(socket, { type: "error", message: "房间不存在。" });
+      if (socket.roomCode) return;
+      if (!room.started && connectedPlayerCount(room) < 2) return send(socket, { type: "error", message: "玩家席满员后才能进入观战席。" });
+      if (room.ended) return send(socket, { type: "error", message: "本房间的对局已经结束。" });
+      const spectatorId = [1, 2].find((id) => !room.spectators[id]);
+      if (!spectatorId) return send(socket, { type: "error", message: "本房间的 2 个观战席均已占用。" });
+      if (!isValidPlayerName(message.spectatorName)) return send(socket, { type: "error", message: "玩家 ID 格式无效或超过 12 个字符单位。" });
+      const spectatorName = normalizePlayerName(message.spectatorName);
+      room.spectators[spectatorId] = socket;
+      room.spectatorNames[spectatorId] = spectatorName;
+      socket.roomCode = roomCode;
+      socket.role = "spectator";
+      socket.playerId = null;
+      socket.spectatorId = spectatorId;
+      send(socket, { type: "spectator-joined", roomCode, spectatorId, spectatorName, boardSize: room.boardSize, roomState: roomState(room) });
+      broadcast(room, { type: "room-state", state: roomState(room) });
+      if (room.state) sendGameState(socket, room.state);
+      broadcastRoomList();
       return;
     }
     if (message.type === "resume-room") {
@@ -244,20 +346,33 @@ websocket.on("connection", (socket) => {
       room.disconnectedAt[playerId] = null;
       socket.roomCode = roomCode;
       socket.playerId = playerId;
+      socket.role = "player";
       socket.sessionToken = room.tokens[playerId];
+      if (room.players[1] && room.players[2] && room.disconnectTimer) {
+        clearTimeout(room.disconnectTimer);
+        room.disconnectTimer = null;
+      }
       send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: stateForViewer(room.state, playerId), sessionToken: room.tokens[playerId] });
       if (room.players[1] && room.players[2]) broadcast(room, { type: "peer-reconnected", playerId });
+      broadcastRoomList();
       return;
     }
     const room = rooms.get(socket.roomCode);
     if (!room) return send(socket, { type: "error", message: "请先创建或加入房间。" });
+    if (socket.role === "spectator") {
+      if (message.type === "leave-room") socket.close();
+      else send(socket, { type: "spectator-read-only", message: "观战席为只读状态，不能执行对局操作。" });
+      return;
+    }
     if (message.type === "state-sync" || message.type === "action" || message.type === "game-event") {
       if (message.type === "state-sync") {
         if (socket.playerId !== 1) return;
         room.state = message.state || null;
-        [room.players[1], room.players[2]].forEach((peer) => {
+        room.ended = Boolean(parseRoomGame(room)?.winner);
+        roomSockets(room).forEach((peer) => {
           if (peer && peer !== socket) sendGameState(peer, room.state);
         });
+        if (room.ended) broadcastRoomList();
         return;
       }
       broadcast(room, { ...message, playerId: socket.playerId }, socket);
@@ -269,7 +384,7 @@ websocket.on("connection", (socket) => {
       if (message.type === "action-request") {
         const validationError = validateActionRequest(room, playerId, message.action && { ...message.action, playerId });
         if (validationError) return send(socket, { type: "action-rejected", message: validationError });
-      } else {
+      } else if (message.type === "end-turn-request") {
         const game = parseRoomGame(room);
         if (game && game.activePlayerId !== playerId) return send(socket, { type: "action-rejected", message: "当前不是你的行动回合。" });
       }
@@ -290,7 +405,8 @@ websocket.on("connection", (socket) => {
       if (room.players[1] && room.players[2] && room.ready[1] && room.ready[2]) {
         room.started = true;
         const firstPlayerId = Math.random() < 0.5 ? 1 : 2;
-        broadcast(room, { type: "match-start", boardSize: room.boardSize, names: room.names, decks: room.decks, firstPlayerId });
+        broadcast(room, { type: "match-start", roomCode: room.code, boardSize: room.boardSize, names: room.names, decks: room.decks, firstPlayerId });
+        broadcastRoomList();
       }
       return;
     }
@@ -307,7 +423,7 @@ server.listen(port, host, () => console.log(`Card Demo online server: http://${h
 function shutdown() {
   for (const room of rooms.values()) {
     broadcast(room, { type: "server-shutdown", message: "服务器重启，本局平局。" });
-    [room.players[1], room.players[2]].forEach((socket) => socket?.close());
+    roomSockets(room).forEach((socket) => socket?.close());
   }
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 500);

@@ -4365,3 +4365,236 @@ body {
     padding: 22px 18px;
   }
 }
+
+/* Public online rooms and spectator-only match states. */
+.online-lobby-card {
+  width: min(1040px, 94vw);
+  max-height: min(820px, 92vh);
+  overflow: hidden;
+  text-align: left;
+}
+
+.online-lobby-card > .phase-banner-eyebrow,
+.online-lobby-card > .deck-reveal-title,
+.online-lobby-card > .deck-reveal-copy {
+  text-align: center;
+}
+
+.online-room-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--overlay-border);
+}
+
+.online-room-list-head > div {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.online-room-list-head span,
+.online-room-identity span,
+.online-room-seats small {
+  color: var(--overlay-muted);
+  font-size: 12px;
+}
+
+.online-room-list-head button {
+  padding: 8px 14px;
+}
+
+.online-room-heading,
+.online-room-code-line {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.online-room-heading {
+  justify-content: center;
+  margin: 6px 0 8px;
+}
+
+.online-room-heading .deck-reveal-title {
+  min-width: 0;
+  margin: 0;
+}
+
+.online-room-copy-btn {
+  flex: 0 0 auto;
+  min-width: 52px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid rgba(229, 213, 160, 0.56);
+  border-radius: 6px;
+  color: var(--overlay-gold);
+  background: rgba(229, 213, 160, 0.1);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.online-room-copy-btn:hover,
+.online-room-copy-btn:focus-visible {
+  border-color: var(--overlay-gold);
+  color: var(--overlay-text);
+  background: rgba(229, 213, 160, 0.2);
+  outline: none;
+}
+
+.online-room-list {
+  max-height: min(360px, 42vh);
+  margin-top: 8px;
+  overflow: auto;
+  border-bottom: 1px solid var(--overlay-border);
+}
+
+.online-room-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.7fr) minmax(72px, auto) 64px 64px 64px minmax(116px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 66px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--overlay-border);
+}
+
+.online-room-identity,
+.online-room-seats {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.online-room-identity strong {
+  color: var(--overlay-gold);
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+.online-room-code-line .online-room-copy-btn {
+  min-width: 44px;
+  min-height: 26px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.online-room-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-room-state {
+  justify-self: start;
+  padding: 4px 8px;
+  border: 1px solid rgba(229, 236, 229, 0.28);
+  border-radius: 6px;
+  color: var(--overlay-text);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.online-room-state.state-playing { color: #f4ca70; }
+.online-room-state.state-ended { color: rgba(243, 244, 237, 0.58); }
+.online-room-map { color: var(--overlay-text); font-weight: 800; }
+.online-room-seats strong { color: var(--overlay-text); font-size: 16px; }
+.online-room-action { width: 100%; min-width: 116px; padding: 9px 12px; }
+
+.online-room-empty {
+  margin: 0;
+  padding: 28px 8px;
+  border-top: 1px solid var(--overlay-border);
+  color: var(--overlay-muted);
+  text-align: center;
+}
+
+.spectator-readonly-note,
+.spectator-capacity-note {
+  margin: 12px 0 0;
+  color: var(--overlay-gold);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.online-room-players small {
+  color: var(--overlay-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.spectator-hand-notice {
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 118px;
+  border: 1px dashed var(--panel-border);
+  border-radius: 8px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.spectator-hand-notice strong {
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.board .cell:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+@media (max-width: 720px) {
+  .online-lobby-card {
+    width: min(96vw, 620px);
+    max-height: 94vh;
+    padding: 58px 18px 20px;
+  }
+
+  .online-room-list {
+    max-height: 42vh;
+  }
+
+  .online-room-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .online-room-heading .deck-reveal-title {
+    font-size: 30px;
+    overflow-wrap: anywhere;
+  }
+
+  .online-room-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, auto);
+    gap: 8px 10px;
+    padding: 12px 2px;
+  }
+
+  .online-room-identity {
+    grid-column: 1 / -2;
+  }
+
+  .online-room-state {
+    justify-self: end;
+  }
+
+  .online-room-map {
+    align-self: center;
+  }
+
+  .online-room-action {
+    grid-column: 2 / -1;
+    min-width: 0;
+  }
+}

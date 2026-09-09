@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHasFreeAction, coreIsOpponentTurn, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
@@ -36,7 +36,7 @@
         && expectedNames.every((name) => Object.values(window.ELITE_AI_EFFECT_INFO_V2).some((trait) => trait.name === name))
         && Object.keys(window.ELITE_AI_EFFECT_ID_ALIASES_V2).length === 0);
 
-      { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("1001", [ally]); coreApplyEliteAiTrait(game, game.players[1], []); check("1001 鼓舞", ally.currentAttack === ally.attack + 1); }
+      { const ally = makeCard("01101", 1, 0, 0), aiCard = makeCard("02101", 2, 1, 0); const game = traitGame("1001", [ally, aiCard]); game.eliteAiTraitOwnerId = 1; coreApplyEliteAiTrait(game, game.players[0], []); check("1001 鼓舞", ally.currentAttack === ally.attack + 1 && aiCard.currentAttack === aiCard.attack); }
       { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1002", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1002 冷箭", enemy.currentAttack === Math.max(0, enemy.attack - 1)); }
       { const dead = makeCard("02101", 2, 0, 0); const game = traitGame("1003", [dead]); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreDestroyV2Card(game, dead, []); check("1003 厚葬", game.players[1].hand.length === 1); }
       { const game = traitGame("1004"); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreApplyEliteAiTrait(game, game.players[1], []); check("1004 军备", game.players[1].hand.length === 1); }
@@ -59,7 +59,7 @@
 
       { const a = makeCard("02101", 2, 0, 0), b = makeCard("02102", 2, 1, 0); const game = traitGame("3001", [a, b]); coreApplyEliteAiTrait(game, game.players[1], []); check("3001 振奋人心", a.currentAttack === a.attack + 1 && b.currentAttack === b.attack + 1); }
       { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("3002", [enemy]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[0], card: enemy }, []); check("3002 虚弱无力", enemy.currentAttack === Math.max(0, enemy.attack - 2)); }
-      { const game = traitGame("3003"); check("3003 灵动迅捷", coreActionLimit(game) === 3); }
+      { const game = traitGame("3003"); check("3003 灵动迅捷", coreActionLimit(game) === 2); }
       { const placed = makeCard("02101", 2, null, null); const game = traitGame("3004"); game.players[1].hand = [placed]; game.actionsUsed = coreActionLimit(game); const allowed = coreCanUseAction(game, placed); placed.row = 0; placed.col = 0; game.boardCards.push(placed); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("3004 凤鸣九霄", allowed && placed.currentAttack === placed.attack + 3 && coreHasFreeAction(game, placed)); }
       { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("3005", [ally]); coreApplyEliteAiTraitEvent(game, "cardMoved", { card: ally, source: { row: 0, col: 0 }, target: { row: 0, col: 1 } }, []); check("3005 勇冠三军", ally.currentAttack === ally.attack + 2); }
       { const dead = makeCard("02101", 2, 0, 0), ally = makeCard("02102", 2, 1, 0); const game = traitGame("3006", [dead, ally]); coreDestroyV2Card(game, dead, []); check("3006 破釜沉舟", ally.currentAttack === ally.attack + 1); }
@@ -98,11 +98,25 @@
 
       const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
       challengeGame.activePlayerId = 2;
+      const suppliedTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
       check("PVE 挑战模式", challengeGame.challengeMode
         && challengeGame.players[1].isAI
         && challengeGame.players[1].name === "精英 AI"
-        && challengeGame.players[1].hand.length === (challengeGame.eliteAiEffectIds.includes("1008") ? 1 : 4)
-        && coreActionLimit(challengeGame) === 2);
+        && challengeGame.eliteAiTraitOwnerId === 2
+        && challengeGame.players[1].hand.length === (challengeGame.eliteAiEffectIds.includes("1008") ? 1 : (challengeGame.firstPlayerId === 2 ? 2 : 3))
+        && coreActionLimit(challengeGame) === 1
+        && suppliedTraitGame.eliteAiEffectIds.length === 1
+        && suppliedTraitGame.eliteAiEffectIds[0] === "1001");
+      const challengePlansValid = JSON.stringify(coreChallengeTraitPlan(1)) === JSON.stringify(["beginner"])
+        && JSON.stringify(coreChallengeTraitPlan(2)) === JSON.stringify(["intermediate"])
+        && JSON.stringify(coreChallengeTraitPlan(3)) === JSON.stringify(["advanced"])
+        && JSON.stringify(coreChallengeTraitPlan(4)) === JSON.stringify(["advanced", "beginner"])
+        && JSON.stringify(coreChallengeTraitPlan(12)) === JSON.stringify(["advanced", "advanced", "advanced", "advanced"]);
+      const sampledTraitIds = corePickChallengeTraits(12);
+      check("挑战关卡词条等级规划与抽取去重", challengePlansValid
+        && sampledTraitIds.length === new Set(sampledTraitIds).size
+        && sampledTraitIds.length === 4
+        && sampledTraitIds.every((id) => window.ELITE_AI_EFFECT_INFO_V2[id]?.level === "advanced"));
 
       const occupiedA = makeCard("01101", 1, 0, 0);
       const occupiedB = makeCard("01102", 2, 0, 1);

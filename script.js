@@ -119,9 +119,15 @@ const state = {
   selectedBoardSize: 5,
   playerName: "",
   selectedDecks: { 1: null, 2: null },
+  pendingChallengeTraitIds: null,
   game: null,
   online: { playerId: null, roomCode: null, host: false }
 };
+
+function isLocalChallengeModeEnabled() {
+  const hostname = String(window.location?.hostname || "").toLowerCase();
+  return !hostname || hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
 
 function getCampDisplayName(campKey) {
   return String(campKey || "无势力").replace("~", "·");
@@ -492,7 +498,10 @@ function renderResult(game) {
     : "—";
 
   ui.winnerTitle.textContent = winner ? `${displayName(winner)} 获胜` : "本局平局";
-  ui.winnerSubtitle.textContent = game.winner?.text || "本局对战已结束。";
+  const challengeComplete = game.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) >= 12;
+  ui.winnerSubtitle.textContent = challengeComplete
+    ? "恭喜，你已打通目前的全部 12 个挑战关卡。"
+    : game.winner?.text || "本局对战已结束。";
   ui.resultWinnerId.textContent = winnerDisplayId;
   ui.resultWinnerSlot.textContent = winner
     ? (game.mode === "online" ? `联网对局 · 玩家 ${winner.id} 席位` : `${displayName(winner)} · ${winner.isAI ? "PVE" : "本地"}对局`)
@@ -523,7 +532,7 @@ function renderResult(game) {
   ui.deckSummaryPlayer1.textContent = summarizeDeck(game.players[0].deckCatalog, game.players[0].deckKey);
   ui.deckSummaryPlayer2.textContent = summarizeDeck(game.players[1].deckCatalog, game.players[1].deckKey);
   if (ui.resultNextLevelBtn) {
-    const canAdvance = game.mode === "pve-challenge" && winnerId === 1;
+    const canAdvance = game.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) < 12;
     ui.resultNextLevelBtn.hidden = !canAdvance;
     ui.resultNextLevelBtn.textContent = `进入第 ${(Number(game.challengeLevel) || 1) + 1} 关`;
   }
@@ -557,6 +566,7 @@ function resetToMenu() {
   closeGameMenu();
   state.game = null;
   state.challengeLevel = 1;
+  state.pendingChallengeTraitIds = null;
   switchScreen("menu");
 }
 
@@ -573,6 +583,49 @@ function createMovingCard(card, ownerId) {
     <span class="unit-meta">${display.skill} · ${getCardAttackText(card)}</span>
   `;
   return ghost;
+}
+
+function createMovementRoute(stageRect, fromRect, toRect, variant = "action", label = "移动") {
+  const startX = fromRect.left - stageRect.left + fromRect.width / 2;
+  const startY = fromRect.top - stageRect.top + fromRect.height / 2;
+  const endX = toRect.left - stageRect.left + toRect.width / 2;
+  const endY = toRect.top - stageRect.top + toRect.height / 2;
+  const distance = Math.max(8, Math.hypot(endX - startX, endY - startY));
+  const route = document.createElement("div");
+  route.className = `movement-route movement-route-${variant}`;
+  route.style.left = `${startX}px`;
+  route.style.top = `${startY - 4}px`;
+  route.style.width = `${distance}px`;
+  route.style.setProperty("--route-angle", `${Math.atan2(endY - startY, endX - startX) * 180 / Math.PI}deg`);
+
+  const marker = document.createElement("div");
+  marker.className = `movement-destination movement-destination-${variant}`;
+  marker.style.left = `${endX}px`;
+  marker.style.top = `${endY}px`;
+  marker.innerHTML = `<span class="movement-destination-ring"></span><span class="movement-destination-label"></span>`;
+  const markerLabel = marker.querySelector(".movement-destination-label");
+  if (markerLabel) markerLabel.textContent = label;
+  return { route, marker, startX, startY, endX, endY };
+}
+
+function markMovementCells(sourceCell, targetCell) {
+  sourceCell?.classList.add("movement-source-cell");
+  targetCell?.classList.add("movement-target-cell");
+}
+
+function clearMovementCells(sourceCell, targetCell) {
+  sourceCell?.classList.remove("movement-source-cell");
+  targetCell?.classList.remove("movement-target-cell");
+}
+
+function prepareMovingGhost(ghost, stageRect, fromRect, toRect) {
+  if (!ghost) return;
+  ghost.style.left = `${fromRect.left - stageRect.left}px`;
+  ghost.style.top = `${fromRect.top - stageRect.top}px`;
+  ghost.style.width = `${toRect.width}px`;
+  ghost.style.minHeight = `${toRect.height}px`;
+  ghost.style.setProperty("--move-x", `${toRect.left - fromRect.left}px`);
+  ghost.style.setProperty("--move-y", `${toRect.top - fromRect.top}px`);
 }
 
 function createCombatCard(card, side) {
@@ -700,8 +753,10 @@ function queueBoardAnimation(game, event) {
   game.pendingAnimations.push(event);
 }
 
-function queuePowerAnimation(game, card, delta) {
+function queuePowerAnimation(game, card, delta, previousPower = null, currentPower = null) {
   if (!game || !card || !delta || typeof card.row !== "number" || typeof card.col !== "number") return;
+  const before = Number.isFinite(Number(previousPower)) ? Number(previousPower) : Math.max(0, (Number(card.currentAttack) || 0) - delta);
+  const after = Number.isFinite(Number(currentPower)) ? Number(currentPower) : Number(card.currentAttack) || 0;
   queueBoardAnimation(game, {
     row: card.row,
     col: card.col,
@@ -711,8 +766,30 @@ function queuePowerAnimation(game, card, delta) {
     glyph: delta > 0 ? "↑" : "↓",
     label: "战力变化",
     detail: `${delta > 0 ? "+" : ""}${delta}`,
+    previousPower: before,
+    currentPower: after,
     cardUid: card.uid
   });
+}
+
+function createPowerChangeEffect(event) {
+  const delta = Number(event.delta ?? event.currentPower - event.previousPower) || 0;
+  const increase = delta > 0;
+  const amount = Math.abs(delta);
+  const before = Number.isFinite(Number(event.previousPower)) ? Number(event.previousPower) : "—";
+  const after = Number.isFinite(Number(event.currentPower)) ? Number(event.currentPower) : "—";
+  const effect = document.createElement("div");
+  effect.className = `power-change power-change-${increase ? "boost" : "weaken"}`;
+  effect.setAttribute("aria-hidden", "true");
+  effect.innerHTML = `
+    <span class="power-change-burst"></span>
+    <span class="power-change-card">
+      <span class="power-change-title">战力${increase ? "提升" : "下降"}</span>
+      <strong class="power-change-delta">${increase ? "+" : "−"}${amount}</strong>
+      <span class="power-change-values">${before} <b>→</b> ${after}</span>
+    </span>
+  `;
+  return effect;
 }
 
 function queueSkillMoveAnimation(game, card, from, to, detail = "技能移动") {
@@ -829,12 +906,22 @@ async function playBoardAnimations(game, events) {
     }
     const rect = cell.getBoundingClientRect();
     if (event.kind === "power") {
-      const arrow = document.createElement("div");
-      arrow.className = `power-arrow ${event.effectType === "weaken" ? "down" : "up"}`;
-      arrow.textContent = event.glyph || (event.effectType === "weaken" ? "↓" : "↑");
-      cell.appendChild(arrow);
-      await wait(900);
-      arrow.remove();
+      const effect = createPowerChangeEffect(event);
+      const targetUnit = event.cardUid ? ui.board.querySelector(`.unit[data-card-uid="${event.cardUid}"]`) : null;
+      const effectType = event.effectType === "weaken" ? "weaken" : "boost";
+      effect.style.left = `${rect.left - stageRect.left + rect.width / 2}px`;
+      effect.style.top = `${rect.top - stageRect.top + rect.height / 2}px`;
+      ui.boardAnimationLayer.appendChild(effect);
+      cell.classList.add("power-change-impact", `power-change-impact-${effectType}`);
+      targetUnit?.classList.add("power-change-target", `power-change-target-${effectType}`);
+      await nextFrame();
+      effect.classList.add("visible");
+      await wait(POWER_CHANGE_VISIBLE_MS);
+      effect.classList.add("fade");
+      await wait(POWER_CHANGE_FADE_MS);
+      effect.remove();
+      cell.classList.remove("power-change-impact", "power-change-impact-boost", "power-change-impact-weaken");
+      targetUnit?.classList.remove("power-change-target", "power-change-target-boost", "power-change-target-weaken");
       continue;
     }
     if (event.kind === "skill-move" && typeof event.fromRow === "number" && typeof event.toRow === "number") {
@@ -843,20 +930,29 @@ async function playBoardAnimations(game, events) {
       if (fromCell && toCell) {
         const fromRect = fromCell.getBoundingClientRect();
         const toRect = toCell.getBoundingClientRect();
-        const startX = fromRect.left - stageRect.left + fromRect.width / 2;
-        const startY = fromRect.top - stageRect.top + fromRect.height / 2;
-        const endX = toRect.left - stageRect.left + toRect.width / 2;
-        const endY = toRect.top - stageRect.top + toRect.height / 2;
-        const distance = Math.hypot(endX - startX, endY - startY);
-        const arrow = document.createElement("div");
-        arrow.className = "skill-move-arrow";
-        arrow.style.left = `${startX}px`;
-        arrow.style.top = `${startY}px`;
-        arrow.style.width = `${distance}px`;
-        arrow.style.transform = `rotate(${Math.atan2(endY - startY, endX - startX) * 180 / Math.PI}deg)`;
-        ui.boardAnimationLayer.appendChild(arrow);
-        await wait(760);
-        arrow.remove();
+        const movingCard = event.cardUid ? getCardByUid(game, event.cardUid) : null;
+        const route = createMovementRoute(stageRect, fromRect, toRect, "skill", event.label || "技能移动");
+        const ghost = movingCard ? createMovingCard(movingCard, event.ownerId || movingCard.ownerId || 1) : null;
+        prepareMovingGhost(ghost, stageRect, fromRect, toRect);
+        ghost?.classList.add("skill-moving-card");
+        markMovementCells(fromCell, toCell);
+        showSkillFlowPrompt(game, event.flowPrompt || `${event.label || "技能移动"}：${event.detail || "卡牌位置发生变化"}`);
+        ui.boardAnimationLayer.appendChild(route.route);
+        ui.boardAnimationLayer.appendChild(route.marker);
+        if (ghost) ui.boardAnimationLayer.appendChild(ghost);
+        await nextFrame();
+        route.route.classList.add("visible");
+        route.marker.classList.add("visible");
+        ghost?.classList.add("arrived");
+        await wait(ACTION_ANIMATION_MS - ACTION_IMPACT_HOLD_MS);
+        route.marker.classList.add("impact");
+        ghost?.classList.add("flash");
+        route.route.classList.add("fade");
+        await wait(ACTION_IMPACT_HOLD_MS);
+        route.route.remove?.();
+        route.marker.remove?.();
+        ghost?.remove?.();
+        clearMovementCells(fromCell, toCell);
       }
       continue;
     }
@@ -919,6 +1015,7 @@ async function playActionAnimations(game, actions) {
   ui.boardAnimationLayer.innerHTML = "";
   const stageRect = ui.boardStage.getBoundingClientRect();
   const nodes = [];
+  const movementCells = [];
   actionable.forEach((action) => {
     const card = getCardByUid(game, action.cardUid);
     const targetCell = getBoardCellElement(action.target.row, action.target.col);
@@ -927,21 +1024,34 @@ async function playActionAnimations(game, actions) {
     }
     const targetRect = targetCell.getBoundingClientRect();
     let startRect;
+    let sourceCell = null;
     if (action.type === "move") {
-      const sourceCell = getBoardCellElement(action.source.row, action.source.col);
+      sourceCell = getBoardCellElement(action.source.row, action.source.col);
       startRect = sourceCell ? sourceCell.getBoundingClientRect() : targetRect;
+      if (sourceCell) {
+        const route = createMovementRoute(stageRect, startRect, targetRect, "action", "移动");
+        ui.boardAnimationLayer.appendChild(route.route);
+        ui.boardAnimationLayer.appendChild(route.marker);
+        route.route.classList.add("visible");
+        route.marker.classList.add("visible");
+        movementCells.push({ sourceCell, targetCell, route });
+      }
     } else {
       const offsetX = action.playerId === 1 ? -120 : 120;
       const offsetY = action.playerId === 1 ? 40 : -40;
       startRect = { left: targetRect.left + offsetX, top: targetRect.top + offsetY, width: targetRect.width, height: targetRect.height };
+      const arrival = document.createElement("div");
+      arrival.className = "movement-destination movement-destination-action visible";
+      arrival.style.left = `${targetRect.left - stageRect.left + targetRect.width / 2}px`;
+      arrival.style.top = `${targetRect.top - stageRect.top + targetRect.height / 2}px`;
+      arrival.innerHTML = `<span class="movement-destination-ring"></span><span class="movement-destination-label">放置</span>`;
+      ui.boardAnimationLayer.appendChild(arrival);
+      movementCells.push({ targetCell, marker: arrival });
     }
     const ghost = createMovingCard(card, action.playerId);
-    ghost.style.left = `${startRect.left - stageRect.left}px`;
-    ghost.style.top = `${startRect.top - stageRect.top}px`;
-    ghost.style.width = `${targetRect.width}px`;
-    ghost.style.minHeight = `${targetRect.height}px`;
-    ghost.style.setProperty("--move-x", `${targetRect.left - startRect.left}px`);
-    ghost.style.setProperty("--move-y", `${targetRect.top - startRect.top}px`);
+    prepareMovingGhost(ghost, stageRect, startRect, targetRect);
+    ghost.classList.add(action.type === "move" ? "action-moving-card" : "placement-moving-card");
+    markMovementCells(sourceCell, targetCell);
     ui.boardAnimationLayer.appendChild(ghost);
     nodes.push(ghost);
   });
@@ -952,7 +1062,18 @@ async function playActionAnimations(game, actions) {
   nodes.forEach((node) => node.classList.add("arrived"));
   await wait(ACTION_ANIMATION_MS - ACTION_IMPACT_HOLD_MS);
   nodes.forEach((node) => node.classList.add("flash"));
+  movementCells.forEach(({ route, marker }) => {
+    route?.route?.classList.add("fade");
+    route?.marker?.classList.add("impact");
+    marker?.classList.add("impact");
+  });
   await wait(ACTION_IMPACT_HOLD_MS);
+  movementCells.forEach(({ sourceCell, targetCell, route, marker }) => {
+    clearMovementCells(sourceCell, targetCell);
+    route?.route?.remove?.();
+    route?.marker?.remove?.();
+    marker?.remove?.();
+  });
   ui.boardAnimationLayer.innerHTML = "";
 }
 
@@ -1023,7 +1144,7 @@ function bindEvents() {
   });
   ui.modeButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      if (button.dataset.mode === "pve-challenge") {
+      if (button.dataset.mode === "pve-challenge" && !isLocalChallengeModeEnabled()) {
         showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
         return;
       }
@@ -1058,7 +1179,7 @@ function bindEvents() {
   });
 
   ui.startGameBtn.addEventListener("click", () => {
-    if (state.selectedMode === "pve-challenge") {
+    if (state.selectedMode === "pve-challenge" && !isLocalChallengeModeEnabled()) {
       showToast("正在施工中", "挑战模式暂未开放，敬请期待。");
       return;
     }

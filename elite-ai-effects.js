@@ -7,7 +7,11 @@
 
   window.ELITE_AI_EFFECTS_V2 = Object.freeze({
     "1001": Object.freeze({
-      onTurnStart(context) { const target = random(context, allies(context)); if (target) context.operations.adjust(target, 1); }
+      onTurnStart(context) {
+        const cards = context.boardCards.filter((card) => card.ownerId === context.player?.id && !card.isGuard);
+        const target = random(context, cards);
+        if (target) context.operations.adjust(target, 1);
+      }
     }),
     "1002": Object.freeze({
       onTurnStart(context) { const target = random(context, enemies(context)); if (target) context.operations.adjust(target, -1); }

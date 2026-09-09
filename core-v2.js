@@ -121,6 +121,14 @@
     return coreCardDisplay(cardOrId).name;
   }
 
+  function coreCardBaseAttack(cardOrId) {
+    if (typeof getCardBaseAttack === "function") return getCardBaseAttack(cardOrId);
+    const displayValue = Number(coreCardDisplay(cardOrId)?.baseAttack);
+    if (Number.isFinite(displayValue)) return displayValue;
+    const runtimeValue = typeof cardOrId === "object" ? Number(cardOrId?.attack) : NaN;
+    return Number.isFinite(runtimeValue) ? Math.max(0, runtimeValue) : 0;
+  }
+
   function coreSkillEffectText(card) {
     if (!card || card.isGuard) return "无";
     const effect = coreCardDisplay(card).effect;
@@ -1566,7 +1574,7 @@
       element.disabled = game.isAnimating;
       if (game.selection.handCardUid === card.uid) element.classList.add("selected");
       element.innerHTML = `
-        <div class="card-top"><h3>${coreEscapeHtml(display.name)}</h3><strong>ATK ${card.attack}</strong></div>
+        <div class="card-top"><h3>${coreEscapeHtml(display.name)}</h3><strong>ATK ${coreCardBaseAttack(card)}</strong></div>
         <p class="card-stats">${coreEscapeHtml(getCardTierLabel(card))} · ${coreEscapeHtml(getCampDisplayName(display.camp))}</p>
         <p class="card-effect">${coreEscapeHtml(display.skill)}</p>
         <span class="hand-skill-tooltip" role="tooltip">
@@ -1647,7 +1655,7 @@
     ui.detailName.textContent = selectedDisplay ? selectedDisplay.name : "选择一张卡牌";
     ui.detailSkill.textContent = selectedDisplay ? selectedDisplay.skill : "悬停或选择卡牌查看技能";
     ui.detailSummary.textContent = selectedCard
-      ? `${getCampDisplayName(selectedDisplay.camp)} · 当前战力 ${selectedCard.currentAttack} · 基础战力 ${selectedCard.attack}`
+      ? `${getCampDisplayName(selectedDisplay.camp)} · 当前战力 ${selectedCard.currentAttack} · 基础战力 ${coreCardBaseAttack(selectedCard)}`
       : "卡牌详情将在此显示。";
     ui.detailTags.innerHTML = selectedCard ? `<span class="detail-tag">${selectedCard.isGuard ? "中立守军" : "玩家卡牌"}</span><span class="detail-tag">${selectedCard.restedTurn === game.turn ? "休整中" : "可行动"}</span>` : "";
     ui.detailLines.innerHTML = selectedCard ? `<div class="detail-line"><strong>技能效果</strong><span class="skill-effect-list">${coreSkillEffectHtml(selectedCard)}</span></div><div class="detail-line"><strong>状态</strong><span>${selectedCard.restedTurn === game.turn ? "本回合休整，不能主动移动" : "可进行移动"}</span></div>` : "";

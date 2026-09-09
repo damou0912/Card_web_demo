@@ -123,6 +123,13 @@ function getCardDisplayName(cardOrId) {
   return getCardDisplay(cardOrId).name;
 }
 
+function getCardBaseAttack(cardOrId) {
+  const displayValue = Number(getCardDisplay(cardOrId)?.baseAttack);
+  if (Number.isFinite(displayValue)) return displayValue;
+  const runtimeValue = typeof cardOrId === "object" ? Number(cardOrId?.attack) : NaN;
+  return Number.isFinite(runtimeValue) ? Math.max(0, runtimeValue) : 0;
+}
+
 function getCardRuntimeDefinition(cardOrId) {
   const id = String(typeof cardOrId === "object" ? cardOrId?.id : cardOrId || "");
   const prefix = id.slice(0, 2);
@@ -444,9 +451,10 @@ function getCardTierLabel(card) {
 
 function getCardAttackText(card, game = null) {
   const currentValue = resolveAttackValue(game, card);
-  return currentValue === card.attack
-    ? `战力 ${card.attack}`
-    : `战力 ${currentValue} / 基础 ${card.attack}`;
+  const baseValue = getCardBaseAttack(card);
+  return currentValue === baseValue
+    ? `战力 ${baseValue}`
+    : `战力 ${currentValue} / 基础 ${baseValue}`;
 }
 
 function renderResult(game) {
@@ -1017,7 +1025,7 @@ function bindEvents() {
 
 window.__CARD_DEMO_DEBUG__ = {
   state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
-  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, applyTheme
+  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack, applyTheme
 };
 window.resetToMenu = resetToMenu;
 window.closeGameMenu = closeGameMenu;

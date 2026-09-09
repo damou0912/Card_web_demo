@@ -321,21 +321,32 @@
   }
 
   function coreEliteAiTraitIds() {
+    const ids = coreCanonicalEliteAiTraitIds();
+    const aliases = Object.keys(window.ELITE_AI_EFFECT_ID_ALIASES_V2 || {});
+    return [...ids, ...aliases];
+  }
+
+  function coreCanonicalEliteAiTraitIds() {
     const effects = window.ELITE_AI_EFFECTS_V2 || {};
     const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
-    return Object.keys(effects).filter((id) => info[id]);
+    return Object.keys(effects).filter((id) => /^\d+$/.test(id) && info[id]);
+  }
+
+  function coreNormalizeEliteAiTraitId(id) {
+    const value = String(id || "");
+    return window.ELITE_AI_EFFECT_ID_ALIASES_V2?.[value] || value;
   }
 
   function coreEliteAiTraitInfo(game) {
     const id = typeof game === "string" ? game : game?.eliteAiEffectId;
-    return id ? window.ELITE_AI_EFFECT_INFO_V2?.[id] || null : null;
+    return id ? window.ELITE_AI_EFFECT_INFO_V2?.[coreNormalizeEliteAiTraitId(id)] || null : null;
   }
 
   function coreEliteAiTraitInfos(game) {
     const ids = game?.eliteAiEffectId && (!Array.isArray(game?.eliteAiEffectIds) || !game.eliteAiEffectIds.length || game.eliteAiEffectId !== game.eliteAiEffectIds[0])
       ? [game.eliteAiEffectId]
       : game?.eliteAiEffectIds || [];
-    return ids.map((id) => window.ELITE_AI_EFFECT_INFO_V2?.[id]).filter(Boolean);
+    return ids.map((id) => window.ELITE_AI_EFFECT_INFO_V2?.[coreNormalizeEliteAiTraitId(id)]).filter(Boolean);
   }
 
   function coreChallengeTraitPlan(level = 1) {
@@ -351,7 +362,7 @@
 
   function corePickChallengeTraits(level = 1) {
     const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
-    const ids = coreEliteAiTraitIds();
+    const ids = coreCanonicalEliteAiTraitIds();
     const selected = [];
     coreChallengeTraitPlan(level).forEach((tier) => {
       const candidates = ids.filter((id) => info[id]?.level === tier && !selected.includes(id));
@@ -367,7 +378,8 @@
       const name = coreEscapeHtml(trait.name);
       const level = coreEscapeHtml(trait.levelLabel || "");
       const description = coreEscapeHtml(trait.description);
-      return `<div class="ai-effect-item" tabindex="0" title="${description}" data-tooltip="${description}"><strong class="elite-tier-${coreEscapeHtml(trait.color || "blue")}">${name} <small>${level}</small></strong></div>`;
+      const tierColor = { beginner: "blue", intermediate: "purple", advanced: "orange" }[trait.level] || "blue";
+      return `<div class="ai-effect-item" tabindex="0" title="${description}" data-tooltip="${description}"><strong class="elite-tier-${tierColor}">${name} <small>${level}</small></strong></div>`;
     }).join("");
   }
 
@@ -381,7 +393,7 @@
     state.game = game;
     try {
       ids.forEach((id) => {
-        const effect = window.ELITE_AI_EFFECTS_V2?.[id];
+        const effect = window.ELITE_AI_EFFECTS_V2?.[coreNormalizeEliteAiTraitId(id)];
         if (typeof effect?.onTurnStart !== "function") return;
         effect.onTurnStart({
           game,
@@ -415,7 +427,10 @@
   }
 
   function coreHasFreeAction(game, card) {
-    return Boolean(card && coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn);
+    return Boolean(card && (
+      (coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn)
+      || (coreCardEffectHasFlag(card, "freeMove") && game.boardCards?.includes(card))
+    ));
   }
 
   function coreCanUseAction(game, card = null) {
@@ -921,7 +936,9 @@
 
   function coreDrawOneCard(game, player, log = []) {
     const result = drawOneCard(game, player);
-    if (result.status !== "drawn") {
+    if (result.status === "drawn") {
+      coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player, drawnCard: result.card, log });
+    } else {
       coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player, reason: result.status, log });
     }
     return result;
@@ -945,6 +962,7 @@
       card.ownerId = owner.id;
       owner.hand.push(card);
       drawn += 1;
+      coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player: owner, drawnCard: card, log: log || [] });
     }
     if (drawn && log) log.push(`从敌方牌库抽取 ${drawn} 张牌。`);
     return drawn;
@@ -1013,13 +1031,29 @@
             drawingPlayer: player
           }));
         }
-      });
+    });
+  }
+
+  function coreRunV2OtherDrawEffects(game, player, drawnCard, log) {
+    [...game.boardCards].forEach((card) => {
+      if (!game.boardCards.includes(card)) return;
+      const effectDefinition = coreCardEffectDefinition(card);
+      if (typeof effectDefinition?.onOtherDrawn !== "function") return;
+      effectDefinition.onOtherDrawn(coreCreateCardEffectContext(
+        game,
+        corePlayer(game, card.ownerId),
+        card,
+        log,
+        { drawingPlayer: player, drawnCard }
+      ));
+    });
   }
 
   const CORE_V2_EVENT = Object.freeze({
     TURN_START: "turnStart",
     CARD_PLACED: "cardPlaced",
     CARD_MOVED: "cardMoved",
+    CARD_DRAWN: "cardDrawn",
     DRAW_FAILED: "drawFailed",
     TURN_END: "turnEnd"
   });
@@ -1032,6 +1066,7 @@
     }
     if (event === CORE_V2_EVENT.CARD_PLACED && payload.card && payload.player) return coreTriggerOtherV2PlacementEffects(game, payload.player, payload.card, payload.log || []);
     if (event === CORE_V2_EVENT.CARD_MOVED && payload.card && payload.source && payload.target) return coreRunV2MoveEffects(game, payload.card, payload.source, payload.target, payload.successful !== false);
+    if (event === CORE_V2_EVENT.CARD_DRAWN && payload.player) return coreRunV2OtherDrawEffects(game, payload.player, payload.drawnCard, payload.log || []);
     if (event === CORE_V2_EVENT.DRAW_FAILED && payload.player) return coreRunV2DrawFailedEffects(game, payload.player, payload.reason, payload.log || []);
     if (event === CORE_V2_EVENT.TURN_END && payload.player) return coreRunV2EndSkills(game, payload.player, payload.log || []);
     return null;
@@ -1085,16 +1120,19 @@
     if (!attacker || !defender || !game.boardCards.includes(attacker) || !game.boardCards.includes(defender) || !coreCanCardsFight(game, attacker, defender)) return;
     const attackerValue = attacker.currentAttack;
     const defenderValue = defender.currentAttack;
+    const sourcePosition = { row: attacker.row, col: attacker.col };
+    const targetPosition = { row: defender.row, col: defender.col };
+    // During combat, the attacker is treated as having entered the target cell.
+    // This lets destruction/combat effects resolve from the post-move position.
+    attacker.row = targetPosition.row;
+    attacker.col = targetPosition.col;
     let attackerDestroyed = false;
     let defenderDestroyed = false;
     if (attackerValue > defenderValue) {
-      const pos = { row: defender.row, col: defender.col };
       defenderDestroyed = coreDestroyV2Card(game, defender, log, attacker);
-      if (defenderDestroyed) {
-        const from = { row: attacker.row, col: attacker.col };
-        attacker.row = pos.row; attacker.col = pos.col;
-        if (typeof queueSkillMoveAnimation === "function") queueSkillMoveAnimation(game, attacker, from, pos, "技能攻击移动");
-        coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, { card: attacker, source: from, target: pos });
+      if (defenderDestroyed && game.boardCards.includes(attacker)) {
+        if (typeof queueSkillMoveAnimation === "function") queueSkillMoveAnimation(game, attacker, sourcePosition, targetPosition, "技能攻击移动");
+        coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, { card: attacker, source: sourcePosition, target: targetPosition });
       }
     } else if (attackerValue < defenderValue) attackerDestroyed = coreDestroyV2Card(game, attacker, log, defender);
     else {
@@ -1102,11 +1140,18 @@
       defenderDestroyed = coreDestroyV2Card(game, defender, log, attacker);
     }
     coreRunV2CombatEffects(game, attacker, defender, attackerDestroyed, defenderDestroyed, log);
+    if (game.boardCards.includes(attacker) && !(attackerValue > defenderValue && defenderDestroyed)) {
+      attacker.row = sourcePosition.row;
+      attacker.col = sourcePosition.col;
+    }
   }
 
   function coreRunOtherV2DestroyEffects(game, destroyedCard, original, causeCard, log) {
     const watchers = [...game.boardCards]
-      .filter((watcher) => watcher.ownerId === destroyedCard.ownerId && watcher.uid !== destroyedCard.uid)
+      .filter((watcher) => (
+        watcher.uid !== destroyedCard.uid
+        && (watcher.ownerId === destroyedCard.ownerId || coreCardEffectHasFlag(watcher, "watchAllDestroyed"))
+      ))
       .sort((left, right) => game.boardCards.indexOf(left) - game.boardCards.indexOf(right));
     watchers.forEach((watcher) => {
       const effectDefinition = coreCardEffectDefinition(watcher);
@@ -1386,6 +1431,12 @@
       } else {
         combatScene = await playCombatClashAnimation(game, card, defender, action.target.row, action.target.col, "交战");
         game.effectBoardCards = game.boardCards;
+        const targetPosition = { row: action.target.row, col: action.target.col };
+        // Treat the move as completed before combat effects resolve. If the
+        // attacker does not successfully capture the target, it is restored
+        // after all combat and destruction effects have finished.
+        card.row = targetPosition.row;
+        card.col = targetPosition.col;
         const attackerValue = Number(card.currentAttack ?? card.attack) || 0;
         const defenderValue = Number(defender.currentAttack ?? defender.attack) || 0;
         const outcome = attackerValue > defenderValue ? "a" : attackerValue < defenderValue ? "b" : "both";
@@ -1395,9 +1446,7 @@
         if (outcome === "a") {
           const defenderPosition = { row: defender.row, col: defender.col };
           defenderDestroyed = coreDestroyV2Card(game, defender, combatLog, card);
-          if (defenderDestroyed) {
-            card.row = defenderPosition.row;
-            card.col = defenderPosition.col;
+          if (defenderDestroyed && game.boardCards.includes(card)) {
             coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, { card, source: sourcePosition, target: defenderPosition });
           }
           coreAppendLog(game, `${coreCardName(card)} 攻击 ${coreCardName(defender)} 并获胜。`);
@@ -1410,6 +1459,10 @@
           coreAppendLog(game, `${coreCardName(card)} 与 ${coreCardName(defender)} 同归于尽。`);
         }
         coreRunV2CombatEffects(game, card, defender, attackerDestroyed, defenderDestroyed, combatLog);
+        if (game.boardCards.includes(card) && !(outcome === "a" && defenderDestroyed)) {
+          card.row = sourcePosition.row;
+          card.col = sourcePosition.col;
+        }
         combatLog.forEach((entry) => coreAppendLog(game, entry));
         game.effectBoardCards = null;
         await finishCombatAnimation(game, combatScene, game.boardCards);
@@ -1418,7 +1471,7 @@
 
     syncPlayerBoardIds(game);
     if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
-    const consumesAction = !coreHasFreeAction(game, card);
+    const consumesAction = action.type === "place" || !coreHasFreeAction(game, card);
     if (consumesAction) game.actionsUsed += 1;
     const won = coreCheckVictory(game);
     game.isAnimating = false;
@@ -2455,7 +2508,7 @@
   window.requestBoardSizeAccess = coreRequestBoardSizeAccess;
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
-    cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyV2PlacementSkill, coreBuildPendingAction,
+    cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyV2PlacementSkill, coreBuildPendingAction, coreHasFreeAction,
     coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
     coreFormatTurnTime, coreIsOpponentTurn, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,

@@ -220,7 +220,7 @@ function drawOneCard(_game, player) {
   const drawnCard = player.drawPile.shift();
   drawnCard.ownerId = player.id;
   player.hand.push(drawnCard);
-  return { status: "drawn" };
+  return { status: "drawn", card: drawnCard };
 }
 
 function drawCardsToHandLimit(game, player) {

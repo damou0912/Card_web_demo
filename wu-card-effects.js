@@ -94,18 +94,28 @@
 
   wu["03210"] = {
     onDestroy(ctx) {
-      const target = ctx.pickRandom(ctx.allies());
-      if (!target) return;
-      ctx.adjust(target, 2, true);
-      if (ctx.causeCard && ctx.isOnBoard(ctx.causeCard)) ctx.skillAttack(target, ctx.causeCard);
+      const allies = [...ctx.allies()];
+      allies.forEach((target) => ctx.adjust(target, 2, true));
+      allies.forEach((target) => {
+        if (!ctx.isOnBoard(target)) return;
+        const enemies = ctx.enemies(target).filter((enemy) => ctx.canFight(target, enemy));
+        const enemy = ctx.pickRandom(enemies);
+        if (enemy) ctx.skillAttack(target, enemy);
+      });
     }
   };
 
   wu["03211"] = {
     onDestroy(ctx) {
       const allies = ctx.otherAllies();
-      const enemies = ctx.board.filter((target) => target.ownerId === ctx.otherPlayer?.id);
-      if (allies.length < enemies.length) allies.forEach((target) => ctx.adjust(target, 1));
+      const enemyPlayers = ctx.board.filter((target) => target.ownerId === ctx.otherPlayer?.id);
+      if (allies.length < enemyPlayers.length) {
+        ctx.board
+          .filter((target) => target.ownerId !== ctx.card.ownerId)
+          .forEach((target) => ctx.adjust(target, -1));
+      } else if (allies.length > enemyPlayers.length) {
+        allies.forEach((target) => ctx.adjust(target, 1));
+      }
     }
   };
 
@@ -118,20 +128,20 @@
   wu["03313"] = {
     onDestroy(ctx) {
       const enemies = ctx.board.filter((target) => target.ownerId !== ctx.card.ownerId);
-      enemies.forEach((target) => ctx.adjust(target, -2, true));
+      enemies.forEach((target) => ctx.adjust(target, -3, true));
       [...enemies].filter((target) => ctx.isOnBoard(target) && target.currentAttack === 0).forEach((target) => ctx.destroy(target));
-      ctx.log("使所有敌方卡牌战力-2，并摧毁战力为0的敌方卡牌。");
+      ctx.log("使所有敌方卡牌战力-3，并摧毁战力为0的敌方卡牌。");
     }
   };
 
   wu["03314"] = {
     onPlace(ctx) {
-      let drawn = 0;
       for (let index = 0; index < 2; index += 1) {
         if (!ctx.draw(ctx.otherPlayer)) break;
-        drawn += 1;
       }
-      if (drawn) ctx.adjust(ctx.card, drawn);
+    },
+    onOtherDrawn(ctx) {
+      if (ctx.drawingPlayer?.id === ctx.otherPlayer?.id) ctx.adjust(ctx.card, 1);
     },
     onDestroy(ctx) { ctx.discard(ctx.otherPlayer, 2); }
   };
@@ -139,9 +149,11 @@
   wu["03315"] = {
     onPlace(ctx) {
       const ownCount = ctx.board.filter((target) => target.ownerId === ctx.card.ownerId).length;
-      const enemyCount = ctx.board.filter((target) => target.ownerId !== ctx.card.ownerId).length;
-      if (enemyCount >= ownCount) ctx.enemies().forEach((target) => ctx.adjust(target, -1));
-      if (ownCount >= enemyCount) ctx.enemies().forEach((target) => ctx.adjust(target, -1));
+      const enemyCount = ctx.board.filter((target) => target.ownerId === ctx.otherPlayer?.id).length;
+      const delta = ownCount === enemyCount ? -2 : -1;
+      ctx.board
+        .filter((target) => target.ownerId !== ctx.card.ownerId)
+        .forEach((target) => ctx.adjust(target, delta));
     },
     onDestroy(ctx) {
       [...ctx.board]
@@ -151,25 +163,25 @@
   };
 
   wu["03416"] = {
+    flags: { freeMove: true, watchAllDestroyed: true },
     onBeforeDestroy(ctx) {
       if (ctx.card.currentAttack <= 4) return;
-      ctx.adjust(ctx.card, -3);
-      ctx.log("战力大于4，保留在原格并永久战力-3。");
+      ctx.adjust(ctx.card, -4);
+      ctx.log("战力大于4，保留在原格并永久战力-4。");
       return false;
     },
-    onOtherDestroyed(ctx) { ctx.adjust(ctx.card, 1); },
-    onCombatResolved(ctx) {
-      if (ctx.isOnBoard(ctx.card) && ctx.isOnBoard(ctx.opponent)) ctx.adjust(ctx.opponent, -2);
-    }
+    onOtherDestroyed(ctx) { ctx.adjust(ctx.card, 1); }
   };
 
   wu["03517"] = {
-    onOtherDestroyed(ctx) {
-      if (ctx.isOnBoard(ctx.destroyedCard)) return;
-      const distance = Math.abs(ctx.original.row - ctx.card.row) + Math.abs(ctx.original.col - ctx.card.col);
-      if (distance !== 1) return;
+    onBeforeAdjacentAllyDestroy(ctx) {
+      const protectedCard = ctx.protectedCard;
       const position = ctx.position(ctx.card);
-      if (ctx.destroy(ctx.card, ctx.destroyedCard)) ctx.reenter(ctx.destroyedCard, position);
+      if (!ctx.destroy(ctx.card, protectedCard)) return false;
+      protectedCard.row = position.row;
+      protectedCard.col = position.col;
+      ctx.emitMoved(protectedCard, { row: ctx.original.row, col: ctx.original.col }, position);
+      return false;
     }
   };
 

@@ -694,6 +694,7 @@
             });
           }
         }
+        if (amount > 0 && targetPlayer.hand.length === 0) coreMaintainEliteAiHand(game, targetPlayer, log);
         return amount;
       },
       destroy: (target, cause = card) => coreDestroyV2Card(game, target, log, cause),
@@ -2648,7 +2649,7 @@
           <div><strong>${coreEscapeHtml(roomState.names?.[1] || (ownId === 1 ? state.playerName : "等待玩家"))}</strong><span>${playerStateText(1)}</span></div>
           <div><strong>${coreEscapeHtml(roomState.names?.[2] || (ownId === 2 ? state.playerName : "等待加入"))}</strong><span>${playerStateText(2)}</span></div>
         </div>
-        <label class="online-deck-choice">我的势力牌库<select id="online-deck-choice" ${ownReady ? "disabled" : ""}>${deckOptions}</select></label>
+        <label class="online-deck-choice">我的卡组<select id="online-deck-choice" ${ownReady ? "disabled" : ""}>${deckOptions}</select></label>
         <button id="online-ready-btn" class="primary-btn" type="button">${ownReady ? "取消准备" : "准备"}</button>
         <p id="online-room-status" class="deck-reveal-copy">${waitingStatus}</p>
         <p class="spectator-capacity-note">观战席 ${Number(roomState.spectatorCount) || 0}/${Number(roomState.spectatorCapacity) || 2}</p>
@@ -2973,11 +2974,11 @@
       ? (state.pendingChallengeTraitIds || []).map((id) => window.ELITE_AI_EFFECT_INFO_V2?.[id]).filter(Boolean)
       : [];
     ui.deckReveal.innerHTML = `
-      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="选择势力牌库">
+      <section class="deck-reveal-card" role="dialog" aria-modal="true" aria-label="选择卡组">
         <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
         <p class="phase-banner-eyebrow">Core Rules V2</p>
-        <h2 class="deck-reveal-title">选择本局势力牌库</h2>
-        <p class="deck-reveal-copy">${state.selectedBoardSize || CORE_BOARD_SIZE}x${state.selectedBoardSize || CORE_BOARD_SIZE} 战场；当前使用每个势力预设的 20 张牌库，卡牌技能按 V2 规则自动结算。${coreIsPveChallenge(mode) ? "挑战模式：仅根据随机词条强化持有者。" : ""}</p>
+        <h2 class="deck-reveal-title">选择本局卡组</h2>
+        <p class="deck-reveal-copy">${state.selectedBoardSize || CORE_BOARD_SIZE}x${state.selectedBoardSize || CORE_BOARD_SIZE} 战场；可选择势力预设牌库，或选择“混沌”在每局随机生成 20 张牌。${coreIsPveChallenge(mode) ? "挑战模式：仅根据随机词条强化持有者。" : ""}</p>
         ${challengeTraits.length ? `<div class="elite-trait-reveal challenge-trait-selection"><span class="ai-effect-label">第 ${state.challengeLevel || 1} 关 AI 精英词条</span>${coreEliteAiTraitMarkup(challengeTraits)}</div>` : ""}
         <div class="deck-reveal-matchup">
           <label class="deck-reveal-side"><span class="label">玩家 1</span><select id="core-deck-p1">${optionMarkup}</select></label>

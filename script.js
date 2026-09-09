@@ -9,6 +9,8 @@ const ACTION_IMPACT_HOLD_MS = 280;
 const BOARD_PULSE_VISIBLE_MS = 520;
 const BOARD_PULSE_FADE_MS = 260;
 const BOARD_PULSE_STEP_GAP_MS = 140;
+const POWER_CHANGE_VISIBLE_MS = 980;
+const POWER_CHANGE_FADE_MS = 300;
 let destructionAnimationSequence = 0;
 
 const THEME_STORAGE_KEY = "card-demo-theme";
@@ -766,6 +768,7 @@ function queuePowerAnimation(game, card, delta, previousPower = null, currentPow
     glyph: delta > 0 ? "↑" : "↓",
     label: "战力变化",
     detail: `${delta > 0 ? "+" : ""}${delta}`,
+    delta,
     previousPower: before,
     currentPower: after,
     cardUid: card.uid
@@ -776,8 +779,8 @@ function createPowerChangeEffect(event) {
   const delta = Number(event.delta ?? event.currentPower - event.previousPower) || 0;
   const increase = delta > 0;
   const amount = Math.abs(delta);
-  const before = Number.isFinite(Number(event.previousPower)) ? Number(event.previousPower) : "—";
-  const after = Number.isFinite(Number(event.currentPower)) ? Number(event.currentPower) : "—";
+  const before = Number.isFinite(Number(event.previousPower)) ? Number(event.previousPower) : "-";
+  const after = Number.isFinite(Number(event.currentPower)) ? Number(event.currentPower) : "-";
   const effect = document.createElement("div");
   effect.className = `power-change power-change-${increase ? "boost" : "weaken"}`;
   effect.setAttribute("aria-hidden", "true");
@@ -785,7 +788,7 @@ function createPowerChangeEffect(event) {
     <span class="power-change-burst"></span>
     <span class="power-change-card">
       <span class="power-change-title">战力${increase ? "提升" : "下降"}</span>
-      <strong class="power-change-delta">${increase ? "+" : "−"}${amount}</strong>
+      <strong class="power-change-delta">${increase ? "+" : "-"}${amount}</strong>
       <span class="power-change-values">${before} <b>→</b> ${after}</span>
     </span>
   `;

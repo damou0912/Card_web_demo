@@ -1001,7 +1001,10 @@
     else card.v2PermanentBonus = (Number(card.v2PermanentBonus) || 0) + delta;
     card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0) + (Number(card.v2TempBonus) || 0));
     if (game) coreEnforceElitePowerBounds(game);
-    if (game && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") queuePowerAnimation(game, card, delta);
+    const actualDelta = card.currentAttack - previous;
+    if (game && actualDelta && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
+    }
     if (card.currentAttack > previous) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
   }
 
@@ -1017,8 +1020,9 @@
     else card.v2PermanentBonus = next - base - temporaryBonus;
     card.currentAttack = next;
     if (game) coreEnforceElitePowerBounds(game);
-    if (next !== previous && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
-      queuePowerAnimation(game, card, next - previous);
+    const actualDelta = card.currentAttack - previous;
+    if (actualDelta && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
     }
     if (next > previous) coreNotifyV2AttackIncrease(game, card, next - previous, temporary);
     return true;

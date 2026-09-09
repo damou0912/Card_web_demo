@@ -2382,36 +2382,200 @@ button:disabled {
   100% { transform: scale(1); filter: brightness(1); }
 }
 
-.power-arrow {
+.power-change {
+  --power-color: #5de3a1;
+  --power-soft: #caffdf;
+  --power-glow: rgba(70, 224, 157, 0.84);
   position: absolute;
-  z-index: 20;
-  left: 50%;
-  top: 50%;
-  color: #67c96b;
-  font-size: 42px;
-  font-weight: 950;
-  line-height: 1;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.55), 0 0 14px currentColor;
+  z-index: 40;
+  display: grid;
+  width: min(180px, 40vw);
+  min-height: 92px;
+  place-items: center;
+  opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -50%);
-  animation: power-arrow-rise 920ms cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  transform: translate(-50%, -50%) scale(0.54);
 }
 
-.power-arrow.down {
-  color: #ef6555;
-  animation-name: power-arrow-fall;
+.power-change-weaken {
+  --power-color: #ff6b68;
+  --power-soft: #ffd3ae;
+  --power-glow: rgba(255, 83, 76, 0.88);
 }
 
-@keyframes power-arrow-rise {
-  0% { opacity: 0; transform: translate(-50%, 10% ) scale(0.65); }
-  22% { opacity: 1; transform: translate(-50%, -54%) scale(1.12); }
-  100% { opacity: 0; transform: translate(-50%, -125%) scale(0.9); }
+.power-change.visible {
+  opacity: 1;
+  animation: power-change-enter 360ms cubic-bezier(0.17, 0.9, 0.25, 1.18) both;
 }
 
-@keyframes power-arrow-fall {
-  0% { opacity: 0; transform: translate(-50%, -100%) scale(0.65); }
-  22% { opacity: 1; transform: translate(-50%, -42%) scale(1.12); }
-  100% { opacity: 0; transform: translate(-50%, 70%) scale(0.9); }
+.power-change.fade {
+  opacity: 0;
+  animation: power-change-exit 300ms ease-out both;
+}
+
+.power-change-burst {
+  position: absolute;
+  inset: -32px;
+  border: 2px solid var(--power-color);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--power-glow) 0%, rgba(255, 255, 255, 0.12) 30%, transparent 68%);
+  box-shadow: 0 0 20px var(--power-glow), 0 0 46px var(--power-glow);
+  opacity: 0.72;
+  animation: power-change-burst 980ms ease-out both;
+}
+
+.power-change-burst::before,
+.power-change-burst::after {
+  position: absolute;
+  inset: 12px;
+  border: 2px dashed var(--power-soft);
+  border-radius: 50%;
+  content: "";
+  animation: power-change-spin 780ms linear infinite;
+}
+
+.power-change-burst::after {
+  inset: 25px;
+  border-style: solid;
+  opacity: 0.58;
+  animation-direction: reverse;
+}
+
+.power-change-card {
+  position: relative;
+  display: grid;
+  min-width: 126px;
+  padding: 9px 15px 10px;
+  border: 3px solid var(--power-color);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(24, 34, 33, 0.97);
+  box-shadow: 0 8px 20px rgba(24, 34, 33, 0.34), 0 0 18px var(--power-glow);
+  text-align: center;
+  transform: translateZ(0);
+}
+
+.power-change-card::after {
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 9px;
+  content: "";
+  pointer-events: none;
+}
+
+.power-change-title {
+  position: relative;
+  z-index: 1;
+  color: var(--power-soft);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  line-height: 1.1;
+}
+
+.power-change-delta {
+  position: relative;
+  z-index: 1;
+  margin-top: 1px;
+  color: var(--power-soft);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 48px;
+  font-weight: 950;
+  line-height: 0.95;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.26), 0 0 14px var(--power-glow);
+}
+
+.power-change-values {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.power-change-values b {
+  padding: 0 5px;
+  color: var(--power-color);
+  font-size: 15px;
+}
+
+.cell.power-change-impact {
+  z-index: 8;
+  animation: power-cell-impact 980ms ease-out both;
+}
+
+.cell.power-change-impact::before {
+  position: absolute;
+  inset: 2px;
+  border: 4px solid var(--power-impact-color);
+  border-radius: inherit;
+  box-shadow: 0 0 0 5px var(--power-impact-soft), 0 0 30px var(--power-impact-color);
+  content: "";
+  pointer-events: none;
+}
+
+.cell.power-change-impact-boost {
+  --power-impact-color: rgba(70, 224, 157, 0.92);
+  --power-impact-soft: rgba(70, 224, 157, 0.18);
+}
+
+.cell.power-change-impact-weaken {
+  --power-impact-color: rgba(255, 83, 76, 0.94);
+  --power-impact-soft: rgba(255, 83, 76, 0.18);
+}
+
+.unit.power-change-target-boost {
+  z-index: 6;
+  animation: power-target-boost 980ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+}
+
+.unit.power-change-target-weaken {
+  z-index: 6;
+  animation: power-target-weaken 980ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+}
+
+@keyframes power-change-enter {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes power-change-exit {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -66%) scale(0.82); }
+}
+
+@keyframes power-change-burst {
+  0% { opacity: 0; transform: scale(0.42); }
+  22% { opacity: 0.9; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+
+@keyframes power-change-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes power-cell-impact {
+  0% { filter: brightness(1); box-shadow: 0 0 0 transparent; }
+  28% { filter: brightness(1.32); box-shadow: 0 0 34px var(--power-impact-color); }
+  100% { filter: brightness(1); box-shadow: 0 0 8px var(--power-impact-soft); }
+}
+
+@keyframes power-target-boost {
+  0% { transform: scale(1); filter: brightness(1) saturate(1); }
+  28% { transform: scale(1.1) translateY(-4px); filter: brightness(1.5) saturate(1.35); }
+  100% { transform: scale(1); filter: brightness(1) saturate(1); }
+}
+
+@keyframes power-target-weaken {
+  0% { transform: translateX(0) scale(1); filter: brightness(1) saturate(1); }
+  18% { transform: translateX(-4px) scale(1.04); filter: brightness(1.24) saturate(0.82); }
+  34% { transform: translateX(4px) scale(1.04); }
+  50% { transform: translateX(-3px) scale(1.02); }
+  100% { transform: translateX(0) scale(1); filter: brightness(1) saturate(1); }
 }
 
 .skill-move-arrow {

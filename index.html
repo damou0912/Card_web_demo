@@ -4,7 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Card Demo</title>
-  <link rel="stylesheet" href="style.css?v=20260909-room-copy">
+  <script>
+    try {
+      const savedTheme = window.localStorage.getItem("card-demo-theme");
+      if (["moss", "mist", "dawn", "bamboo", "night"].includes(savedTheme)) {
+        document.documentElement.dataset.theme = savedTheme;
+      }
+    } catch (_error) {
+      // Keep the default palette when browser storage is unavailable.
+    }
+  </script>
+  <link rel="stylesheet" href="style.css?v=20260909-night-theme">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -55,6 +65,9 @@
             </button>
             <button class="theme-btn" type="button" data-theme="bamboo" aria-pressed="false" aria-label="竹青淡绿">
               <span class="theme-swatch" aria-hidden="true"></span><span>竹青淡绿</span>
+            </button>
+            <button class="theme-btn" type="button" data-theme="night" aria-pressed="false" aria-label="夜间护眼">
+              <span class="theme-swatch" aria-hidden="true"></span><span>夜间护眼</span>
             </button>
           </div>
         </div>
@@ -299,7 +312,7 @@
 
   <script src="card-info.js?v=card-info-cb24396f94da"></script>
   <script src="v2-card-data.js?v=card-info-cb24396f94da"></script>
-  <script src="script.js?v=20260909-free-move-capability"></script>
+  <script src="script.js?v=20260909-night-theme"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260908-display-effect-isolation"></script>

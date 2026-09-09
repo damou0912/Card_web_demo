@@ -128,9 +128,9 @@
   wu["03313"] = {
     onDestroy(ctx) {
       const enemies = ctx.board.filter((target) => target.ownerId !== ctx.card.ownerId);
-      enemies.forEach((target) => ctx.adjust(target, -3, true));
+      enemies.forEach((target) => ctx.adjust(target, -2, true));
       [...enemies].filter((target) => ctx.isOnBoard(target) && target.currentAttack === 0).forEach((target) => ctx.destroy(target));
-      ctx.log("使所有敌方卡牌战力-3，并摧毁战力为0的敌方卡牌。");
+      ctx.log("使所有敌方卡牌战力-2，并摧毁战力为0的敌方卡牌。");
     }
   };
 

@@ -8,7 +8,7 @@
   const CORE_TURN_TIME_LIMIT_MS = CORE_TURN_TIME_LIMIT_SECONDS * 1000;
   const CORE_TIMER_TICK_MS = 250;
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
-  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260908";
+  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260909";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
@@ -32,18 +32,6 @@
     if (!PLAYER_ID_ALLOWED.test(name)) return { valid: false, message: "仅允许中文、英文、数字及 _ - . ! ? @ # + =。" };
     if (corePlayerIdUnits(name) > PLAYER_ID_MAX_UNITS) return { valid: false, message: "玩家 ID 最多 12 个字符单位，中文每字按 2 个单位计算。" };
     return { valid: true, value: name };
-  }
-
-  async function coreGetPublicIp() {
-    if (typeof fetch !== "function") return null;
-    try {
-      const response = await fetch("https://api.ipify.org?format=json", { cache: "no-store" });
-      if (!response.ok) return null;
-      const data = await response.json();
-      return typeof data.ip === "string" && data.ip ? data.ip : null;
-    } catch (_error) {
-      return null;
-    }
   }
 
   function coreShowPlayerIdModal(required = false) {
@@ -77,34 +65,30 @@
     });
   }
 
-  async function corePersistPlayerId(name) {
-    const ip = await coreGetPublicIp();
-    if (!ip) return;
-    try { window.localStorage?.setItem(`cardDemoPlayerId:${ip}`, name); } catch (_error) { /* storage may be unavailable */ }
+  function corePersistPlayerId(name) {
+    try { window.localStorage?.setItem("cardDemoPlayerId", name); } catch (_error) { /* storage may be unavailable */ }
   }
 
-  async function coreInitializePlayerIdentity() {
-    const ip = await coreGetPublicIp();
+  function coreInitializePlayerIdentity() {
+    let lastRoom = null;
     let stored = "";
-    if (ip) {
-      try { stored = window.localStorage?.getItem(`cardDemoPlayerId:${ip}`) || ""; } catch (_error) { stored = ""; }
-    }
-    const valid = coreValidatePlayerId(stored);
+    try {
+      stored = window.localStorage?.getItem("cardDemoPlayerId") || "";
+      lastRoom = JSON.parse(window.localStorage?.getItem("cardDemoOnlineRoom") || "null");
+    } catch (_error) { /* storage may be unavailable or invalid */ }
+    const valid = coreValidatePlayerId(stored || lastRoom?.playerName);
     if (valid.valid) {
       state.playerName = valid.value;
       if (ui.playerIdValue) ui.playerIdValue.textContent = valid.value;
+      corePersistPlayerId(valid.value);
     } else if (!state.playerName) {
       coreShowPlayerIdModal(true);
     }
-    try {
-      const lastRoom = JSON.parse(window.localStorage?.getItem("cardDemoOnlineRoom") || "null");
-      if (lastRoom?.roomCode && state.playerName && window.CardOnline) {
-        state.online = { playerId: null, roomCode: lastRoom.roomCode, playerName: state.playerName, host: false, role: "player", rooms: [] };
-        state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
-        window.CardOnline.connect();
-        window.setTimeout(() => window.CardOnline.resumeRoom(lastRoom.roomCode, state.playerName, lastRoom.sessionToken), 250);
-      }
-    } catch (_error) { /* ignore invalid saved room */ }
+    if (lastRoom?.roomCode && lastRoom?.sessionToken && state.playerName && window.CardOnline) {
+      state.online = { playerId: null, roomCode: lastRoom.roomCode, playerName: state.playerName, sessionToken: lastRoom.sessionToken, host: false, role: "player", rooms: [], reconnecting: true };
+      state.online.unsubscribe = window.CardOnline.on(coreHandleOnlineMessage);
+      window.CardOnline.connect();
+    }
   }
 
   function corePlayer(game, playerId) {
@@ -501,7 +485,14 @@
     if (!ai) return 0;
     let removed = 0;
     while (ai.hand.length > 1) {
-      ai.hand.splice(randomInt(0, ai.hand.length - 1), 1);
+      const index = randomInt(0, ai.hand.length - 1);
+      const discardedCard = ai.hand.splice(index, 1)[0];
+      if (game.currentPhase !== "开局展示" && typeof queueCardFlowAnimation === "function") {
+        queueCardFlowAnimation(game, "discard", ai, discardedCard, {
+          reason: "精英词条【断粮】",
+          flowPrompt: `${ai.name || "精英 AI"} 因精英词条【断粮】弃置 ${coreCardName(discardedCard)}。`
+        });
+      }
       removed += 1;
     }
     return removed;
@@ -526,6 +517,12 @@
     if (!ai || ai.hand.length >= coreHandLimitForPlayer(game, ai)) return { status: "not-created" };
     const card = coreCreateEliteReinforcementCard(ai);
     ai.hand.push(card);
+    if (game.currentPhase !== "开局展示" && typeof queueCardFlowAnimation === "function") {
+      queueCardFlowAnimation(game, "draw", ai, card, {
+        sourceLabel: "援军效果",
+        flowPrompt: `${ai.name || "精英 AI"} 从援军效果抽取援兵。`
+      });
+    }
     log.push(`精英特性【援军】使 ${ai.name || "词条持有者"} 抽出 1 张战力为 1 的援兵。`);
     return { status: "drawn", card };
   }
@@ -689,7 +686,14 @@
       discard: (targetPlayer, count = 1) => {
         if (!targetPlayer?.hand?.length) return 0;
         const amount = Math.min(count, targetPlayer.hand.length);
-        for (let index = 0; index < amount; index += 1) targetPlayer.hand.splice(randomInt(0, targetPlayer.hand.length - 1), 1);
+        for (let index = 0; index < amount; index += 1) {
+          const discardedCard = targetPlayer.hand.splice(randomInt(0, targetPlayer.hand.length - 1), 1)[0];
+          if (typeof queueCardFlowAnimation === "function") {
+            queueCardFlowAnimation(game, "discard", targetPlayer, discardedCard, {
+              flowPrompt: `${targetPlayer.name || `玩家 ${targetPlayer.id}`} 弃置 ${coreCardName(discardedCard)}。`
+            });
+          }
+        }
         return amount;
       },
       destroy: (target, cause = card) => coreDestroyV2Card(game, target, log, cause),
@@ -1198,8 +1202,14 @@
       ? { status: "hand-full" }
       : drawOneCard(game, player);
     if (result.status === "drawn") {
+      if (typeof queueCardFlowAnimation === "function") {
+        queueCardFlowAnimation(game, "draw", player, result.card);
+      }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player, drawnCard: result.card, log });
     } else {
+      if (typeof queueCardFlowAnimation === "function") {
+        queueCardFlowAnimation(game, "draw-failed", player, null, { reason: result.status });
+      }
       coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player, reason: result.status, log });
     }
     return result;
@@ -1212,10 +1222,24 @@
     for (let index = 0; index < count; index += 1) {
       if (!owner || !enemy) break;
       if (owner.hand.length >= HAND_LIMIT) {
+        if (typeof queueCardFlowAnimation === "function") {
+          queueCardFlowAnimation(game, "draw-failed", owner, null, {
+            reason: "hand-full",
+            sourceLabel: `${enemy?.name || "敌方"}牌库`,
+            flowPrompt: `${owner.name || `玩家 ${owner.id}`} 从${enemy?.name || "敌方"}牌库抽卡失败：手牌已满。`
+          });
+        }
         coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player: owner, reason: "hand-full", log: log || [] });
         break;
       }
       if (!enemy.drawPile.length) {
+        if (typeof queueCardFlowAnimation === "function") {
+          queueCardFlowAnimation(game, "draw-failed", owner, null, {
+            reason: "deck-empty",
+            sourceLabel: `${enemy.name || "敌方"}牌库`,
+            flowPrompt: `${owner.name || `玩家 ${owner.id}`} 从${enemy.name || "敌方"}牌库抽卡失败：牌库已空。`
+          });
+        }
         coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player: owner, reason: "deck-empty", log: log || [] });
         break;
       }
@@ -1223,6 +1247,12 @@
       card.ownerId = owner.id;
       owner.hand.push(card);
       drawn += 1;
+      if (typeof queueCardFlowAnimation === "function") {
+        queueCardFlowAnimation(game, "draw", owner, card, {
+          sourceLabel: `${enemy.name || "敌方"}牌库`,
+          flowPrompt: `${owner.name || `玩家 ${owner.id}`} 从${enemy.name || "敌方"}牌库抽取 ${coreCardName(card)}。`
+        });
+      }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player: owner, drawnCard: card, log: log || [] });
     }
     if (drawn && log) log.push(`从敌方牌库抽取 ${drawn} 张牌。`);
@@ -2597,7 +2627,13 @@
     const ownId = state.online.playerId;
     const ownDeck = state.online.deckKey || "三国~蜀";
     const deckOptions = getAvailableDeckKeys().map((deck) => `<option value="${deck}" ${deck === ownDeck ? "selected" : ""}>${getCampDisplayName(deck)}</option>`).join("");
-    const readyText = (id) => roomState.ready?.[id] ? "已准备" : "未准备";
+    const playerStateText = (id) => roomState.names?.[id] && roomState.connectedPlayers?.[id] === false
+      ? "等待重连"
+      : roomState.ready?.[id] ? "已准备" : "未准备";
+    const disconnectedPlayerId = [1, 2].find((id) => roomState.names?.[id] && roomState.connectedPlayers?.[id] === false);
+    const waitingStatus = disconnectedPlayerId
+      ? `玩家 ${disconnectedPlayerId} 已断线，席位保留 5 分钟……`
+      : roomState.hasPlayers?.[2] ? "等待双方准备……" : "等待玩家 2 加入……";
     const ownReady = Boolean(roomState.ready?.[ownId]);
     ui.deckReveal.innerHTML = `
       <section class="deck-reveal-card online-room-card" role="dialog" aria-modal="true" aria-label="等待联网玩家">
@@ -2609,12 +2645,12 @@
         </div>
         <p class="deck-reveal-copy">地图：${roomState.boardSize || state.selectedBoardSize}x${roomState.boardSize || state.selectedBoardSize}。请将房间号发送给另一位玩家。</p>
         <div class="online-room-players">
-          <div><strong>${roomState.names?.[1] || (ownId === 1 ? state.playerName : "等待玩家")}</strong><span>${readyText(1)}</span></div>
-          <div><strong>${roomState.names?.[2] || (ownId === 2 ? state.playerName : "等待加入")}</strong><span>${readyText(2)}</span></div>
+          <div><strong>${coreEscapeHtml(roomState.names?.[1] || (ownId === 1 ? state.playerName : "等待玩家"))}</strong><span>${playerStateText(1)}</span></div>
+          <div><strong>${coreEscapeHtml(roomState.names?.[2] || (ownId === 2 ? state.playerName : "等待加入"))}</strong><span>${playerStateText(2)}</span></div>
         </div>
         <label class="online-deck-choice">我的势力牌库<select id="online-deck-choice" ${ownReady ? "disabled" : ""}>${deckOptions}</select></label>
         <button id="online-ready-btn" class="primary-btn" type="button">${ownReady ? "取消准备" : "准备"}</button>
-        <p id="online-room-status" class="deck-reveal-copy">${roomState.hasPlayers?.[2] ? "等待双方准备……" : "等待玩家 2 加入……"}</p>
+        <p id="online-room-status" class="deck-reveal-copy">${waitingStatus}</p>
         <p class="spectator-capacity-note">观战席 ${Number(roomState.spectatorCount) || 0}/${Number(roomState.spectatorCapacity) || 2}</p>
       </section>
     `;
@@ -2664,13 +2700,26 @@
     if (!message) return;
     if (message.type === "connected") {
       const status = document.getElementById("online-lobby-status");
+      if (state.online?.roomCode && state.online?.sessionToken && state.online?.role === "player") {
+        if (status) status.textContent = "已重新连接，正在恢复房间……";
+        state.online.reconnecting = true;
+        window.CardOnline.resumeRoom(state.online.roomCode, state.online.playerName || state.playerName, state.online.sessionToken);
+        return;
+      }
       if (status) status.textContent = "已连接，房间列表会自动更新。";
       window.CardOnline?.listRooms?.();
       return;
     }
     if (message.type === "disconnected") {
       const status = document.getElementById("online-lobby-status");
-      if (status) status.textContent = "联网服务已断开，请重新打开联网对战。";
+      if (status) status.textContent = "连接已中断，正在自动重连……";
+      if (state.online?.roomCode && !state.online.reconnecting) showToast("连接已中断", "正在自动重连，玩家席位将保留 5 分钟。");
+      state.online.reconnecting = true;
+      return;
+    }
+    if (message.type === "reconnecting") {
+      const status = document.getElementById("online-lobby-status");
+      if (status) status.textContent = `正在进行第 ${message.attempt || 1} 次重连……`;
       return;
     }
     if (message.type === "room-list") {
@@ -2679,14 +2728,14 @@
       return;
     }
     if (message.type === "room-created") {
-      state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: true, role: "player" };
+      state.online = { ...state.online, playerId: 1, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: true, role: "player", reconnecting: false };
       try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken })); } catch (_error) { /* ignore */ }
       coreStartOnlineHost();
       return;
     }
     if (message.type === "room-joined") {
       const playerId = Number(message.playerId) || 2;
-      state.online = { ...state.online, playerId, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: playerId === 1, role: "player" };
+      state.online = { ...state.online, playerId, roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken, host: playerId === 1, role: "player", reconnecting: false };
       try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName: message.playerName, sessionToken: message.sessionToken })); } catch (_error) { /* ignore */ }
       coreCloseOverlay();
       state.selectedBoardSize = message.boardSize || state.selectedBoardSize;
@@ -2730,7 +2779,12 @@
       return;
     }
     if (message.type === "room-resumed") {
-      state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, sessionToken: message.sessionToken, host: message.playerId === 1, role: "player" };
+      const playerName = message.playerName || state.online.playerName || state.playerName;
+      state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, playerName, sessionToken: message.sessionToken, deckKey: message.deckKey || state.online.deckKey, host: message.playerId === 1, role: "player", reconnecting: false, roomState: message.roomState };
+      state.playerName = playerName;
+      if (ui.playerIdValue) ui.playerIdValue.textContent = playerName;
+      corePersistPlayerId(playerName);
+      try { window.localStorage?.setItem("cardDemoOnlineRoom", JSON.stringify({ roomCode: message.roomCode, playerName, sessionToken: message.sessionToken })); } catch (_error) { /* storage may be unavailable */ }
       if (message.started && message.state) {
         try {
           state.game = coreDeserializeOnlineGame(message.state);
@@ -2746,16 +2800,28 @@
         coreRender();
         showToast("已恢复对局", "已回到断线前的对局状态。");
       } else {
-        coreShowOnlineWaiting(message.state || { roomCode: message.roomCode, boardSize: message.boardSize, names: {}, ready: {}, hasPlayers: {} });
+        state.game = null;
+        coreShowOnlineWaiting(message.roomState || { roomCode: message.roomCode, boardSize: message.boardSize, names: { [message.playerId]: playerName }, ready: {}, hasPlayers: { [message.playerId]: true } });
+        showToast("已恢复房间", "已返回断线前的玩家席位。");
       }
       return;
     }
     if (message.type === "resume-failed") {
       try { window.localStorage?.removeItem("cardDemoOnlineRoom"); } catch (_error) { /* ignore */ }
       state.game = null;
+      state.online = { ...state.online, playerId: null, roomCode: null, sessionToken: null, host: false, role: null, reconnecting: false };
       coreCloseOverlay();
       switchScreen("menu");
       showToast("房间已失效", message.message || "原房间不存在。");
+      return;
+    }
+    if (message.type === "session-replaced") {
+      window.CardOnline?.disconnect?.();
+      state.game = null;
+      state.online = { ...state.online, playerId: null, roomCode: null, sessionToken: null, host: false, role: null, reconnecting: false };
+      coreCloseOverlay();
+      switchScreen("menu");
+      showToast("连接已转移", message.message || "本房间已在另一个页面恢复。");
       return;
     }
     if (message.type === "auto-surrender") {
@@ -2822,8 +2888,12 @@
     }
     if (message.type === "error") showToast("联网房间", message.message || "联网操作失败。");
     if (message.type === "peer-left") {
-      if (state.game?.mode === "online") showToast("玩家已断线", "对方已断开连接，5 分钟内重新连接可继续对局。");
+      if (message.reconnectDeadline) showToast("玩家已断线", "对方席位保留 5 分钟，重新连接后可继续。");
       else showToast("玩家已退出", "房间已释放该玩家席位，可以等待新玩家加入。");
+      return;
+    }
+    if (message.type === "peer-reconnected") {
+      showToast("玩家已重连", "对方已返回房间。");
       return;
     }
     if (message.type === "server-shutdown") {

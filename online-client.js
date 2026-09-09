@@ -1,29 +1,54 @@
 (() => {
   let socket = null;
   let connected = false;
+  let reconnectEnabled = false;
+  let reconnectAttempt = 0;
+  let reconnectTimer = null;
   const listeners = new Set();
+  const RECONNECT_DELAYS_MS = [500, 1000, 2000, 5000];
 
   function notify(message) {
     listeners.forEach((listener) => listener(message));
   }
 
+  function clearReconnectTimer() {
+    if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  function scheduleReconnect() {
+    if (!reconnectEnabled || reconnectTimer !== null) return;
+    const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+    reconnectAttempt += 1;
+    notify({ type: "reconnecting", attempt: reconnectAttempt, delay });
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, delay);
+  }
+
   function connect() {
+    reconnectEnabled = true;
     if (socket && socket.readyState <= 1) return;
+    clearReconnectTimer();
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const nextSocket = new WebSocket(`${protocol}//${window.location.host}`);
     socket = nextSocket;
     nextSocket.addEventListener("open", () => {
       if (socket !== nextSocket) return;
       connected = true;
+      reconnectAttempt = 0;
       notify({ type: "connected" });
     });
     nextSocket.addEventListener("close", () => {
       if (socket !== nextSocket) return;
+      socket = null;
       connected = false;
       notify({ type: "disconnected" });
+      scheduleReconnect();
     });
     nextSocket.addEventListener("error", () => {
-      if (socket === nextSocket) notify({ type: "error", message: "无法连接联网服务。" });
+      if (socket === nextSocket && reconnectAttempt === 0) notify({ type: "error", message: "无法连接联网服务，正在自动重试。" });
     });
     nextSocket.addEventListener("message", (event) => {
       if (socket !== nextSocket) return;
@@ -32,9 +57,13 @@
   }
 
   function disconnect() {
-    if (socket) socket.close();
+    reconnectEnabled = false;
+    reconnectAttempt = 0;
+    clearReconnectTimer();
+    const currentSocket = socket;
     socket = null;
     connected = false;
+    if (currentSocket) currentSocket.close();
   }
 
   function send(message) {

@@ -2334,6 +2334,263 @@ button:disabled {
   font-size: 14px;
 }
 
+.card-flow {
+  --flow-color: #85c9ed;
+  --flow-glow: rgba(77, 164, 214, 0.52);
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 2vw, 24px);
+  padding: 18px;
+  opacity: 0;
+  transform: scale(0.78);
+  transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.card-flow-draw {
+  --flow-color: #8cd57a;
+  --flow-glow: rgba(110, 204, 88, 0.58);
+}
+
+.card-flow-discard {
+  --flow-color: #f0775a;
+  --flow-glow: rgba(211, 75, 45, 0.58);
+}
+
+.card-flow-draw-failed {
+  --flow-color: #f0b25c;
+  --flow-glow: rgba(230, 142, 50, 0.56);
+}
+
+.card-flow.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.card-flow.fade {
+  opacity: 0;
+  transform: scale(1.08);
+}
+
+.card-flow-burst {
+  position: absolute;
+  width: min(280px, 54vw);
+  aspect-ratio: 1;
+  border: 2px solid color-mix(in srgb, var(--flow-color) 72%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 12px color-mix(in srgb, var(--flow-color) 11%, transparent), 0 0 46px var(--flow-glow);
+  opacity: 0;
+  transform: scale(0.38);
+}
+
+.card-flow.visible .card-flow-burst {
+  animation: card-flow-burst 980ms ease-out both;
+}
+
+.card-flow-route {
+  position: absolute;
+  display: grid;
+  width: 132px;
+  height: 38px;
+  place-items: center;
+  color: var(--flow-color);
+  filter: drop-shadow(0 0 9px var(--flow-glow));
+}
+
+.card-flow-route span {
+  position: absolute;
+  width: 118px;
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, transparent, var(--flow-color), transparent);
+  transform: rotate(-18deg);
+}
+
+.card-flow-route b {
+  position: absolute;
+  right: 0;
+  color: var(--flow-color);
+  font-size: 29px;
+  line-height: 1;
+}
+
+.card-flow-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: 88px;
+  min-width: 88px;
+  height: 122px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 8px;
+  border: 2px solid var(--flow-color);
+  border-radius: 11px;
+  color: #fffdf3;
+  background: linear-gradient(145deg, rgba(41, 61, 67, 0.98), rgba(24, 31, 35, 0.98));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--flow-color) 18%, transparent), 0 10px 28px rgba(20, 27, 30, 0.46), 0 0 24px var(--flow-glow);
+  text-align: center;
+}
+
+.card-flow-card-top {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 50%;
+  color: #1f1a17;
+  background: var(--flow-color);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.card-flow-card strong {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-flow-card small {
+  max-width: 100%;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-flow-card em {
+  color: var(--flow-color);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.card-flow-copy {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: min(210px, 46vw);
+  max-width: min(250px, 48vw);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--flow-color) 76%, white);
+  border-radius: 12px;
+  color: white;
+  background: rgba(31, 26, 23, 0.9);
+  box-shadow: 0 10px 24px rgba(31, 26, 23, 0.32), 0 0 20px var(--flow-glow);
+  backdrop-filter: blur(8px);
+}
+
+.card-flow-label {
+  color: var(--flow-color);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+}
+
+.card-flow-copy > strong {
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.card-flow-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.card-flow-path i {
+  color: var(--flow-color);
+  font-size: 17px;
+  font-style: normal;
+  font-weight: 950;
+}
+
+.card-flow-reason {
+  color: #fff1bf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.card-flow-draw.visible .card-flow-card {
+  animation: card-flow-draw 980ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.card-flow-discard.visible .card-flow-card {
+  animation: card-flow-discard 980ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.card-flow-draw-failed.visible .card-flow-card {
+  animation: card-flow-failed 720ms ease-in-out both;
+}
+
+@keyframes card-flow-burst {
+  0% { opacity: 0; transform: scale(0.38); }
+  35% { opacity: 0.95; transform: scale(0.9); }
+  100% { opacity: 0; transform: scale(1.32); }
+}
+
+@keyframes card-flow-draw {
+  0% { opacity: 0; transform: translateY(62px) rotate(-8deg) scale(0.72); }
+  42% { opacity: 1; transform: translateY(-8px) rotate(3deg) scale(1.06); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
+}
+
+@keyframes card-flow-discard {
+  0% { opacity: 0; transform: translateY(-10px) rotate(0) scale(1); }
+  42% { opacity: 1; transform: translateY(-14px) rotate(-4deg) scale(1.04); }
+  100% { opacity: 1; transform: translateY(18px) rotate(9deg) scale(0.84); }
+}
+
+@keyframes card-flow-failed {
+  0%, 100% { opacity: 1; transform: translateX(0) rotate(0); }
+  25% { transform: translateX(-8px) rotate(-4deg); }
+  50% { transform: translateX(8px) rotate(4deg); }
+  75% { transform: translateX(-5px) rotate(-2deg); }
+}
+
+@media (max-width: 640px) {
+  .card-flow {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .card-flow-card {
+    width: 72px;
+    min-width: 72px;
+    height: 102px;
+    padding: 8px 5px;
+  }
+
+  .card-flow-card strong { font-size: 11px; }
+  .card-flow-card small { font-size: 9px; }
+  .card-flow-copy {
+    min-width: 0;
+    max-width: min(190px, 52vw);
+    padding: 10px 11px;
+  }
+  .card-flow-copy > strong { font-size: 13px; }
+  .card-flow-path { font-size: 10px; }
+}
+
 .board-pulse.visible {
   opacity: 1;
   transform: scale(1.04);
@@ -3886,6 +4143,45 @@ h1 {
   --overlay-gold: #d5dcac;
 }
 
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --ink: #dce5df;
+  --muted: #9eaaa4;
+  --panel: rgba(37, 46, 43, 0.97);
+  --panel-border: #4c5b55;
+  --accent: #9a7259;
+  --accent-deep: #d5aa83;
+  --accent-soft: #493a32;
+  --blue: #88aeb3;
+  --blue-soft: #304549;
+  --grid: #4b5a54;
+  --blocked: #151b19;
+  --success: #82aa8d;
+  --shadow: 0 18px 38px rgba(4, 9, 8, 0.32);
+  --theme-page-top: #18211f;
+  --theme-page-mid: #222c29;
+  --theme-page-bottom: #141c1a;
+  --theme-surface-soft: #303a36;
+  --theme-surface-raised: #39443f;
+  --theme-board: #202926;
+  --theme-cell-top: #35403c;
+  --theme-cell-bottom: #29332f;
+  --theme-move-top: #4a4934;
+  --theme-move-bottom: #393b2c;
+  --theme-attack-top: #4a3633;
+  --theme-attack-bottom: #392b29;
+  --theme-status-top: rgba(43, 52, 48, 0.98);
+  --theme-status-bottom: rgba(37, 49, 48, 0.98);
+  --theme-accent-rgb: 154, 114, 89;
+  --theme-blue-rgb: 96, 137, 143;
+  --theme-overlay-start: #26312d;
+  --theme-overlay-end: #18211e;
+  --overlay-text: #eef2ec;
+  --overlay-muted: rgba(224, 232, 225, 0.76);
+  --overlay-border: rgba(174, 193, 182, 0.28);
+  --overlay-gold: #d8c58f;
+}
+
 body {
   background: linear-gradient(145deg, var(--theme-page-top) 0%, var(--theme-page-mid) 52%, var(--theme-page-bottom) 100%);
 }
@@ -4059,6 +4355,10 @@ body {
 
 .theme-btn[data-theme="bamboo"] .theme-swatch {
   --theme-swatch: #aec6b5;
+}
+
+.theme-btn[data-theme="night"] .theme-swatch {
+  --theme-swatch: #26322e;
 }
 
 .game-menu-theme {
@@ -4597,4 +4897,125 @@ body {
     grid-column: 2 / -1;
     min-width: 0;
   }
+}
+
+/* Night mode keeps every large surface dim while retaining clear card ownership colors. */
+:root[data-theme="night"] h1 {
+  color: #e6ece7;
+}
+
+:root[data-theme="night"] .primary-btn {
+  color: #f5f2ea;
+  background: linear-gradient(135deg, #87644f, #68483b);
+}
+
+:root[data-theme="night"] .hero-card,
+:root[data-theme="night"] .top-bar,
+:root[data-theme="night"] .status-card,
+:root[data-theme="night"] .panel-card,
+:root[data-theme="night"] .board-panel,
+:root[data-theme="night"] .hand-section {
+  box-shadow: var(--shadow);
+}
+
+:root[data-theme="night"] .unit.player1,
+:root[data-theme="night"] .moving-card.player1,
+:root[data-theme="night"] .combat-card.player1 {
+  background: linear-gradient(160deg, #8b624e, #593d34);
+}
+
+:root[data-theme="night"] .unit.player2,
+:root[data-theme="night"] .moving-card.player2,
+:root[data-theme="night"] .combat-card.player2 {
+  background: linear-gradient(160deg, #54767d, #294a52);
+}
+
+:root[data-theme="night"] .unit.guard {
+  border-color: #65716e;
+  color: #e4e9e5;
+  background: linear-gradient(145deg, #56615e, #353e3b);
+}
+
+:root[data-theme="night"] .card {
+  box-shadow: 0 8px 18px rgba(3, 8, 7, 0.24), inset 0 0 0 1px rgba(222, 232, 225, 0.08);
+}
+
+:root[data-theme="night"] .card:hover,
+:root[data-theme="night"] .card:focus-visible,
+:root[data-theme="night"] .card.selected {
+  box-shadow: 0 12px 26px rgba(3, 8, 7, 0.34), 0 0 0 3px rgba(154, 114, 89, 0.2);
+}
+
+:root[data-theme="night"] .card.rarity-普通 .card-top h3 { color: #dce5df; }
+:root[data-theme="night"] .card.rarity-稀有 .card-top h3 { color: #89bad1; }
+:root[data-theme="night"] .card.rarity-史诗 .card-top h3 { color: #bda3ce; }
+:root[data-theme="night"] .card.rarity-传说 .card-top h3 { color: #ddb080; }
+:root[data-theme="night"] .card.rarity-特殊 .card-top h3 { color: #c8d3cd; }
+
+:root[data-theme="night"] .hand-header {
+  border-bottom-color: var(--panel-border);
+}
+
+:root[data-theme="night"] .hand-action-count,
+:root[data-theme="night"] .turn-timer {
+  border-color: rgba(184, 139, 105, 0.62);
+  color: #d9b492;
+  background: #3a332d;
+  box-shadow: 0 5px 14px rgba(4, 9, 8, 0.22);
+}
+
+:root[data-theme="night"] .hand-action-count.is-opponent-turn,
+:root[data-theme="night"] .turn-timer.is-opponent-turn {
+  border-color: rgba(121, 163, 169, 0.66);
+  color: #b9d4d6;
+  background: #2b3e41;
+}
+
+:root[data-theme="night"] .hand-action-count.is-complete {
+  border-color: rgba(112, 157, 124, 0.68);
+  color: #b8d5bf;
+  background: #2d4033;
+}
+
+:root[data-theme="night"] .turn-timer.is-warning {
+  border-color: #957546;
+  color: #dfc184;
+  background: #413927;
+}
+
+:root[data-theme="night"] .turn-timer.is-critical,
+:root[data-theme="night"] .surrender-btn {
+  border-color: #8f5d58;
+  color: #e5aaa3;
+  background: #44302e;
+}
+
+:root[data-theme="night"] #end-turn-btn.is-highlighted {
+  border-color: #a87558;
+  color: #e7b696;
+  background: #46352d;
+  box-shadow: 0 0 0 4px rgba(168, 117, 88, 0.18);
+}
+
+:root[data-theme="night"] .ai-effect-panel,
+:root[data-theme="night"] .elite-trait-reveal {
+  border-color: rgba(184, 139, 105, 0.42);
+  background: rgba(73, 58, 50, 0.7);
+}
+
+:root[data-theme="night"] .deck-reveal-side select,
+:root[data-theme="night"] .online-deck-choice select,
+:root[data-theme="night"] .online-lobby-actions input,
+:root[data-theme="night"] .player-id-card input {
+  border-color: var(--panel-border);
+  color: var(--ink);
+  background: var(--theme-surface-soft);
+}
+
+:root[data-theme="night"] .cell.control-1::after {
+  box-shadow: inset 0 0 0 1px rgba(215, 158, 128, 0.24);
+}
+
+:root[data-theme="night"] .cell.control-2::after {
+  box-shadow: inset 0 0 0 1px rgba(137, 186, 209, 0.22);
 }

@@ -114,6 +114,40 @@ function waitForServer(child, port) {
       return client;
     };
 
+    const reconnectObserver = await makeClient();
+    const originalWaitingHost = await makeClient();
+    originalWaitingHost.send({ type: "create-room", playerName: "ReHost", boardSize: 4 });
+    const waitingCreated = await originalWaitingHost.waitForType("room-created");
+    const takeoverClient = await makeClient();
+    takeoverClient.send({ type: "resume-room", roomCode: waitingCreated.roomCode, playerName: "DifferentName", sessionToken: waitingCreated.sessionToken });
+    const waitingTakeover = await takeoverClient.waitForType("room-resumed");
+    assert.equal((await originalWaitingHost.waitForType("session-replaced")).type, "session-replaced");
+    await originalWaitingHost.waitForClose();
+    assert.equal(waitingTakeover.started, false);
+    assert.equal(waitingTakeover.playerName, "ReHost");
+    assert.notEqual(waitingTakeover.sessionToken, waitingCreated.sessionToken);
+    assert.equal(waitingTakeover.roomState.connectedPlayers[1], true);
+
+    const staleTokenClient = await makeClient();
+    staleTokenClient.send({ type: "resume-room", roomCode: waitingCreated.roomCode, playerName: "ReconnectHost", sessionToken: waitingCreated.sessionToken });
+    assert.equal((await staleTokenClient.waitForType("resume-failed")).type, "resume-failed");
+
+    takeoverClient.close();
+    await takeoverClient.waitForClose();
+    await reconnectObserver.waitFor((message) => message.type === "room-list"
+      && message.rooms.some((room) => room.roomCode === waitingCreated.roomCode && room.playerCount === 1 && room.connectedPlayerCount === 0));
+    const waitingResumeClient = await makeClient();
+    waitingResumeClient.send({ type: "resume-room", roomCode: waitingCreated.roomCode, playerName: "ReHost", sessionToken: waitingTakeover.sessionToken });
+    const waitingResumed = await waitingResumeClient.waitForType("room-resumed");
+    assert.equal(waitingResumed.started, false);
+    assert.equal(waitingResumed.roomState.hasPlayers[1], true);
+    assert.equal(waitingResumed.roomState.connectedPlayers[1], true);
+    assert.notEqual(waitingResumed.sessionToken, waitingTakeover.sessionToken);
+    waitingResumeClient.send({ type: "leave-room" });
+    await waitingResumeClient.waitForClose();
+    await reconnectObserver.waitFor((message) => message.type === "room-list"
+      && !message.rooms.some((room) => room.roomCode === waitingCreated.roomCode));
+
     const host = await makeClient();
     const playerTwo = await makeClient();
     const spectatorOne = await makeClient();
@@ -130,7 +164,7 @@ function waitForServer(child, port) {
     assert.equal(listedWaitingRoom.rooms.find((room) => room.roomCode === roomCode).spectatorCapacity, 2);
 
     playerTwo.send({ type: "join-room", roomCode, playerName: "Guest" });
-    await playerTwo.waitForType("room-joined");
+    const playerTwoJoined = await playerTwo.waitForType("room-joined");
     spectatorOne.send({ type: "join-spectator", roomCode, spectatorName: "WatchA" });
     spectatorTwo.send({ type: "join-spectator", roomCode, spectatorName: "WatchB" });
     assert.equal((await spectatorOne.waitForType("spectator-joined")).spectatorId, 1);
@@ -150,7 +184,7 @@ function waitForServer(child, port) {
     const gameState = JSON.stringify({
       ruleset: "core-v2",
       cardDataVersion: "card-info-v2-display-effect-isolation-20260908",
-      runtimeSchemaVersion: "runtime-display-effect-isolation-20260908",
+      runtimeSchemaVersion: "runtime-display-effect-isolation-20260909",
       activePlayerId: 1,
       turn: 1,
       winner: null,
@@ -171,6 +205,34 @@ function waitForServer(child, port) {
     const readOnly = await spectatorOne.waitForType("spectator-read-only");
     assert.match(readOnly.message, /只读/);
 
+    const freeMoveState = JSON.stringify({
+      ...JSON.parse(gameState),
+      actionsUsed: 1,
+      boardCards: [{ uid: "03416-card", id: "03416", ownerId: 1, row: 1, col: 1, restedTurn: null, lastMovedTurn: null, freeMove: true }],
+    });
+    host.send({ type: "state-sync", state: freeMoveState });
+    host.send({ type: "action-request", action: {
+      type: "move", cardUid: "03416-card", source: { row: 1, col: 1 }, target: { row: 1, col: 2 }
+    } });
+    const freeMoveForwarded = await host.waitFor((message) => message.type === "action-request" && message.action?.cardUid === "03416-card");
+    assert.equal(freeMoveForwarded.action.target.col, 2);
+
+    playerTwo.close();
+    await playerTwo.waitForClose();
+    const peerLeft = await host.waitForType("peer-left");
+    assert.equal(peerLeft.playerId, 2);
+    assert.ok(peerLeft.reconnectDeadline > Date.now());
+    const resumedPlayerTwo = await makeClient();
+    resumedPlayerTwo.send({ type: "resume-room", roomCode, playerName: "ChangedName", sessionToken: playerTwoJoined.sessionToken });
+    const activeResume = await resumedPlayerTwo.waitForType("room-resumed");
+    assert.equal(activeResume.started, true);
+    assert.equal(activeResume.playerName, "Guest");
+    assert.notEqual(activeResume.sessionToken, playerTwoJoined.sessionToken);
+    const resumedState = JSON.parse(activeResume.state);
+    assert.deepEqual(resumedState.players[0].hand[0], { uid: "p1-card", hidden: true });
+    assert.equal(resumedState.players[1].hand[0].uid, "p2-card");
+    assert.equal((await host.waitForType("peer-reconnected")).playerId, 2);
+
     spectatorOne.send({ type: "leave-room" });
     await spectatorOne.waitForClose();
     host.send({ type: "list-rooms" });
@@ -178,9 +240,9 @@ function waitForServer(child, port) {
       && message.rooms.some((room) => room.roomCode === roomCode && room.spectatorCount === 1));
     assert.equal(afterLeave.rooms.find((room) => room.roomCode === roomCode).playerCount, 2);
     assert.equal(host.socket.readyState, WebSocket.OPEN);
-    assert.equal(playerTwo.socket.readyState, WebSocket.OPEN);
+    assert.equal(resumedPlayerTwo.socket.readyState, WebSocket.OPEN);
 
-    console.log("Railway room and spectator integration test passed");
+    console.log("Railway room, spectator, and reconnect integration test passed");
   } finally {
     clients.forEach((client) => client.close());
     child.kill();

@@ -9,6 +9,7 @@ const port = Number(process.env.PORT) || 4173;
 const host = process.env.HOST || "0.0.0.0";
 const rooms = new Map();
 const SPECTATOR_CAPACITY = 2;
+const RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RECONNECT_GRACE_MS) || 5 * 60 * 1000);
 const PLAYER_ID_ALLOWED = /^[A-Za-z0-9_\-\.\!\?@#\+=\u3400-\u9fff]+$/;
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
@@ -45,6 +46,17 @@ function makeSessionToken() {
   return crypto.randomBytes(24).toString("base64url");
 }
 
+function sessionTokenMatches(providedValue, expectedValue) {
+  const provided = typeof providedValue === "string" ? Buffer.from(providedValue) : Buffer.alloc(0);
+  const expected = typeof expectedValue === "string" ? Buffer.from(expectedValue) : Buffer.alloc(0);
+  return provided.length === expected.length && provided.length > 0 && crypto.timingSafeEqual(provided, expected);
+}
+
+function playerIdForSessionToken(room, sessionToken) {
+  if (!room) return null;
+  return [1, 2].find((playerId) => sessionTokenMatches(sessionToken, room.tokens[playerId])) || null;
+}
+
 function roomSockets(room) {
   return [room.players[1], room.players[2], ...Object.values(room.spectators || {})].filter(Boolean);
 }
@@ -59,26 +71,36 @@ function connectedPlayerCount(room) {
   return [room.players[1], room.players[2]].filter(Boolean).length;
 }
 
+function occupiedPlayerCount(room) {
+  return [1, 2].filter((playerId) => Boolean(room.tokens[playerId])).length;
+}
+
+function availablePlayerId(room) {
+  return [1, 2].find((playerId) => !room.tokens[playerId]) || null;
+}
+
 function spectatorCount(room) {
   return Object.values(room.spectators || {}).filter(Boolean).length;
 }
 
 function publicRoomState(room) {
-  const playerCount = connectedPlayerCount(room);
+  const playerCount = occupiedPlayerCount(room);
+  const connectedPlayers = connectedPlayerCount(room);
   const watchers = spectatorCount(room);
   return {
     roomCode: room.code,
     boardSize: room.boardSize,
     names: room.names,
     playerCount,
+    connectedPlayerCount: connectedPlayers,
     playerCapacity: 2,
     spectatorCount: watchers,
     spectatorCapacity: SPECTATOR_CAPACITY,
     started: room.started,
     ended: Boolean(room.ended),
     createdAt: room.createdAt,
-    canJoin: !room.started && playerCount < 2,
-    canSpectate: !room.ended && (room.started || playerCount === 2) && watchers < SPECTATOR_CAPACITY
+    canJoin: !room.started && Boolean(availablePlayerId(room)),
+    canSpectate: !room.ended && (room.started || connectedPlayers === 2) && watchers < SPECTATOR_CAPACITY
   };
 }
 
@@ -97,6 +119,57 @@ function broadcastRoomList() {
   websocket.clients.forEach((socket) => send(socket, message));
 }
 
+function clearDisconnectTimer(room, playerId) {
+  if (room.disconnectTimers?.[playerId]) clearTimeout(room.disconnectTimers[playerId]);
+  if (room.disconnectTimers) room.disconnectTimers[playerId] = null;
+}
+
+function releasePlayerSeat(room, playerId) {
+  clearDisconnectTimer(room, playerId);
+  room.players[playerId] = null;
+  room.names[playerId] = null;
+  room.tokens[playerId] = null;
+  room.decks[playerId] = null;
+  room.ready[playerId] = false;
+  room.disconnectedAt[playerId] = null;
+}
+
+function deleteRoomIfEmpty(room) {
+  if (occupiedPlayerCount(room) > 0 || room.started) return false;
+  Object.values(room.spectators || {}).forEach((watcher) => {
+    if (watcher) send(watcher, { type: "spectator-session-ended", message: "玩家已离开，房间已关闭。" });
+    watcher?.close();
+  });
+  rooms.delete(room.code);
+  return true;
+}
+
+function expireDisconnectedPlayer(room, playerId) {
+  if (!rooms.has(room.code) || room.players[playerId] || !room.disconnectedAt[playerId]) return;
+  clearDisconnectTimer(room, playerId);
+  if (!room.started) {
+    releasePlayerSeat(room, playerId);
+    broadcast(room, { type: "room-state", state: roomState(room) });
+    deleteRoomIfEmpty(room);
+    broadcastRoomList();
+    return;
+  }
+  const winnerId = playerId === 1 ? 2 : 1;
+  const winner = room.players[winnerId];
+  if (winner) send(winner, { type: "auto-surrender", loserId: playerId, message: "对方断线超过 5 分钟，视为自动认输。" });
+  Object.values(room.spectators || {}).forEach((watcher) => {
+    if (watcher) send(watcher, { type: "spectator-session-ended", winnerId, message: "有玩家断线超时，本次观战已结束。" });
+  });
+  roomSockets(room).forEach((peer) => peer?.close());
+  rooms.delete(room.code);
+  broadcastRoomList();
+}
+
+function scheduleDisconnectExpiry(room, playerId) {
+  clearDisconnectTimer(room, playerId);
+  room.disconnectTimers[playerId] = setTimeout(() => expireDisconnectedPlayer(room, playerId), RECONNECT_GRACE_MS);
+}
+
 function removeSocket(socket) {
   if (socket.roomRemovalHandled) return;
   socket.roomRemovalHandled = true;
@@ -111,34 +184,18 @@ function removeSocket(socket) {
     broadcastRoomList();
     return;
   }
-  if (room.players[socket.playerId] === socket) room.players[socket.playerId] = null;
-  if (!room.started) {
-    room.ready[socket.playerId] = false;
-    room.decks[socket.playerId] = null;
-    broadcast(room, { type: "room-state", state: roomState(room) }, socket);
+  const playerId = Number(socket.playerId);
+  if (![1, 2].includes(playerId) || room.players[playerId] !== socket) return;
+  room.players[playerId] = null;
+  if (socket.voluntaryLeave && !room.started) {
+    releasePlayerSeat(room, playerId);
   } else {
-    room.disconnectedAt[socket.playerId] = Date.now();
-    if (!room.disconnectTimer) {
-      room.disconnectTimer = setTimeout(() => {
-        if (!rooms.has(room.code)) return;
-        const firstDrop = Math.min(...Object.values(room.disconnectedAt).filter(Boolean));
-        const loserId = room.disconnectedAt[1] === firstDrop ? 1 : 2;
-        const winner = room.players[loserId === 1 ? 2 : 1];
-        if (winner) send(winner, { type: "auto-surrender", loserId, message: "对方断线超过 5 分钟，视为自动认输。" });
-        Object.values(room.spectators || {}).forEach((watcher) => {
-          if (watcher) send(watcher, { type: "spectator-session-ended", winnerId: loserId === 1 ? 2 : 1, message: "有玩家断线超时，本次观战已结束。" });
-        });
-        roomSockets(room).forEach((peer) => peer?.close());
-        rooms.delete(room.code);
-        broadcastRoomList();
-      }, 5 * 60 * 1000);
-    }
+    room.disconnectedAt[playerId] = Date.now();
+    scheduleDisconnectExpiry(room, playerId);
   }
-  broadcast(room, { type: "peer-left", playerId: socket.playerId }, socket);
-  if (!room.players[1] && !room.players[2] && !room.started) {
-    Object.values(room.spectators || {}).forEach((watcher) => watcher?.close());
-    rooms.delete(socket.roomCode);
-  }
+  broadcast(room, { type: "peer-left", playerId, reconnectDeadline: room.disconnectedAt[playerId] ? room.disconnectedAt[playerId] + RECONNECT_GRACE_MS : null }, socket);
+  broadcast(room, { type: "room-state", state: roomState(room) }, socket);
+  deleteRoomIfEmpty(room);
   broadcastRoomList();
 }
 
@@ -148,7 +205,8 @@ function roomState(room) {
     boardSize: room.boardSize,
     names: room.names,
     ready: room.ready,
-    hasPlayers: { 1: Boolean(room.players[1]), 2: Boolean(room.players[2]) },
+    hasPlayers: { 1: Boolean(room.tokens[1]), 2: Boolean(room.tokens[2]) },
+    connectedPlayers: { 1: Boolean(room.players[1]), 2: Boolean(room.players[2]) },
     spectatorNames: room.spectatorNames,
     spectatorCount: spectatorCount(room),
     spectatorCapacity: SPECTATOR_CAPACITY,
@@ -222,7 +280,9 @@ function validateActionRequest(room, playerId, action) {
   const card = cards.find((entry) => entry.uid === action.cardUid && Number(entry.ownerId) === playerId);
   if (!card || !validCell(action.source, size) || !validCell(action.target, size)
     || card.row !== action.source.row || card.col !== action.source.col) return "移动卡牌或位置无效。";
-  if (Number(game.actionsUsed) >= actionLimit && Number(card.freeActionTurn) !== Number(game.turn)) return "本回合行动次数已用尽。";
+  if (Number(game.actionsUsed) >= actionLimit
+    && Number(card.freeActionTurn) !== Number(game.turn)
+    && card.freeMove !== true) return "本回合行动次数已用尽。";
   if (action.source.row === action.target.row && action.source.col === action.target.col) return "移动目标必须不同于原位置。";
   const targetCard = cards.find((entry) => entry.row === action.target.row && entry.col === action.target.col);
   if (targetCard?.uid === card.uid) return "不能与自身交战。";
@@ -276,7 +336,7 @@ websocket.on("connection", (socket) => {
       const roomCode = makeRoomCode();
       const boardSize = [3, 4, 5].includes(Number(message.boardSize)) ? Number(message.boardSize) : 4;
       const sessionToken = makeSessionToken();
-      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, ended: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimer: null, players: { 1: socket, 2: null }, spectators: { 1: null, 2: null }, spectatorNames: { 1: null, 2: null } };
+      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, ended: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimers: { 1: null, 2: null }, players: { 1: socket, 2: null }, spectators: { 1: null, 2: null }, spectatorNames: { 1: null, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
@@ -290,8 +350,8 @@ websocket.on("connection", (socket) => {
     if (message.type === "join-room") {
       const roomCode = String(message.roomCode || "").trim().toUpperCase();
       const room = rooms.get(roomCode);
-      const joinId = room && !room.players[1] ? 1 : 2;
-      if (!room || room.started || room.players[joinId]) return send(socket, { type: "error", message: "房间不存在、已开始或玩家席已满。" });
+      const joinId = room && availablePlayerId(room);
+      if (!room || room.started || !joinId) return send(socket, { type: "error", message: "房间不存在、已开始或玩家席已满。" });
       if (socket.roomCode) return;
       if (!isValidPlayerName(message.playerName)) return send(socket, { type: "error", message: "玩家 ID 格式无效或超过 12 个字符单位。" });
       const playerName = normalizePlayerName(message.playerName);
@@ -336,24 +396,29 @@ websocket.on("connection", (socket) => {
     if (message.type === "resume-room") {
       const roomCode = String(message.roomCode || "").trim().toUpperCase();
       const room = rooms.get(roomCode);
-      const playerName = normalizePlayerName(message.playerName);
-      const playerId = room && room.names[1] === playerName ? 1 : room && room.names[2] === playerName ? 2 : null;
-      const providedToken = typeof message.sessionToken === "string" ? Buffer.from(message.sessionToken) : Buffer.alloc(0);
-      const expectedToken = Buffer.from((room && playerId && room.tokens[playerId]) || "");
-      const tokenMatches = providedToken.length === expectedToken.length && providedToken.length > 0 && crypto.timingSafeEqual(providedToken, expectedToken);
-      if (!room || !playerId || !tokenMatches || room.players[playerId] || !room.disconnectedAt[playerId] || Date.now() - room.disconnectedAt[playerId] > 5 * 60 * 1000) return send(socket, { type: "resume-failed", message: "原房间不存在、会话已失效或已超过重连时间。" });
+      const playerId = playerIdForSessionToken(room, message.sessionToken);
+      if (!room || !playerId || room.ended) return send(socket, { type: "resume-failed", message: "原房间不存在、会话已失效或已超过重连时间。" });
+      if (!room.players[playerId] && room.disconnectedAt[playerId] && Date.now() - room.disconnectedAt[playerId] > RECONNECT_GRACE_MS) {
+        expireDisconnectedPlayer(room, playerId);
+        return send(socket, { type: "resume-failed", message: "原房间不存在、会话已失效或已超过重连时间。" });
+      }
+      const previousSocket = room.players[playerId];
+      if (previousSocket && previousSocket !== socket) {
+        previousSocket.roomRemovalHandled = true;
+        send(previousSocket, { type: "session-replaced", message: "本房间已在另一个页面恢复。" });
+        previousSocket.close();
+      }
+      clearDisconnectTimer(room, playerId);
       room.players[playerId] = socket;
       room.disconnectedAt[playerId] = null;
+      room.tokens[playerId] = makeSessionToken();
       socket.roomCode = roomCode;
       socket.playerId = playerId;
       socket.role = "player";
       socket.sessionToken = room.tokens[playerId];
-      if (room.players[1] && room.players[2] && room.disconnectTimer) {
-        clearTimeout(room.disconnectTimer);
-        room.disconnectTimer = null;
-      }
-      send(socket, { type: "room-resumed", roomCode, playerId, boardSize: room.boardSize, started: room.started, state: stateForViewer(room.state, playerId), sessionToken: room.tokens[playerId] });
-      if (room.players[1] && room.players[2]) broadcast(room, { type: "peer-reconnected", playerId });
+      send(socket, { type: "room-resumed", roomCode, playerId, playerName: room.names[playerId], boardSize: room.boardSize, deckKey: room.decks[playerId], started: room.started, state: stateForViewer(room.state, playerId), roomState: roomState(room), sessionToken: room.tokens[playerId] });
+      broadcast(room, { type: "peer-reconnected", playerId }, socket);
+      broadcast(room, { type: "room-state", state: roomState(room) }, socket);
       broadcastRoomList();
       return;
     }
@@ -411,6 +476,7 @@ websocket.on("connection", (socket) => {
       return;
     }
     if (message.type === "leave-room") {
+      socket.voluntaryLeave = true;
       socket.close();
     }
   });

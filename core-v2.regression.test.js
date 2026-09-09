@@ -100,7 +100,7 @@ const legacyRuntimeDisplayRemoved = [legacyRuntimeGame.boardCards[0], legacyRunt
 const onlineRuntimeProbe = {
   ruleset: "core-v2",
   cardDataVersion: originalLibrary.version,
-  runtimeSchemaVersion: "runtime-display-effect-isolation-20260908",
+  runtimeSchemaVersion: "runtime-display-effect-isolation-20260909",
   boardCards: [{ id: "02101", name: "旧卡名", skill: "旧技能", effect: "旧描述", camp: "旧势力", rarity: "旧品质" }],
   players: []
 };

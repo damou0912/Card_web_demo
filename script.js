@@ -12,6 +12,9 @@ const BOARD_PULSE_STEP_GAP_MS = 140;
 const TURN_START_PULSE_VISIBLE_MS = 2200;
 const TURN_START_PULSE_FADE_MS = 320;
 const TURN_START_PULSE_STEP_GAP_MS = 220;
+const CARD_FLOW_VISIBLE_MS = 980;
+const CARD_FLOW_FADE_MS = 260;
+const CARD_FLOW_STEP_GAP_MS = 140;
 const POWER_CHANGE_VISIBLE_MS = 980;
 const POWER_CHANGE_FADE_MS = 300;
 let destructionAnimationSequence = 0;
@@ -21,7 +24,8 @@ const THEME_PRESETS = Object.freeze({
   moss: "苔原灰绿",
   mist: "雾蓝灰",
   dawn: "暖杏灰",
-  bamboo: "竹青淡绿"
+  bamboo: "竹青淡绿",
+  night: "夜间护眼"
 });
 
 const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots;
@@ -173,7 +177,8 @@ function makeCardTemplate(slot) {
 
 function cloneCard(template) {
   const id = String(template?.id || "");
-  const runtimeBaseAttack = getCardRuntimeDefinition(id)?.baseAttack;
+  const runtimeDefinition = getCardRuntimeDefinition(id);
+  const runtimeBaseAttack = runtimeDefinition?.baseAttack;
   const attack = Math.max(0, Number.isFinite(runtimeBaseAttack) ? runtimeBaseAttack : Number(template?.attack) || 0);
   return {
     id,
@@ -183,7 +188,10 @@ function cloneCard(template) {
     currentAttack: attack,
     buffCap: attack,
     movesTaken: 0,
-    hasPlaced: false
+    hasPlaced: false,
+    // Persist generic action capabilities so the online validator can apply
+    // the same effect flags without loading browser-only effect modules.
+    freeMove: Boolean(runtimeDefinition?.flags?.freeMove)
   };
 }
 
@@ -762,7 +770,9 @@ async function finishCombatAnimation(game, scene, boardCards, outcome = null) {
 }
 
 function queueBoardAnimation(game, event) {
-  if (!game || !event || typeof event.row !== "number" || typeof event.col !== "number") {
+  const isBoardEvent = typeof event?.row === "number" && typeof event?.col === "number";
+  const isCardFlowEvent = ["draw", "discard", "draw-failed"].includes(event?.kind);
+  if (!game || !event || (!isBoardEvent && !isCardFlowEvent)) {
     return null;
   }
   if (!Array.isArray(game.pendingAnimations)) {
@@ -874,6 +884,17 @@ function showSkillFlowPrompt(game, prompt) {
   }
 }
 
+function showCardFlowPrompt(game, prompt, kind) {
+  if (!prompt) return;
+  if (state.game && state.game.turn === game?.turn) {
+    state.game.flowPrompt = prompt;
+  }
+  if (ui.statusMessage) ui.statusMessage.textContent = prompt;
+  if (ui.statusSubtext) {
+    ui.statusSubtext.textContent = kind === "discard" ? "弃牌效果正在展示。" : "抽卡效果正在展示。";
+  }
+}
+
 function queueSkillAnimation(game, card, detail = null, tone = "skill") {
   if (!card) {
     return null;
@@ -893,6 +914,28 @@ function queueSkillAnimation(game, card, detail = null, tone = "skill") {
     flowPrompt: formatSkillFlowPrompt(game, card, detail),
     cardUid: card.uid,
     ...profile
+  });
+}
+
+function queueCardFlowAnimation(game, kind, player, card = null, options = {}) {
+  if (!game || !kind || !player) return null;
+  const display = card ? getCardDisplay(card) : null;
+  const isDiscard = kind === "discard";
+  const isFailed = kind === "draw-failed";
+  const reason = options.reason === "hand-full" ? "手牌已满" : options.reason === "deck-empty" ? "牌库已空" : options.reason;
+  return queueBoardAnimation(game, {
+    kind,
+    ownerId: player.id || 1,
+    playerName: player.name || `玩家 ${player.id || 1}`,
+    cardName: display?.name || (isFailed ? "未抽到卡牌" : "卡牌"),
+    cardSkill: display?.skill || "",
+    cardAttack: card ? Number(card.currentAttack ?? card.attack) || 0 : null,
+    sourceLabel: options.sourceLabel || (isDiscard ? "手牌" : "牌库"),
+    destinationLabel: options.destinationLabel || (isDiscard ? "弃牌" : "手牌"),
+    reason,
+    flowPrompt: options.flowPrompt || (isFailed
+      ? `${player.name || `玩家 ${player.id || 1}`} 抽卡未成功：${reason || "当前条件不满足"}。`
+      : `${player.name || `玩家 ${player.id || 1}`} ${isDiscard ? "弃置" : "抽取"} ${display?.name || "1 张卡牌"}。`)
   });
 }
 
@@ -926,6 +969,38 @@ function createBoardPulse(event) {
   return pulse;
 }
 
+function createCardFlowEffect(event) {
+  const isDiscard = event.kind === "discard";
+  const isFailed = event.kind === "draw-failed";
+  const actionLabel = isFailed ? "抽卡未成功" : isDiscard ? "弃牌" : "抽卡";
+  const sourceLabel = event.sourceLabel || (isDiscard ? "手牌" : "牌库");
+  const destinationLabel = event.destinationLabel || (isDiscard ? "弃牌" : "手牌");
+  const cardName = escapeAnimationText(event.cardName || (isFailed ? "未抽到卡牌" : "卡牌"));
+  const cardSkill = event.cardSkill ? escapeAnimationText(event.cardSkill) : "";
+  const hasCardAttack = event.cardAttack !== null && event.cardAttack !== undefined && Number.isFinite(Number(event.cardAttack));
+  const cardAttack = hasCardAttack ? `战力 ${Number(event.cardAttack)}` : "";
+  const reason = event.reason ? `<span class="card-flow-reason">${escapeAnimationText(event.reason)}</span>` : "";
+  const effect = document.createElement("div");
+  effect.className = `card-flow card-flow-${event.kind} player${event.ownerId || 1}`;
+  effect.innerHTML = `
+    <span class="card-flow-burst"></span>
+    <span class="card-flow-route" aria-hidden="true"><span></span><b>${isDiscard ? "↓" : "↑"}</b></span>
+    <span class="card-flow-card" aria-hidden="true">
+      <span class="card-flow-card-top">${isFailed ? "!" : isDiscard ? "弃" : "抽"}</span>
+      <strong>${cardName}</strong>
+      ${cardSkill ? `<small>${cardSkill}</small>` : ""}
+      ${cardAttack ? `<em>${cardAttack}</em>` : ""}
+    </span>
+    <span class="card-flow-copy">
+      <span class="card-flow-label">${actionLabel}</span>
+      <strong>${escapeAnimationText(event.playerName || "当前玩家")}</strong>
+      <span class="card-flow-path"><b>${escapeAnimationText(sourceLabel)}</b><i>→</i><b>${escapeAnimationText(destinationLabel)}</b></span>
+      ${reason}
+    </span>
+  `;
+  return effect;
+}
+
 async function playBoardAnimations(game, events) {
   if (!Array.isArray(events) || events.length === 0) {
     return;
@@ -933,6 +1008,19 @@ async function playBoardAnimations(game, events) {
   const stageRect = ui.boardStage.getBoundingClientRect();
   for (const event of events) {
     if (event.kind === "destroy" && game.consumedDestructionAnimationIds?.has(event.destruction?.id)) {
+      continue;
+    }
+    if (["draw", "discard", "draw-failed"].includes(event.kind)) {
+      showCardFlowPrompt(game, event.flowPrompt || `${event.playerName || "当前玩家"}${event.kind === "discard" ? "弃牌" : "抽卡"}。`, event.kind);
+      const flow = createCardFlowEffect(event);
+      ui.boardAnimationLayer.appendChild(flow);
+      await nextFrame();
+      flow.classList.add("visible");
+      await wait(CARD_FLOW_VISIBLE_MS);
+      flow.classList.add("fade");
+      await wait(CARD_FLOW_FADE_MS);
+      flow.remove();
+      await wait(CARD_FLOW_STEP_GAP_MS);
       continue;
     }
     const cell = getBoardCellElement(event.row, event.col);

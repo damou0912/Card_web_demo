@@ -378,6 +378,14 @@
     return game?.players?.find((player) => player.id === ownerId) || coreEliteAiPlayer(game);
   }
 
+  function coreHandLimitForPlayer(game, player) {
+    return coreIsPveChallenge(game)
+      && player?.id === coreEliteAiTraitOwner(game)?.id
+      && coreEliteAiHasTrait(game, "1008")
+      ? 1
+      : HAND_LIMIT;
+  }
+
   function coreEliteAiTraitIdsForGame(game) {
     const ids = game?.eliteAiEffectId && (!Array.isArray(game?.eliteAiEffectIds) || !game.eliteAiEffectIds.length || game.eliteAiEffectId !== game.eliteAiEffectIds[0])
       ? [game.eliteAiEffectId]
@@ -388,7 +396,7 @@
   function coreEliteAiTraitContext(game, event, payload, log) {
     const ai = coreEliteAiTraitOwner(game);
     const operations = {
-      handLimit: HAND_LIMIT,
+      handLimit: coreHandLimitForPlayer(game, ai),
       adjust: (card, amount, temporary = false, isolated = true) => {
         const previous = state.game;
         state.game = game;
@@ -499,7 +507,7 @@
   }
 
   function coreDrawEliteReinforcement(game, ai, log = []) {
-    if (!ai || ai.hand.length >= HAND_LIMIT || !coreEliteAiHasTrait(game, "1005")) return { status: "not-created" };
+    if (!ai || ai.hand.length >= coreHandLimitForPlayer(game, ai) || !coreEliteAiHasTrait(game, "1005")) return { status: "not-created" };
     const card = coreCreateEliteReinforcementCard(ai);
     ai.hand.push(card);
     log.push(`精英特性【援军】使 ${ai.name || "词条持有者"} 抽出 1 张战力为 1 的援兵。`);
@@ -882,7 +890,9 @@
     }
 
     game.players.forEach((player) => {
-      const openingHand = player.id === firstPlayerId ? 2 : 3;
+      const openingHand = coreHandLimitForPlayer(game, player) === 1
+        ? 1
+        : player.id === firstPlayerId ? 2 : 3;
       for (let index = 0; index < openingHand; index += 1) {
         drawOneCard(game, player);
       }
@@ -1184,7 +1194,9 @@
   }
 
   function coreDrawOneCard(game, player, log = []) {
-    const result = drawOneCard(game, player);
+    const result = player?.hand?.length >= coreHandLimitForPlayer(game, player)
+      ? { status: "hand-full" }
+      : drawOneCard(game, player);
     if (result.status === "drawn") {
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player, drawnCard: result.card, log });
     } else {
@@ -3062,7 +3074,7 @@
   // The test runner loads a separate suite and accesses only this stable API.
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
     cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
-    coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreMaintainEliteAiHand,
+    coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,

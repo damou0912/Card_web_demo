@@ -65,6 +65,40 @@ const originalLibrary = context.CARD_LIBRARY;
 ["script.js", "core-v2.js", "core-v2.test-suite.js"].forEach((file) => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file });
 });
+const expectedChaosRarities = { "普通": 7, "稀有": 5, "史诗": 3, "传说": 1, "特殊": 4 };
+const chaosDeck = context.__CARD_DEMO_DEBUG__.buildCampDeck("混沌");
+const chaosRarityCounts = chaosDeck.reduce((counts, card) => {
+  const rarity = context.__CARD_DEMO_DEBUG__.getCardDisplay(card).rarity;
+  counts[rarity] = (counts[rarity] || 0) + 1;
+  return counts;
+}, {});
+const chaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pvp", { 1: "混沌", 2: "混沌" }, 5, 1);
+const nextChaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pvp", { 1: "混沌", 2: "混沌" }, 5, 1);
+const firstChaosCatalog = chaosGame.players[0].deckCatalog;
+const secondChaosCatalog = chaosGame.players[1].deckCatalog;
+const firstGameCards = [...firstChaosCatalog, ...secondChaosCatalog];
+const nextGameCards = nextChaosGame.players.flatMap((player) => player.deckCatalog);
+const originalRandom = context.Math.random;
+let aiDeckAtUpperRandomBound = null;
+try {
+  context.Math.random = () => 0.999999;
+  aiDeckAtUpperRandomBound = context.__CARD_DEMO_DEBUG__.getRandomDeckKey();
+} finally {
+  context.Math.random = originalRandom;
+}
+const chaosDeckValidation = {
+  availableAsDeckOption: context.__CARD_DEMO_DEBUG__.getAvailableDeckKeys().includes("混沌"),
+  excludedFromAiRandomPool: aiDeckAtUpperRandomBound === "三国~吴",
+  hasTwentyCards: chaosDeck.length === 20,
+  hasExactRarityCounts: Object.entries(expectedChaosRarities).every(([rarity, count]) => chaosRarityCounts[rarity] === count),
+  usesOnlyCatalogCards: chaosDeck.every((card) => originalLibrary.cardSlots.some((slot) => String(slot.id) === String(card.id))),
+  samplesWithoutReplacement: new Set(chaosDeck.map((card) => card.id)).size === chaosDeck.length,
+  playersHaveSeparateCatalogs: firstChaosCatalog !== secondChaosCatalog
+    && firstChaosCatalog.every((card) => !secondChaosCatalog.includes(card)),
+  playersHaveIndependentUids: new Set(firstGameCards.map((card) => card.uid)).size === firstGameCards.length,
+  recreatingGameBuildsNewCards: firstGameCards.every((card) => !nextGameCards.includes(card))
+};
+const chaosDeckPassed = Object.values(chaosDeckValidation).every(Boolean);
 const legacyContext = { window: null, CARD_INFO_SCHEMA_VERSION: "legacy", CARD_INFO: [{ id: "old-card", attack: 99 }] };
 legacyContext.window = legacyContext;
 vm.createContext(legacyContext);
@@ -145,8 +179,8 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected) {
-  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
+if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== 60 || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== 60 || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed) {
+  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);
@@ -159,4 +193,5 @@ if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-202609
   console.log(`Runtime/display boundary: ${runtimeDisplayFieldsAbsent && displayUsesTableById && legacyRuntimeDisplayRemoved && onlineRuntimeDisplayRemoved ? "passed" : "failed"}`);
   console.log(`Stale online runtime rejection: ${staleOnlineRuntimeRejected ? "passed" : "failed"}`);
   console.log(`Legacy data isolation: ${legacyLibraryReplaced && legacySchemaRejected ? "passed" : "failed"}`);
+  console.log(`Chaos deck generation: ${Object.keys(chaosDeckValidation).length}/${Object.keys(chaosDeckValidation).length}`);
 }

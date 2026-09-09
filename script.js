@@ -32,6 +32,14 @@ const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots;
 if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908" || !Array.isArray(GAME_CARD_SLOT_TEMPLATES)) {
   throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
 }
+const CHAOS_DECK_KEY = "混沌";
+const CHAOS_DECK_RARITY_COUNTS = Object.freeze({
+  "普通": 7,
+  "稀有": 5,
+  "史诗": 3,
+  "传说": 1,
+  "特殊": 4
+});
 const GAME_CARD_DISPLAY_BY_ID = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
 const GUARD_CARD_DISPLAY = Object.freeze({
   name: "守军", camp: "无势力", rarity: "普通", skill: "无",
@@ -196,6 +204,16 @@ function cloneCard(template) {
 }
 
 function buildCampDeck(campKey) {
+  if (campKey === CHAOS_DECK_KEY) {
+    const selectedSlots = Object.entries(CHAOS_DECK_RARITY_COUNTS).flatMap(([rarity, count]) => {
+      const rarityPool = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.rarity === rarity);
+      if (rarityPool.length < count) {
+        throw new Error(`混沌卡组无法生成：${rarity}卡牌需要 ${count} 张，当前仅有 ${rarityPool.length} 张。`);
+      }
+      return shuffle(rarityPool).slice(0, count);
+    });
+    return selectedSlots.map((slot) => cloneCard(makeCardTemplate(slot)));
+  }
   const directCards = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.camp === campKey);
   return directCards.map((slot) => cloneCard(makeCardTemplate(slot)));
 }
@@ -379,11 +397,11 @@ function closeThemeMenu() {
 }
 
 function getAvailableDeckKeys() {
-  return [...new Set(GAME_CARD_SLOT_TEMPLATES.map((slot) => slot.camp).filter(Boolean))];
+  return [...new Set(GAME_CARD_SLOT_TEMPLATES.map((slot) => slot.camp).filter(Boolean)), CHAOS_DECK_KEY];
 }
 
 function getRandomDeckKey() {
-  const decks = getAvailableDeckKeys();
+  const decks = getAvailableDeckKeys().filter((deckKey) => deckKey !== CHAOS_DECK_KEY);
   return decks.length ? decks[randomInt(0, decks.length - 1)] : null;
 }
 
@@ -1333,7 +1351,8 @@ function bindEvents() {
 
 window.__CARD_DEMO_DEBUG__ = {
   state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
-  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack, applyTheme
+  getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack,
+  getAvailableDeckKeys, getRandomDeckKey, applyTheme
 };
 window.resetToMenu = resetToMenu;
 window.leaveOnlineSession = leaveOnlineSession;

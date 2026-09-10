@@ -544,8 +544,8 @@ function summarizeDeck(deckCatalog, deckKey) {
 function showResult() {
   renderResult(state.game);
   const game = state.game;
-  const winnerId = game?.winner?.id;
-  const shouldShowReward = game?.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) < 12;
+  const winnerId = game?.winner?.playerId;
+  const shouldShowReward = game?.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) % 3 === 0 && Number(game.challengeLevel) < 12;
   if (shouldShowReward) {
     const ownedTraitIds = state.challengePlayerTraitIds || [];
     const rewardChoices = window.corePickChallengeRewardTraits?.(ownedTraitIds, 3) || [];

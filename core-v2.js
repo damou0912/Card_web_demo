@@ -3501,6 +3501,18 @@
         }
       });
     });
+    // 添加跳过按钮事件处理 - 随机选择一个
+    const skipBtn = modal.querySelector("#challenge-reward-skip");
+    if (skipBtn) {
+      skipBtn.addEventListener("click", () => {
+        if (choices.length > 0) {
+          const randomIndex = randomInt(0, choices.length - 1);
+          if (typeof window.selectChallengeReward === "function") {
+            window.selectChallengeReward(randomIndex);
+          }
+        }
+      });
+    }
   };
   window.selectChallengeReward = (choiceIndex) => {
     const choices = state.pendingChallengeRewardChoices || [];

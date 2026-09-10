@@ -93,7 +93,11 @@
     }),
     "2005": Object.freeze({
       onCardPlaced(context) { if (context.player?.id !== own(context).id && context.card) context.operations.adjust(context.card, 1); },
-      onTurnStart(context) { enemies(context).forEach((card) => context.operations.adjust(card, -1)); }
+      onTurnStart(context) {
+        context.boardCards
+          .filter((card) => card.ownerId !== own(context).id)
+          .forEach((card) => context.operations.adjust(card, -1));
+      }
     }),
     "2006": Object.freeze({
       onCardDrawn(context) {

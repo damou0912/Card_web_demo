@@ -2193,17 +2193,205 @@
     return shortlist[randomInt(0, shortlist.length - 1)].action;
   }
 
+  function coreCheckAiSurrender(game, player) {
+    if (!game || !player) return false;
+    const handEmpty = player.hand.length === 0;
+    const deckEmpty = player.drawPile.length === 0;
+    const boardEmpty = !game.boardCards.some((card) => card.ownerId === player.id && !card.isGuard);
+    return handEmpty && deckEmpty && boardEmpty;
+  }
+
+  function coreCalculatePositionAdvantage(game, player) {
+    const control = coreControlMap(game).counts;
+    const ownControl = control[player.id] || 0;
+    const enemyControl = control[otherPlayerId(player.id)] || 0;
+    const ownPower = game.boardCards
+      .filter((card) => card.ownerId === player.id && !card.isGuard)
+      .reduce((sum, card) => sum + (Number(card.currentAttack ?? card.attack) || 0), 0);
+    const enemyPower = game.boardCards
+      .filter((card) => card.ownerId !== player.id && !card.isGuard)
+      .reduce((sum, card) => sum + (Number(card.currentAttack ?? card.attack) || 0), 0);
+    return {
+      controlDiff: ownControl - enemyControl,
+      powerDiff: ownPower - enemyPower,
+      totalAdvantage: (ownControl - enemyControl) * 10 + (ownPower - enemyPower)
+    };
+  }
+
+  function coreEvaluateCardEffectRisk(game, player, card, isPlacement = false) {
+    const definition = coreCardEffectDefinition(card);
+    if (!definition) return 0;
+
+    let riskScore = 0;
+
+    if (isPlacement) {
+      if (definition.onPlace) {
+        if (coreCardEffectHasFlag(card, "hasDangerousEffect")) riskScore -= 5;
+        if (coreCardEffectHasFlag(card, "needsSetup")) riskScore -= 3;
+      }
+    }
+
+    if (definition.onCombatResolved) {
+      if (coreCardEffectHasFlag(card, "hasDangerousEffect")) riskScore -= 4;
+    }
+
+    if (definition.onOwnCardAttackIncreased || definition.onOwnCardAttackDecreased) {
+      if (coreCardEffectHasFlag(card, "buffsAllies")) riskScore += 2;
+    }
+
+    return riskScore;
+  }
+
+  function coreSimulateActionOutcome(game, player, action) {
+    const before = coreCalculatePositionAdvantage(game, player);
+    const enemy = otherPlayerId(player.id);
+
+    if (action.type === "place") {
+      const cell = action.target;
+      const card = player.hand.find((c) => c.uid === action.cardUid);
+      if (!card) return null;
+
+      const cardAttack = Number(card.currentAttack ?? card.attack) || 0;
+      const neighbors = getOrthogonalNeighbors(cell.row, cell.col)
+        .filter((c) => coreIsInsideBoard(c.row, c.col, game))
+        .map((c) => getBoardCardAt(game, c.row, c.col))
+        .filter(Boolean);
+
+      let powerChange = cardAttack;
+      let controlChange = 1;
+      let effectRisk = coreEvaluateCardEffectRisk(game, player, card, true);
+
+      for (const neighbor of neighbors) {
+        if (neighbor.ownerId === player.id) {
+          continue;
+        }
+        const defenderAttack = Number(neighbor.currentAttack ?? neighbor.attack) || 0;
+        if (cardAttack > defenderAttack) {
+          powerChange += defenderAttack;
+          controlChange += 1;
+
+          const defenderDef = coreCardEffectDefinition(neighbor);
+          if (defenderDef?.onCombatResolved && coreCardEffectHasFlag(neighbor, "retaliate")) {
+            effectRisk -= 3;
+          }
+        } else if (cardAttack === defenderAttack) {
+          powerChange -= cardAttack;
+        } else {
+          powerChange -= cardAttack;
+          if (coreCardEffectHasFlag(neighbor, "retaliate")) {
+            effectRisk -= 4;
+          }
+        }
+      }
+
+      return {
+        controlDiff: before.controlDiff + controlChange,
+        powerDiff: before.powerDiff + powerChange,
+        totalAdvantage: before.totalAdvantage + controlChange * 10 + powerChange + effectRisk
+      };
+    } else if (action.type === "move") {
+      const card = game.boardCards.find((c) => c.uid === action.cardUid);
+      if (!card || card.ownerId !== player.id) return null;
+
+      const targetCell = action.target;
+      const targetCard = getBoardCardAt(game, targetCell.row, targetCell.col);
+
+      if (!targetCard) {
+        const moveRisk = coreEvaluateCardEffectRisk(game, player, card, false);
+        return {
+          controlDiff: before.controlDiff,
+          powerDiff: before.powerDiff,
+          totalAdvantage: before.totalAdvantage + moveRisk
+        };
+      }
+
+      if (targetCard.ownerId === player.id) {
+        return null;
+      }
+
+      const attackerAttack = Number(card.currentAttack ?? card.attack) || 0;
+      const defenderAttack = Number(targetCard.currentAttack ?? targetCard.attack) || 0;
+
+      let powerChange = 0;
+      let controlChange = 0;
+      let effectRisk = 0;
+
+      const cardDef = coreCardEffectDefinition(card);
+      const targetDef = coreCardEffectDefinition(targetCard);
+
+      if (attackerAttack > defenderAttack) {
+        powerChange = defenderAttack;
+        controlChange = 1;
+
+        if (targetDef?.onCombatResolved && coreCardEffectHasFlag(targetCard, "retaliate")) {
+          effectRisk -= 2;
+        }
+      } else if (attackerAttack === defenderAttack) {
+        powerChange = -attackerAttack - defenderAttack;
+        controlChange = 0;
+
+        if (cardDef?.onCombatResolved && coreCardEffectHasFlag(card, "hasDangerousEffect")) {
+          effectRisk -= 3;
+        }
+      } else {
+        powerChange = -attackerAttack;
+        controlChange = 0;
+
+        if (coreCardEffectHasFlag(card, "avoidCombatWhenBehind")) {
+          effectRisk -= 5;
+        }
+
+        if (targetDef?.onCombatResolved && coreCardEffectHasFlag(targetCard, "retaliate")) {
+          effectRisk -= 4;
+        }
+      }
+
+      return {
+        controlDiff: before.controlDiff + controlChange,
+        powerDiff: before.powerDiff + powerChange,
+        totalAdvantage: before.totalAdvantage + controlChange * 10 + powerChange + effectRisk
+      };
+    }
+
+    return null;
+  }
+
+  function coreIsActionBeneficial(game, player, action) {
+    const after = coreSimulateActionOutcome(game, player, action);
+    if (!after) return true;
+
+    const before = coreCalculatePositionAdvantage(game, player);
+
+    if (before.totalAdvantage >= 0) {
+      return after.totalAdvantage >= before.totalAdvantage;
+    } else {
+      return after.totalAdvantage >= before.totalAdvantage;
+    }
+  }
+
   async function coreRunAiTurn(game) {
     const ai = corePlayer(game, game.activePlayerId);
     if (!game || game.winner || !ai?.isAI || game.isAnimating) {
       return;
     }
+
+    if (coreCheckAiSurrender(game, ai)) {
+      await coreSurrender(game, ai.id);
+      return;
+    }
+
     while (!game.winner && game.activePlayerId === ai.id && coreHasExecutableAction(game)) {
       const action = corePlanAiAction(game, ai);
       if (!action) {
         await coreEndTurn(game, false);
         return;
       }
+
+      if (!coreIsActionBeneficial(game, ai, action)) {
+        await coreEndTurn(game, false);
+        return;
+      }
+
       await coreResolveAction(game, action);
       await wait(420);
     }
@@ -3164,6 +3352,19 @@
     const pendingTraits = state.selectedMode === "pve-challenge" ? state.pendingChallengeTraitIds : null;
     state.game = coreCreateGame(state.selectedMode, state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, pendingTraits);
     state.pendingChallengeTraitIds = null;
+
+    // 首次进入PVE挑战模式第1关时显示词条选择
+    if (state.selectedMode === "pve-challenge" && state.challengeLevel === 1 && state.challengePlayerTraitIds.length === 0) {
+      const ownedTraitIds = [];
+      const rewardChoices = corePickChallengeRewardTraits(ownedTraitIds, 3);
+      if (rewardChoices.length) {
+        state.pendingChallengeRewardChoices = rewardChoices;
+        switchScreen("game");
+        window.setTimeout(() => window.showChallengeRewardSelection?.(rewardChoices), 500);
+        return;
+      }
+    }
+
     switchScreen("game");
     coreShowOpeningReveal(state.game);
   }
@@ -3250,7 +3451,8 @@
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
     coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
-    coreVictoryTarget, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
+    coreVictoryTarget, coreCheckAiSurrender, coreCalculatePositionAdvantage, coreEvaluateCardEffectRisk, coreSimulateActionOutcome, coreIsActionBeneficial,
+    CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
   });
   window.render = coreRender;
   window.renderBoard = coreRenderBoard;

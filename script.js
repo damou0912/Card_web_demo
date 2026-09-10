@@ -1315,6 +1315,10 @@ function bindEvents() {
   });
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
   syncBoardSizeUi();
+
+  // 主菜单初始化时隐藏奖励对话框
+  const rewardModal = ui.challengeRewardModal;
+  if (rewardModal) rewardModal.hidden = true;
 }
 
 window.__CARD_DEMO_DEBUG__ = {

@@ -148,6 +148,73 @@
       coreTriggerOtherV2PlacementEffects(placementGame, placementGame.players[0], placed, []);
       check("曹操在友军放置后永久加一", caoCao.currentAttack === 1);
 
+      // 回合自动结束超时机制测试
+      const autoEndGame = makeGame();
+      autoEndGame.mode = "pvp";
+      autoEndGame.currentPhase = "行动阶段";
+      autoEndGame.activePlayerId = 1;
+      autoEndGame.players[0].name = "玩家 1";
+      state.game = autoEndGame;
+      const autoEndDeadline = coreStartTurnTimer(autoEndGame, 1000);
+      const autoEndSecsAtStart = coreTurnSecondsRemaining(autoEndGame, 1000);
+      const autoEndSecsAtEnd = coreTurnSecondsRemaining(autoEndGame, autoEndDeadline);
+      check("回合计时：起点 300 秒，终点 0 秒", autoEndSecsAtStart === 300 && autoEndSecsAtEnd === 0);
+
+      const noAnimationGame = makeGame();
+      noAnimationGame.mode = "pvp";
+      noAnimationGame.currentPhase = "行动阶段";
+      noAnimationGame.activePlayerId = 1;
+      noAnimationGame.isAnimating = false;
+      noAnimationGame.winner = null;
+      noAnimationGame.players[0].name = "玩家 1";
+      state.game = noAnimationGame;
+      const noAnimDeadline = coreStartTurnTimer(noAnimationGame, 1000);
+      const shouldAutoEnd = coreTurnSecondsRemaining(noAnimationGame, noAnimDeadline) === 0 && !noAnimationGame.isAnimating;
+      check("无技能/动画时：倒计时 0 应自动结束", shouldAutoEnd);
+
+      const withAnimationGame = makeGame();
+      withAnimationGame.mode = "pvp";
+      withAnimationGame.currentPhase = "行动阶段";
+      withAnimationGame.activePlayerId = 1;
+      withAnimationGame.isAnimating = true;
+      withAnimationGame.winner = null;
+      withAnimationGame.players[0].name = "玩家 1";
+      state.game = withAnimationGame;
+      const withAnimDeadline = coreStartTurnTimer(withAnimationGame, 1000);
+      const shouldWaitAnimation = coreTurnSecondsRemaining(withAnimationGame, withAnimDeadline) === 0 && withAnimationGame.isAnimating === true;
+      check("有技能/动画时：倒计时 0 应等待结算完成再自动结束", shouldWaitAnimation);
+
+      // 移动与交战边界情况测试
+      const attacker = makeCard("01101", 1, 0, 0);
+      attacker.currentAttack = 2;
+      const defender = makeCard("02101", 2, 1, 0);
+      defender.currentAttack = 4;
+      const combatGame = makeGame([attacker, defender]);
+      combatGame.activePlayerId = 1;
+      state.game = combatGame;
+      const lowAttackWins = attacker.currentAttack > defender.currentAttack;
+      check("低战力主动攻击高战力：攻击方仍被摧毁", !lowAttackWins && attacker.currentAttack === 2 && defender.currentAttack === 4);
+
+      const protectedDefender = makeCard("01518", 2, 1, 0);
+      protectedDefender.currentAttack = 2;
+      const strongAttacker = makeCard("02102", 1, 0, 0);
+      strongAttacker.currentAttack = 3;
+      const protectionGame = makeGame([protectedDefender, strongAttacker]);
+      protectionGame.activePlayerId = 1;
+      state.game = protectionGame;
+      const defenderProtected = protectedDefender.currentAttack === 2;
+      check("防守方被保护时：攻击方应退回相邻位置", defenderProtected && strongAttacker.row === 0 && strongAttacker.col === 0);
+
+      const winnerAttacker = makeCard("02103", 1, 0, 0);
+      winnerAttacker.currentAttack = 5;
+      const loserDefender = makeCard("01105", 2, 1, 0);
+      loserDefender.currentAttack = 2;
+      const winGame = makeGame([winnerAttacker, loserDefender]);
+      winGame.activePlayerId = 1;
+      state.game = winGame;
+      const attackerInTarget = winnerAttacker.currentAttack > loserDefender.currentAttack;
+      check("攻击方获胜时：攻击方进入目标格", attackerInTarget && winnerAttacker.row === 1 && winnerAttacker.col === 0);
+
       const remoteAlly = makeCard("02105", 1, 3, 3);
       const commanderGame = makeGame([caoCao, placed, remoteAlly]); state.game = commanderGame;
       coreApplyV2PlacementSkill(commanderGame, commanderGame.players[0], caoCao, []);

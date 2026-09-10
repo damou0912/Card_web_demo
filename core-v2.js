@@ -357,6 +357,16 @@
     return game?.players?.find((player) => player.id === ownerId) || coreEliteAiPlayer(game);
   }
 
+  function coreChallengeTraitBindings(game) {
+    if (!coreIsPveChallenge(game)) return [];
+    const aiOwner = coreEliteAiTraitOwner(game);
+    const playerOwner = corePlayer(game, 1);
+    return [
+      { owner: aiOwner, ids: coreEliteAiTraitIdsForGame(game), source: "opponent" },
+      { owner: playerOwner, ids: [...new Set((game.challengePlayerTraitIds || []).map(coreNormalizeEliteAiTraitId).filter(Boolean))], source: "player" }
+    ].filter((binding) => binding.owner && binding.ids.length);
+  }
+
   function coreHandLimitForPlayer(game, player) {
     if (!coreIsPveChallenge(game) || !player) return HAND_LIMIT;
     const limits = coreResolveEliteAiRule(game, "handLimit", { player });
@@ -370,8 +380,8 @@
     return [...new Set(ids.map(coreNormalizeEliteAiTraitId).filter(Boolean))];
   }
 
-  function coreEliteAiTraitContext(game, event, payload, log) {
-    const ai = coreEliteAiTraitOwner(game);
+  function coreEliteAiTraitContext(game, event, payload, log, binding = null) {
+    const ai = binding?.owner || coreEliteAiTraitOwner(game);
     const operations = {
       handLimit: event === "handLimit" ? HAND_LIMIT : coreHandLimitForPlayer(game, ai),
       adjust: (card, amount, temporary = false, isolated = true) => {
@@ -404,26 +414,29 @@
       },
       getCardState: (card, key) => card?.eliteTraitState?.[key],
       claimFirstPlacement: (key) => {
+        const claimKey = `${ai?.id || 0}:${key}`;
         game.eliteAiFirstPlacementClaims ||= {};
-        if (game.eliteAiFirstPlacementClaims[key] === game.turn) return false;
-        game.eliteAiFirstPlacementClaims[key] = game.turn;
+        if (game.eliteAiFirstPlacementClaims[claimKey] === game.turn) return false;
+        game.eliteAiFirstPlacementClaims[claimKey] = game.turn;
         return true;
       },
-      hasFirstPlacementClaim: (key) => game.eliteAiFirstPlacementClaims?.[key] === game.turn,
+      hasFirstPlacementClaim: (key) => game.eliteAiFirstPlacementClaims?.[`${ai?.id || 0}:${key}`] === game.turn,
       pickRandom: (cards) => corePickRandom(cards || []),
       preventRest: (card) => { if (card && card.restedTurn === game.turn) card.restedTurn = null; },
-      trimHandToOne: () => coreTrimEliteAiHand(game),
+      trimHandToOne: () => coreTrimEliteAiHand(game, payload.player || ai),
       logMessage: (message) => log.push(message)
     };
-    return { game, event, ai, player: payload.player || null, card: payload.card || null, boardCards: game.boardCards, log, operations, ...payload };
+    return { game, event, ai, traitSource: binding?.source || "opponent", player: payload.player || null, card: payload.card || null, boardCards: game.boardCards, log, operations, ...payload };
   }
 
   function coreResolveEliteAiRule(game, hook, payload = {}, log = []) {
     if (!coreIsPveChallenge(game)) return [];
-    const context = coreEliteAiTraitContext(game, hook, payload, log);
-    return coreEliteAiTraitIdsForGame(game).map((id) => {
-      const handler = window.ELITE_AI_EFFECTS_V2?.[id]?.[hook];
-      return typeof handler === "function" ? handler(context) : undefined;
+    return coreChallengeTraitBindings(game).flatMap((binding) => {
+      const context = coreEliteAiTraitContext(game, hook, payload, log, binding);
+      return binding.ids.map((id) => {
+        const handler = window.ELITE_AI_EFFECTS_V2?.[id]?.[hook];
+        return typeof handler === "function" ? handler(context) : undefined;
+      });
     });
   }
 
@@ -437,14 +450,17 @@
 
   function coreApplyEliteAiTraitEvent(game, event, payload = {}, log = []) {
     if (!coreIsPveChallenge(game)) return null;
-    const context = coreEliteAiTraitContext(game, event, payload, log);
     let prevented = false;
-    coreEliteAiTraitIdsForGame(game).forEach((id) => {
-      const definition = window.ELITE_AI_EFFECTS_V2?.[id];
-      const handler = definition?.[`on${event[0].toUpperCase()}${event.slice(1)}`];
-      if (typeof handler !== "function") return;
-      const result = handler(context);
-      if (result === false) prevented = true;
+    coreChallengeTraitBindings(game).forEach((binding) => {
+      if (event === "turnStart" && payload.player?.id !== binding.owner.id) return;
+      const context = coreEliteAiTraitContext(game, event, payload, log, binding);
+      binding.ids.forEach((id) => {
+        const definition = window.ELITE_AI_EFFECTS_V2?.[id];
+        const handler = definition?.[`on${event[0].toUpperCase()}${event.slice(1)}`];
+        if (typeof handler !== "function") return;
+        const result = handler(context);
+        if (result === false) prevented = true;
+      });
     });
     return prevented ? false : null;
   }
@@ -468,6 +484,28 @@
       const candidates = ids.filter((id) => info[id]?.level === tier && !selected.includes(id));
       if (candidates.length) selected.push(candidates[randomInt(0, candidates.length - 1)]);
     });
+    return selected;
+  }
+
+  function corePickWeightedChallengeTraitTier(roll = Math.random()) {
+    const value = Math.max(0, Math.min(0.999999999, Number(roll) || 0));
+    if (value < 0.9) return "beginner";
+    if (value < 0.99) return "intermediate";
+    return "advanced";
+  }
+
+  function corePickChallengeRewardTraits(ownedIds = [], count = 3) {
+    const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
+    const excluded = new Set((ownedIds || []).map(coreNormalizeEliteAiTraitId));
+    const available = coreCanonicalEliteAiTraitIds().filter((id) => !excluded.has(id));
+    const selected = [];
+    while (selected.length < Math.min(Math.max(0, Number(count) || 0), available.length)) {
+      const tier = corePickWeightedChallengeTraitTier();
+      const tierCandidates = available.filter((id) => info[id]?.level === tier && !selected.includes(id));
+      const fallback = available.filter((id) => !selected.includes(id));
+      const candidates = tierCandidates.length ? tierCandidates : fallback;
+      selected.push(candidates[randomInt(0, candidates.length - 1)]);
+    }
     return selected;
   }
 
@@ -539,16 +577,17 @@
     coreResolveEliteAiRule(game, "handState", { player: ai }, log);
   }
 
-  function coreExpireEliteScopedBonuses(game) {
+  function coreExpireEliteScopedBonuses(game, ownerId) {
     game.boardCards.forEach((card) => {
       const amount = Number(card.eliteTraitTempBonusUntilOwnTurn) || 0;
-      if (!amount) return;
+      if (!amount || Number(card.eliteTraitTempBonusOwnerId) !== Number(ownerId)) return;
       const previous = state.game;
       state.game = game;
       const isolated = !card.eliteTraitTempBonusAffectedByCards;
       try { coreAdjustAttack(card, -amount, true, isolated); } finally { state.game = previous; }
       delete card.eliteTraitTempBonusUntilOwnTurn;
       delete card.eliteTraitTempBonusAffectedByCards;
+      delete card.eliteTraitTempBonusOwnerId;
     });
   }
 
@@ -843,7 +882,7 @@
     return guards;
   }
 
-  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null, challengeLevel = state.challengeLevel || 1, challengeTraitIds = null) {
+  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null, challengeLevel = state.challengeLevel || 1, challengeTraitIds = null, playerTraitIds = null) {
     const selectedSize = Number(boardSize);
     const size = Number.isInteger(selectedSize) && selectedSize >= 3 && selectedSize <= 5 ? selectedSize : CORE_BOARD_SIZE;
     const playerOneCatalog = buildCampDeck(selectedDecks[1]);
@@ -901,6 +940,10 @@
         : [];
       game.eliteAiEffectIds = suppliedTraits.length ? suppliedTraits : corePickChallengeTraits(game.challengeLevel);
       game.eliteAiEffectId = game.eliteAiEffectIds[0] || null;
+      const suppliedPlayerTraits = Array.isArray(playerTraitIds)
+        ? [...new Set(playerTraitIds.map(coreNormalizeEliteAiTraitId))].filter((id) => window.ELITE_AI_EFFECT_INFO_V2?.[id] && window.ELITE_AI_EFFECTS_V2?.[id])
+        : [];
+      game.challengePlayerTraitIds = suppliedPlayerTraits;
     }
 
     game.players.forEach((player) => {
@@ -2023,6 +2066,10 @@
     return cells.map((cell) => getBoardCardAt(game, cell.row, cell.col)).filter(Boolean);
   }
 
+  // The scorer is intentionally heuristic: generic positional terms apply to all
+  // cards, while the card-id branches below encode deck-specific play patterns on
+  // top of the data-driven effects. New cards work without touching this function;
+  // the id branches only sharpen how the AI values cards it already plays well.
   function coreAiPlacementScore(game, player, card, cell) {
     const allies = coreAiNeighbors(game, cell.row, cell.col).filter((target) => target.ownerId === player.id);
     const enemies = coreAiNeighbors(game, cell.row, cell.col).filter((target) => target.ownerId !== player.id);
@@ -2352,6 +2399,19 @@
       ui.opponentAiEffect.innerHTML = traits.length
         ? `<span class="ai-effect-label">本关精英词条</span>${coreEliteAiTraitMarkup(traits)}`
         : "";
+    }
+    if (ui.ownChallengeEffects) {
+      if (coreIsPveChallenge(game) && !spectator) {
+        const playerTraitIds = game.challengePlayerTraitIds || [];
+        const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
+        const traits = playerTraitIds.map((id) => ({ ...info[id], name: info[id]?.name || id, description: info[id]?.description || "", level: info[id]?.level || "beginner" })).filter(Boolean);
+        ui.ownChallengeEffects.hidden = !traits.length;
+        ui.ownChallengeEffects.innerHTML = traits.length
+          ? `<span class="ai-effect-label">我的词条奖励</span>${coreEliteAiTraitMarkup(traits)}`
+          : "";
+      } else {
+        ui.ownChallengeEffects.hidden = true;
+      }
     }
     ui.handTitle.textContent = spectator ? "观战视角" : `${handOwner.name} 的手牌`;
     ui.submitActionBtn.hidden = true;
@@ -3102,7 +3162,8 @@
       2: getRandomDeckKey()
     };
     state.pendingChallengeTraitIds = null;
-    state.game = coreCreateGame("pve-challenge", state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel);
+    const playerTraits = (state.challengePlayerTraitIds || []).map(coreNormalizeEliteAiTraitId).filter(Boolean);
+    state.game = coreCreateGame("pve-challenge", state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, null, playerTraits);
     switchScreen("game");
     coreShowOpeningReveal(state.game);
     return true;
@@ -3118,6 +3179,13 @@
         <h2 class="deck-reveal-title">${first.name} 获得先手</h2>
         <p class="deck-reveal-copy">${game.boardSize}x${game.boardSize} 战场；${first.name} 初始 ${first.hand.length} 张手牌；${second.name} 初始 ${second.hand.length} 张手牌。全局第 1 回合仅有 1 次行动，其余回合有 2 次行动。</p>
         ${(() => { const traits = coreEliteAiTraitInfos(game); return traits.length ? `<div class="elite-trait-reveal"><span class="ai-effect-label">第 ${game.challengeLevel} 关精英词条</span>${coreEliteAiTraitMarkup(traits)}</div>` : ""; })()}
+        ${(() => {
+          const playerTraitIds = game.challengePlayerTraitIds || [];
+          if (!playerTraitIds.length) return "";
+          const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
+          const traits = playerTraitIds.map((id) => ({ ...info[id], name: info[id]?.name || id, description: info[id]?.description || "", level: info[id]?.level || "beginner" })).filter(Boolean);
+          return traits.length ? `<div class="elite-trait-reveal"><span class="ai-effect-label">玩家词条奖励</span>${coreEliteAiTraitMarkup(traits)}</div>` : "";
+        })()}
         <div class="deck-reveal-matchup">
           <article class="deck-reveal-side"><p class="label">${first.name} · 先手</p><h3>${getCampDisplayName(first.deckKey)}</h3><p>${summarizeDeck(first.deckCatalog, first.deckKey)}</p></article>
           <div class="deck-reveal-versus">VS</div>
@@ -3162,7 +3230,7 @@
   window.__CARD_DEMO_CORE_V2_TEST_API__ = Object.freeze({
     cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
     coreAddCardsToDrawPile, coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
-    coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits,
+    coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits, corePickChallengeRewardTraits,
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
     coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
@@ -3190,6 +3258,45 @@
   };
   window.beginGame = coreBeginGame;
   window.beginNextChallengeLevel = coreBeginNextChallengeLevel;
+  window.showChallengeRewardSelection = (rewardChoices) => {
+    state.pendingChallengeRewardChoices = rewardChoices || [];
+    const modal = ui.challengeRewardModal;
+    if (!modal) return;
+    const choices = rewardChoices || [];
+    const traitsInfo = window.ELITE_AI_EFFECT_INFO_V2 || {};
+    const choicesHtml = choices.map((traitId, index) => {
+      const trait = traitsInfo[traitId];
+      if (!trait) return "";
+      const tierColor = { beginner: "blue", intermediate: "purple", advanced: "orange" }[trait.level] || "blue";
+      return `<button class="reward-choice-btn elite-tier-${tierColor}" data-choice-index="${index}" type="button">
+        <strong>${coreEscapeHtml(trait.name)}</strong>
+        <small>${coreEscapeHtml(trait.description)}</small>
+      </button>`;
+    }).join("");
+    const choicesContainer = modal.querySelector(".reward-choices-container");
+    if (choicesContainer) choicesContainer.innerHTML = choicesHtml;
+    modal.hidden = false;
+    modal.querySelectorAll(".reward-choice-btn").forEach((btn, index) => {
+      btn.addEventListener("click", () => {
+        if (typeof window.selectChallengeReward === "function") {
+          window.selectChallengeReward(index);
+        }
+      });
+    });
+  };
+  window.selectChallengeReward = (choiceIndex) => {
+    const choices = state.pendingChallengeRewardChoices || [];
+    if (!Number.isInteger(choiceIndex) || choiceIndex < 0 || choiceIndex >= choices.length) return;
+    const selectedTraitId = choices[choiceIndex];
+    state.challengePlayerTraitIds ||= [];
+    state.challengePlayerTraitIds.push(coreNormalizeEliteAiTraitId(selectedTraitId));
+    const modal = ui.challengeRewardModal;
+    if (modal) modal.hidden = true;
+    state.pendingChallengeRewardChoices = null;
+    if (typeof window.beginNextChallengeLevel === "function") {
+      window.beginNextChallengeLevel();
+    }
+  };
   window.loadCardTestSetupForCore = coreLoadCardTestSetup;
 
   function coreHasExecutableAction(game) {

@@ -224,6 +224,7 @@
               <span id="own-player-control" class="badge"></span>
             </div>
             <div id="own-player-summary" class="player-summary" aria-live="polite"></div>
+            <div id="own-challenge-effects" class="ai-effect-panel" hidden></div>
             <p id="selection-summary" class="panel-copy">选择手牌放置，或选择己方场上卡牌移动。</p>
           </div>
         </aside>
@@ -308,6 +309,15 @@
         </div>
       </div>
     </section>
+
+    <div id="challenge-reward-modal" class="challenge-reward-modal" aria-hidden="true">
+      <section class="challenge-reward-card" role="dialog" aria-modal="true" aria-labelledby="challenge-reward-title">
+        <p class="phase-banner-eyebrow">CHALLENGE REWARD</p>
+        <h2 id="challenge-reward-title">选择奖励词条</h2>
+        <p class="panel-copy">胜利！请从下列 3 个词条中选择 1 个来助力后续挑战。</p>
+        <div class="reward-choices-container"></div>
+      </section>
+    </div>
   </main>
 
   <script src="card-info.js?v=card-info-cb24396f94da"></script>

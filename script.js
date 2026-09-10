@@ -1,9 +1,4 @@
-const BOARD_SIZE = 5;
-const INITIAL_HAND_SIZE = 3;
 const HAND_LIMIT = 5;
-const MAX_TURNS = 25;
-const VICTORY_CONTROL_COUNT = 13;
-const BROKEN_CELL_COUNT = 2;
 const ACTION_ANIMATION_MS = 1200;
 const ACTION_IMPACT_HOLD_MS = 280;
 const BOARD_PULSE_VISIBLE_MS = 520;
@@ -93,6 +88,8 @@ const ui = {
   ownPlayerSummary: document.getElementById("own-player-summary"),
   opponentPlayerSummary: document.getElementById("opponent-player-summary"),
   opponentAiEffect: document.getElementById("opponent-ai-effect"),
+  ownChallengeEffects: document.getElementById("own-challenge-effects"),
+  challengeRewardModal: document.getElementById("challenge-reward-modal"),
   selectionSummary: document.getElementById("selection-summary"),
   detailRarity: document.getElementById("detail-rarity"),
   detailName: document.getElementById("detail-name"),
@@ -139,6 +136,9 @@ const state = {
   playerName: "",
   selectedDecks: { 1: null, 2: null },
   pendingChallengeTraitIds: null,
+  challengePlayerTraitIds: [],
+  pendingChallengeRewardChoices: null,
+  pendingChallengeRewardLevel: null,
   game: null,
   online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] }
 };
@@ -230,18 +230,6 @@ function createPlayer(id, name, deckKey, deckCatalog, isAI = false) {
 
 function resetSelection() {
   return { handCardUid: null, boardCardUid: null, targetCell: null };
-}
-
-function pickBrokenCells() {
-  const blocked = [];
-  while (blocked.length < BROKEN_CELL_COUNT) {
-    const row = randomInt(0, BOARD_SIZE - 1);
-    const col = randomInt(0, BOARD_SIZE - 1);
-    if (!blocked.some((cell) => cell.row === row && cell.col === col)) {
-      blocked.push({ row, col });
-    }
-  }
-  return blocked;
 }
 
 function drawOneCard(_game, player) {
@@ -455,32 +443,6 @@ function syncPlayerBoardIds(game) {
   });
 }
 
-function computeControlMap(game) {
-  const influence = new Map();
-  const addInfluence = (row, col, ownerId) => {
-    if (!Number.isInteger(row) || !Number.isInteger(col) || isBrokenCell(game, row, col) || !ownerId) {
-      return;
-    }
-    const key = cellKey(row, col);
-    const data = influence.get(key) || { owners: new Set() };
-    data.owners.add(ownerId);
-    influence.set(key, data);
-  };
-
-  game.boardCards.forEach((card) => {
-    addInfluence(card.row, card.col, card.ownerId);
-  });
-
-  const counts = { 1: 0, 2: 0 };
-  influence.forEach((data) => {
-    if (data.owners.size === 1) {
-      const [ownerId] = [...data.owners];
-      counts[ownerId] += 1;
-    }
-  });
-  return { influence, counts };
-}
-
 function playerName(game, playerId) {
   return game.players.find((player) => player.id === playerId)?.name || `玩家 ${playerId}`;
 }
@@ -581,6 +543,17 @@ function summarizeDeck(deckCatalog, deckKey) {
 
 function showResult() {
   renderResult(state.game);
+  const game = state.game;
+  const winnerId = game?.winner?.id;
+  const shouldShowReward = game?.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) < 12;
+  if (shouldShowReward) {
+    const ownedTraitIds = state.challengePlayerTraitIds || [];
+    const rewardChoices = window.corePickChallengeRewardTraits?.(ownedTraitIds, 3) || [];
+    if (rewardChoices.length) {
+      setTimeout(() => window.showChallengeRewardSelection?.(rewardChoices), 500);
+      return;
+    }
+  }
   switchScreen("result");
 }
 
@@ -599,6 +572,9 @@ function resetToMenu() {
   state.game = null;
   state.challengeLevel = 1;
   state.pendingChallengeTraitIds = null;
+  state.challengePlayerTraitIds = [];
+  state.pendingChallengeRewardChoices = null;
+  state.pendingChallengeRewardLevel = null;
   switchScreen("menu");
 }
 
@@ -1329,7 +1305,12 @@ function bindEvents() {
   ui.resultNextLevelBtn?.addEventListener("click", () => window.beginNextChallengeLevel?.());
   ui.resultRestartBtn.addEventListener("click", () => {
     if (state.online?.role === "spectator") return;
-    if (state.game?.mode === "pve-challenge") state.challengeLevel = 1;
+    if (state.game?.mode === "pve-challenge") {
+      state.challengeLevel = 1;
+      state.challengePlayerTraitIds = [];
+      state.pendingChallengeRewardChoices = null;
+      state.pendingChallengeRewardLevel = null;
+    }
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());

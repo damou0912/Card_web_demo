@@ -5019,3 +5019,125 @@ body {
 :root[data-theme="night"] .cell.control-2::after {
   box-shadow: inset 0 0 0 1px rgba(137, 186, 209, 0.22);
 }
+
+.challenge-reward-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 76;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(42, 50, 46, 0.46);
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.challenge-reward-modal[hidden] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.challenge-reward-modal:not([hidden]) {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.challenge-reward-card {
+  position: relative;
+  width: min(520px, 92vw);
+  max-height: 80vh;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  color: #f3f3e9;
+  background: linear-gradient(145deg, #3f4d49, #2d3b39);
+  box-shadow: 0 24px 58px rgba(38, 48, 43, 0.3);
+  text-align: center;
+  overflow-y: auto;
+}
+
+.challenge-reward-card h2 {
+  margin: 0 0 12px 0;
+  font-size: clamp(22px, 5vw, 28px);
+}
+
+.challenge-reward-card .panel-copy {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.reward-choices-container {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.reward-choice-btn {
+  padding: 16px 12px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #f3f3e9;
+  cursor: pointer;
+  transition: all 180ms ease;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.reward-choice-btn:hover:not(:disabled),
+.reward-choice-btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-2px);
+}
+
+.reward-choice-btn strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.reward-choice-btn small {
+  display: block;
+  font-size: 12px;
+  color: rgba(243, 243, 233, 0.72);
+  line-height: 1.4;
+}
+
+.reward-choice-btn.elite-tier-blue {
+  border-color: rgba(47, 94, 145, 0.3);
+  background: rgba(47, 94, 145, 0.1);
+}
+
+.reward-choice-btn.elite-tier-blue:hover:not(:disabled),
+.reward-choice-btn.elite-tier-blue:focus-visible {
+  border-color: rgba(47, 94, 145, 0.5);
+  background: rgba(47, 94, 145, 0.2);
+}
+
+.reward-choice-btn.elite-tier-purple {
+  border-color: rgba(155, 89, 182, 0.3);
+  background: rgba(155, 89, 182, 0.1);
+}
+
+.reward-choice-btn.elite-tier-purple:hover:not(:disabled),
+.reward-choice-btn.elite-tier-purple:focus-visible {
+  border-color: rgba(155, 89, 182, 0.5);
+  background: rgba(155, 89, 182, 0.2);
+}
+
+.reward-choice-btn.elite-tier-orange {
+  border-color: rgba(197, 92, 54, 0.3);
+  background: rgba(197, 92, 54, 0.1);
+}
+
+.reward-choice-btn.elite-tier-orange:hover:not(:disabled),
+.reward-choice-btn.elite-tier-orange:focus-visible {
+  border-color: rgba(197, 92, 54, 0.5);
+  background: rgba(197, 92, 54, 0.2);
+}

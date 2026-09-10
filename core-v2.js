@@ -1914,6 +1914,16 @@
     };
   }
 
+  function coreMarkGameSettlement(game, winnerId, text) {
+    game.currentPhase = "胜负结算";
+    game.lastResolution = text;
+    game.turnDeadlineAt = null;
+    game.selection = resetSelection();
+    if (game.winner?.playerId !== winnerId) {
+      game.winner = { playerId: winnerId, text };
+    }
+  }
+
   function coreRunV2EndSkills(game, active, log) {
     game.boardCards.filter((card) => card.ownerId === active.id).forEach((source) => {
       const effectDefinition = coreCardEffectDefinition(source);

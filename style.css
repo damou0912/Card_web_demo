@@ -15,6 +15,17 @@
   --shadow: 0 18px 45px rgba(81, 54, 37, 0.12);
   --radius: 24px;
   --radius-sm: 16px;
+  /* 常用透明颜色 */
+  --overlay-dark: rgba(42, 50, 46, 0.46);
+  --overlay-darker: rgba(31, 26, 23, 0.92);
+  --overlay-subtle: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.24);
+  --border-lighter: rgba(255, 255, 255, 0.18);
+  --text-light: rgba(243, 243, 233, 0.72);
+  /* 品牌色变体 */
+  --accent-rgb: 244, 202, 112;
+  --blue-overlay-light: rgba(47, 94, 145, 0.1);
+  --blue-overlay: rgba(47, 94, 145, 0.2);
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 

@@ -5611,8 +5611,10 @@ body {
 }
 
 .login-success-container {
+  position: relative;
   text-align: left;
   min-height: 40px;
+  padding-bottom: 8px;
 }
 
 .login-welcome-text {
@@ -5624,8 +5626,8 @@ body {
 
 .logout-mini-btn {
   position: absolute;
-  bottom: 12px;
-  right: 12px;
+  bottom: 0;
+  right: 0;
   padding: 4px 10px;
   border: 1px solid var(--panel-border);
   border-radius: 4px;

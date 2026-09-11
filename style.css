@@ -4393,6 +4393,41 @@ h1 {
   --overlay-gold: #d5dcac;
 }
 
+:root[data-theme="an-pink"] {
+  --ink: #600030;
+  --muted: #a0557a;
+  --panel: rgba(255, 240, 248, 0.95);
+  --panel-border: #f0c0d8;
+  --accent: #d4589a;
+  --accent-deep: #a82d70;
+  --accent-soft: #f4d5e8;
+  --blue: #d4589a;
+  --blue-soft: #fcd5e8;
+  --grid: #efc1d9;
+  --blocked: #a04070;
+  --success: #b84b8f;
+  --shadow: 0 16px 34px rgba(96, 0, 48, 0.1);
+  --theme-page-top: #ffe5f0;
+  --theme-page-mid: #ffeef5;
+  --theme-page-bottom: #ffd5e8;
+  --theme-surface-soft: #fff0f7;
+  --theme-surface-raised: #fff9fc;
+  --theme-board: #ffebf3;
+  --theme-cell-top: #fff5fa;
+  --theme-cell-bottom: #ffe0ea;
+  --theme-move-top: #ffe0e8;
+  --theme-move-bottom: #ffc8d9;
+  --theme-attack-top: #ffe8da;
+  --theme-attack-bottom: #ffd0c0;
+  --theme-status-top: rgba(255, 245, 250, 0.96);
+  --theme-status-bottom: rgba(255, 240, 248, 0.96);
+  --theme-accent-rgb: 212, 88, 154;
+  --theme-blue-rgb: 212, 88, 154;
+  --theme-overlay-start: #8a3a5e;
+  --theme-overlay-end: #6b2a48;
+  --overlay-gold: #f4a8d0;
+}
+
 :root[data-theme="night"] {
   color-scheme: dark;
   --ink: #dce5df;
@@ -4616,6 +4651,10 @@ body {
 
 .theme-btn[data-theme="night"] .theme-swatch {
   --theme-swatch: #26322e;
+}
+
+.theme-btn[data-theme="an-pink"] .theme-swatch {
+  --theme-swatch: #daa0d8;
 }
 
 .game-menu-theme {

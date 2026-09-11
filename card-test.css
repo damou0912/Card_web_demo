@@ -5,6 +5,9 @@
   --line: rgba(55, 53, 48, 0.18);
   --p1: #b54638;
   --p2: #2f709b;
+  --an-pink: #daa0d8;
+  --an-pink-bg: #FFC1E0;
+  --an-pink-text: #600030;
   --gold: #c69236;
   --panel: rgba(255, 252, 245, 0.88);
 }
@@ -136,6 +139,37 @@ input[type="number"]:focus,
 .battle-footer {
   flex-wrap: wrap;
   line-height: 1.45;
+}
+
+/* An-粉色主题配置 */
+body.theme-an-pink {
+  color: var(--an-pink-text);
+  background:
+    radial-gradient(circle at 85% 0%, rgba(255, 193, 224, 0.3), transparent 28%),
+    linear-gradient(145deg, #FFE5F0 0%, var(--an-pink-bg) 52%, #FFD9E8 100%);
+}
+
+body.theme-an-pink .panel,
+body.theme-an-pink .battle-panel {
+  background: rgba(255, 240, 248, 0.95);
+  border-color: rgba(96, 0, 48, 0.2);
+}
+
+body.theme-an-pink .test-board {
+  border-color: #C97BA8;
+  background: #E8A8D0;
+}
+
+body.theme-an-pink .test-cell {
+  background: linear-gradient(135deg, #FFD5E8, #FFC1D9);
+}
+
+body.theme-an-pink .search-input:focus,
+body.theme-an-pink select:focus,
+body.theme-an-pink input[type="number"]:focus,
+body.theme-an-pink .scene-data:focus {
+  border-color: var(--an-pink-text);
+  box-shadow: 0 0 0 3px rgba(96, 0, 48, 0.14);
 }
 
 @media (max-width: 1100px) {

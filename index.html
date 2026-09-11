@@ -7,7 +7,7 @@
   <script>
     try {
       const savedTheme = window.localStorage.getItem("card-demo-theme");
-      if (["moss", "mist", "dawn", "bamboo", "night"].includes(savedTheme)) {
+      if (["moss", "mist", "dawn", "bamboo", "night", "an-pink"].includes(savedTheme)) {
         document.documentElement.dataset.theme = savedTheme;
       }
     } catch (_error) {
@@ -110,6 +110,9 @@
             </button>
             <button class="theme-btn" type="button" data-theme="night" aria-pressed="false" aria-label="夜间护眼">
               <span class="theme-swatch" aria-hidden="true"></span><span>夜间护眼</span>
+            </button>
+            <button class="theme-btn" type="button" data-theme="an-pink" aria-pressed="false" aria-label="An-粉">
+              <span class="theme-swatch" aria-hidden="true"></span><span>An-粉</span>
             </button>
           </div>
         </div>

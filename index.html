@@ -339,7 +339,9 @@
         <div class="modify-deck-content">
           <div class="deck-selector">
             <p class="modify-deck-label">选择卡组</p>
-            <div class="deck-options" id="deck-options" role="group" aria-label="选择要修改的卡组"></div>
+            <select id="deck-select" class="deck-select" aria-label="选择要修改的卡组">
+              <option value="">-- 请选择卡组 --</option>
+            </select>
           </div>
           <div class="rarity-selector" hidden id="rarity-selector">
             <p class="modify-deck-label">选择品质</p>
@@ -434,6 +436,14 @@
       console.error("CARD_INFO_SCHEMA_VERSION:", window.CARD_INFO_SCHEMA_VERSION);
     } else {
       console.log("✓ v2-card-data.js 已加载，" + window.CARD_LIBRARY.cardSlots.length + " 张卡牌");
+    }
+  </script>
+  <script src="replacement-cards.js?v=card-info-ee5970761881"></script>
+  <script>
+    if (!window.REPLACEMENT_CARDS) {
+      console.error("❌ replacement-cards.js 加载失败或执行错误");
+    } else {
+      console.log("✓ replacement-cards.js 已加载，" + window.REPLACEMENT_CARDS.length + " 张可替换卡牌");
     }
   </script>
   <script src="auth-client.js"></script>

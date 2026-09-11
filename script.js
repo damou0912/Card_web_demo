@@ -38,7 +38,26 @@ const CAMP_DECK_RARITY_COUNTS = Object.freeze({
 });
 const CHAOS_DECK_KEY = "混沌";
 
-const GAME_CARD_DISPLAY_BY_ID = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+// 使用 window 来确保全局可访问
+window.GAME_CARD_DISPLAY_BY_ID = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+
+// 添加函数来重新初始化卡牌库（在替换卡牌加载后调用）
+function reinitializeCardLibrary() {
+  if (window.CARD_LIBRARY?.cardSlots) {
+    window.GAME_CARD_DISPLAY_BY_ID = new Map(window.CARD_LIBRARY.cardSlots.map((slot) => [String(slot.id), slot]));
+    console.log(`✓ 卡牌库已重新初始化，现有 ${window.GAME_CARD_DISPLAY_BY_ID.size} 张卡牌`);
+  }
+}
+
+// 监听替换卡牌加载完成
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(reinitializeCardLibrary, 100);
+  });
+} else {
+  setTimeout(reinitializeCardLibrary, 100);
+}
+
 const GUARD_CARD_DISPLAY = Object.freeze({
   name: "守军", camp: "无势力", rarity: "普通", skill: "无",
   effect: "中立守军：双方均视为敌方卡牌。"
@@ -462,18 +481,29 @@ function closeModifyDeck() {
 
 function initializeModifyDeck() {
   const availableCamps = getAvailableDeckKeys().filter(key => key !== CHAOS_DECK_KEY);
-  const deckOptions = ui.deckOptions;
-  deckOptions.innerHTML = '';
+  const deckSelect = document.getElementById('deck-select');
+
+  // 清除之前的选项（保留占位符）
+  while (deckSelect.options.length > 1) {
+    deckSelect.remove(1);
+  }
 
   availableCamps.forEach(camp => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'deck-option-btn';
-    button.textContent = getCampDisplayName(camp);
-    button.dataset.camp = camp;
-    button.addEventListener('click', () => selectCampForModify(camp));
-    deckOptions.appendChild(button);
+    const option = document.createElement('option');
+    option.value = camp;
+    option.textContent = getCampDisplayName(camp);
+    deckSelect.appendChild(option);
   });
+
+  // 重置选择
+  deckSelect.value = '';
+
+  // 绑定change事件
+  deckSelect.onchange = (e) => {
+    if (e.target.value) {
+      selectCampForModify(e.target.value);
+    }
+  };
 }
 
 function selectCampForModify(camp) {
@@ -484,9 +514,11 @@ function selectCampForModify(camp) {
   const originalDeck = buildCampDeck(camp);
   state.modifyDeck.originalDeck = originalDeck;
 
-  ui.deckOptions.querySelectorAll('.deck-option-btn').forEach(btn => {
-    btn.classList.toggle('selected', btn.dataset.camp === camp);
-  });
+  // 更新下拉菜单的选中状态
+  const deckSelect = document.getElementById('deck-select');
+  if (deckSelect) {
+    deckSelect.value = camp;
+  }
 
   ui.raritySelector.hidden = false;
   ui.cardReplacement.hidden = true;
@@ -599,7 +631,14 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
     }
   });
 
-  availableCards.forEach(candidateSlot => {
+  // 合并可用卡牌：既包括原卡组相同势力的卡牌，也包括替换卡牌中相同品质的卡牌
+  const allCandidates = [...availableCards];
+  if (window.REPLACEMENT_CARDS) {
+    const replacementCardsForRarity = window.REPLACEMENT_CARDS.filter(card => card.rarity === rarity);
+    allCandidates.push(...replacementCardsForRarity);
+  }
+
+  allCandidates.forEach(candidateSlot => {
     // 跳过：原卡牌、其他位置已选择的替换卡牌、已经在卡组内的卡牌
     if (candidateSlot.id === originalCard.id ||
         replacedCardIds.has(String(candidateSlot.id)) ||
@@ -614,9 +653,14 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
       button.classList.add('selected');
     }
 
+    // 添加替换卡牌的标记
+    const isReplacementCard = window.REPLACEMENT_CARDS &&
+                              window.REPLACEMENT_CARDS.some(c => c.id === candidateSlot.id);
+    const badge = isReplacementCard ? ' <span class="new-card-badge">🆕</span>' : '';
+
     button.innerHTML = `
       <strong>${candidateSlot.name}</strong>
-      <small>${candidateSlot.skill}</small>
+      <small>${candidateSlot.skill}</small>${badge}
     `;
 
     button.addEventListener('click', () => {

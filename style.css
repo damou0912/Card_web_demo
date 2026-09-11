@@ -6023,6 +6023,35 @@ body {
   gap: 10px;
 }
 
+.deck-select {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(40, 40, 50, 0.8);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 200ms ease;
+}
+
+.deck-select option {
+  background: rgba(40, 40, 50, 0.95);
+  color: #ffffff;
+}
+
+.deck-select:hover {
+  background: rgba(50, 50, 60, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.deck-select:focus {
+  outline: none;
+  background: rgba(50, 50, 60, 0.9);
+  border-color: #78b48c;
+  box-shadow: 0 0 0 2px rgba(120, 180, 140, 0.3);
+}
+
 .deck-option-btn,
 .rarity-option-btn {
   padding: 12px;
@@ -6173,6 +6202,12 @@ body {
   display: block;
   font-size: 11px;
   color: #b8c5ba;
+}
+
+.new-card-badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 12px;
 }
 
 .modify-deck-actions {

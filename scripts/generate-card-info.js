@@ -7,6 +7,7 @@ const XLSX = require("xlsx");
 const root = path.resolve(__dirname, "..");
 const sourcePath = path.join(root, "outputs", "card-info-table-xlsx", "card_info_v2.xlsx");
 const targetPath = path.join(root, "card-info.js");
+const replacementCardsPath = path.join(root, "replacement-cards.js");
 const cardInfoSchemaVersion = "card-info-v2-display-effect-isolation-20260908";
 const expectedHeaders = ["卡牌ID", "卡牌名称", "势力", "技能名称", "基础战力", "品质", "技能效果描述"];
 const defaultDeckHeader = "默认卡组";
@@ -45,17 +46,16 @@ if (!baseHeadersMatch && !withDefaultDeckMatch && !legacyHeadersMatch) {
 }
 
 const ids = new Set();
-const cards = rows.filter((row) => row.some((value) => cellText(value))).map((row, index) => {
+const cards = [];
+const replacementCards = [];
+
+rows.filter((row) => row.some((value) => cellText(value))).forEach((row, index) => {
   const rowNumber = index + 2;
   const values = expectedHeaders.map((_, column) => row[column]);
   const id = cellText(values[0]);
   if (!cardIdPattern.test(id)) fail(`第 ${rowNumber} 行卡牌 ID 无效：${id}`);
   if (ids.has(id)) fail(`卡牌 ID 重复：${id}`);
   ids.add(id);
-
-  // Check if card is in default deck (only if the column exists)
-  const inDefaultDeck = withDefaultDeckMatch ? Number(row[expectedHeaders.length]) === 1 : true;
-  if (!inDefaultDeck) return null; // Skip cards not in default deck
 
   const baseAttack = Number(values[4]);
   if (!Number.isInteger(baseAttack) || baseAttack < 0) fail(`第 ${rowNumber} 行基础战力无效：${cellText(values[4])}`);
@@ -66,14 +66,21 @@ const cards = rows.filter((row) => row.some((value) => cellText(value))).map((ro
     camp: cellText(values[2]),
     skill: cellText(values[3]),
     baseAttack,
-    // The adapter maps this source value to the runtime attack field.
     attack: baseAttack,
     rarity: cellText(values[5]),
     effect: effectText(values[6])
   };
   if (!card.name || !card.camp || !card.skill || !card.rarity || !card.effect) fail(`第 ${rowNumber} 行存在空的卡牌基础信息：${id}`);
-  return card;
-}).filter(card => card !== null);
+
+  // 检查是否在默认卡组中
+  const inDefaultDeck = withDefaultDeckMatch ? Number(row[expectedHeaders.length]) === 1 : true;
+
+  if (inDefaultDeck) {
+    cards.push(card);
+  } else {
+    replacementCards.push(card);
+  }
+});
 
 if (cards.length !== 60) fail(`卡牌数量应为 60，实际为 ${cards.length}（可能是因为"默认卡组"列过滤）`);
 const output = [
@@ -86,13 +93,28 @@ const output = [
 ].join("\n");
 
 fs.writeFileSync(targetPath, output, "utf8");
+
+// 生成替换卡牌文件
+const replacementOutput = [
+  "/* Generated from outputs/card-info-table-xlsx/card_info_v2.xlsx. */",
+  "/* 这些卡牌可用于在修改卡组页面中替换默认卡组中相同品质的卡牌 */",
+  "/* Run: npm run generate:card-info */",
+  `const REPLACEMENT_CARDS = ${JSON.stringify(replacementCards, null, 2)};`,
+  "window.REPLACEMENT_CARDS = REPLACEMENT_CARDS;",
+  ""
+].join("\n");
+
+fs.writeFileSync(replacementCardsPath, replacementOutput, "utf8");
+
 const cacheVersion = `card-info-${crypto.createHash("sha1").update(output).digest("hex").slice(0, 12)}`;
 for (const htmlName of ["index.html", "card-test.html"]) {
   const htmlPath = path.join(root, htmlName);
   let html = fs.readFileSync(htmlPath, "utf8");
   html = html
     .replace(/card-info\.js\?v=[^"']+/g, `card-info.js?v=${cacheVersion}`)
-    .replace(/v2-card-data\.js\?v=[^"']+/g, `v2-card-data.js?v=${cacheVersion}`);
+    .replace(/v2-card-data\.js\?v=[^"']+/g, `v2-card-data.js?v=${cacheVersion}`)
+    .replace(/replacement-cards\.js\?v=[^"']+/g, `replacement-cards.js?v=${cacheVersion}`);
   fs.writeFileSync(htmlPath, html, "utf8");
 }
 console.log(`Generated ${path.relative(root, targetPath)} from ${path.relative(root, sourcePath)}: ${cards.length} cards`);
+console.log(`Generated ${path.relative(root, replacementCardsPath)}: ${replacementCards.length} replacement cards`);

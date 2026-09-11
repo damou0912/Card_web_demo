@@ -69,14 +69,12 @@ const ui = {
   loginUsername: document.getElementById("login-username"),
   loginPassword: document.getElementById("login-password"),
   loginSubmitBtn: document.getElementById("login-submit-btn") || document.querySelector(".login-submit-btn"),
-  loginCancelBtn: document.getElementById("login-cancel-btn"),
   presetAccountsList: document.getElementById("preset-accounts-list"),
-  logoutBtn: document.getElementById("logout-btn"),
-  closeAfterLoginBtn: document.getElementById("close-after-login-btn"),
   loginFormContainer: document.getElementById("login-form-container"),
   loginSuccessContainer: document.getElementById("login-success-container"),
   loginUsernameDisplay: document.getElementById("login-username-display"),
   loginStatusText: document.getElementById("login-status-text"),
+  logoutBtn: document.getElementById("logout-btn"),
   themeSubmenuBtn: document.getElementById("theme-submenu-btn"),
   themeSubmenu: document.getElementById("theme-submenu"),
   mapSubmenuBtn: document.getElementById("map-submenu-btn"),
@@ -573,22 +571,17 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
   const currentModifications = state.modifyDeck.modifications[rarity] || {};
   const currentReplacement = currentModifications[rarityIndex];
 
-  // 获取该品质中所有已被使用的卡牌 ID
-  const usedCardIds = new Set();
-  const cardsInRarity = state.modifyDeck.originalDeck.filter(card => getCardQuality(card) === rarity);
-
-  cardsInRarity.forEach((card, idx) => {
-    // 跳过当前正在替换的位置
-    if (idx === rarityIndex) return;
-
-    // 检查这个位置是否被修改过
-    let finalCard = currentModifications[idx] || card;
-    usedCardIds.add(String(finalCard.id));
+  // 收集该品质中所有已被选中的卡牌 ID（来自修改）
+  const replacedCardIds = new Set();
+  Object.values(currentModifications).forEach(card => {
+    if (card?.id && card.id !== originalCard.id) {
+      replacedCardIds.add(String(card.id));
+    }
   });
 
   availableCards.forEach(candidateSlot => {
-    // 跳过原卡牌和已在该品质中的其他卡牌
-    if (candidateSlot.id === originalCard.id || usedCardIds.has(String(candidateSlot.id))) {
+    // 只跳过原卡牌和其他位置已选择的替换卡牌
+    if (candidateSlot.id === originalCard.id || replacedCardIds.has(String(candidateSlot.id))) {
       return;
     }
 
@@ -1697,9 +1690,7 @@ function bindEvents() {
     const password = ui.loginPassword?.value || "";
     handleLogin(username, password);
   });
-  ui.loginCancelBtn?.addEventListener("click", closeLoginMenu);
   ui.logoutBtn?.addEventListener("click", handleLogout);
-  ui.closeAfterLoginBtn?.addEventListener("click", closeLoginMenu);
   ui.quickLogoutBtn?.addEventListener("click", handleLogout);
   ui.actionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.actionLogClose?.addEventListener("click", closeActionLog);

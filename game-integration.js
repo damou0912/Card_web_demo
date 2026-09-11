@@ -205,6 +205,8 @@ const gameIntegration = (() => {
     getCurrentUser,
     setCurrentUser,
     saveGameResult,
+    loadChallengeProgress,
+    clearChallengeProgress,
     showAuthModal,
     closeAuthModal
   };

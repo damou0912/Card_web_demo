@@ -38,30 +38,18 @@
       onCardPlaced(context) {
         const card = context.card;
         if (context.player?.id !== own(context).id || !card || !context.operations.claimFirstPlacement("1007")) return;
-        context.operations.adjustScoped(card, 3, false);
-      }
-    }),
-    "1008": Object.freeze({
-      handLimit(context) { return context.player?.id === own(context).id ? 1 : null; },
-      onCardDrawn(context) { if (context.player?.id === own(context).id) context.operations.trimHandToOne(); },
-      onCardPlaced(context) { if (context.player?.id === own(context).id) context.operations.trimHandToOne(); },
-      handState(context) {
-        if (context.player?.id !== own(context).id) return;
-        context.operations.trimHandToOne();
-        if (!context.player.hand.length) {
-          context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", !context.player.drawPile.length);
-          context.operations.drawCard(context.player);
-          if (context.player.hand.length) context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", false);
-        } else {
-          context.operations.setPlayerState(context.player, "waitingForDrawPileRefill", false);
-        }
-        context.operations.trimHandToOne();
+        context.operations.setCardState(card, "cautionTurn", context.game.turn);
+        context.operations.adjust(card, 3);
       },
-      onDrawPileChanged(context) {
-        const player = context.player;
-        if (player?.id !== own(context).id || !player.eliteTraitState?.waitingForDrawPileRefill || !player.drawPile.length || player.hand.length) return;
-        context.operations.drawCard(player);
-        context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
+      onTurnStart(context) {
+        const cards = allies(context);
+        cards.forEach((card) => {
+          const cautionTurn = context.operations.getCardState(card, "cautionTurn");
+          if (cautionTurn !== undefined && cautionTurn !== context.game.turn) {
+            context.operations.adjust(card, -3);
+            context.operations.setCardState(card, "cautionTurn", undefined);
+          }
+        });
       }
     }),
     "1009": Object.freeze({

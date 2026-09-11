@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>吴卡修改测试 - 03106, 03314, 03315, 03416, 03519</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+    .test-container { max-width: 1200px; margin: 0 auto; }
+    .test-section { background: white; margin: 20px 0; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .test-title { font-size: 18px; font-weight: bold; color: #333; margin-bottom: 15px; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+    .test-case { margin: 10px 0; padding: 10px; background: #f9f9f9; border-left: 4px solid #ddd; }
+    .test-case.pass { border-left-color: #28a745; background: #f0fff4; }
+    .test-case.fail { border-left-color: #dc3545; background: #fff5f5; }
+    .test-status { font-weight: bold; display: inline-block; width: 60px; }
+    .pass { color: #28a745; }
+    .fail { color: #dc3545; }
+    .summary { margin-top: 30px; font-size: 16px; font-weight: bold; }
+    .stats { display: flex; gap: 40px; margin-top: 10px; }
+    .stat { padding: 10px 20px; background: #f0f0f0; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>吴卡修改用例测试</h1>
+    <p>测试5张修改卡牌的效果实现</p>
+    <div id="results"></div>
+  </div>
+
+  <script src="card-info.js"></script>
+  <script src="core-v2.js"></script>
+  <script src="wu-card-effects.js"></script>
+  <script src="core-v2.test-suite.js"></script>
+
+  <script>
+    (async () => {
+      // 等待所有脚本加载
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      if (!window.runCoreV2CardBoundaryTests) {
+        document.getElementById('results').innerHTML = '<div class="test-section"><p style="color:red;">❌ 测试函数未加载</p></div>';
+        return;
+      }
+
+      // 运行测试
+      const allResults = window.runCoreV2CardBoundaryTests();
+
+      // 筛选修改卡牌的测试
+      const modifiedCardTests = allResults.results.filter(r =>
+        r.name.includes('03106-修改') ||
+        r.name.includes('03314-修改') ||
+        r.name.includes('03315-修改') ||
+        r.name.includes('03416-修改') ||
+        r.name.includes('03519-修改')
+      );
+
+      // 生成HTML
+      let html = `
+        <div class="test-section">
+          <div class="test-title">📊 测试统计</div>
+          <div class="stats">
+            <div class="stat">总测试数: ${allResults.passed + allResults.failed}</div>
+            <div class="stat"><span class="pass">✓ 通过: ${allResults.passed}</span></div>
+            <div class="stat"><span class="fail">✗ 失败: ${allResults.failed}</span></div>
+          </div>
+        </div>
+      `;
+
+      // 修改卡牌测试结果
+      html += '<div class="test-section"><div class="test-title">🎴 修改卡牌测试结果</div>';
+
+      modifiedCardTests.forEach(test => {
+        const statusClass = test.passed ? 'pass' : 'fail';
+        const statusText = test.passed ? '✓ PASS' : '✗ FAIL';
+        html += `
+          <div class="test-case ${statusClass}">
+            <span class="test-status ${statusClass}">${statusText}</span>
+            <strong>${test.id}</strong> - ${test.name}
+            ${test.error ? `<div style="color:red;margin-top:5px;">错误: ${test.error}</div>` : ''}
+          </div>
+        `;
+      });
+
+      html += '</div>';
+
+      // 所有测试详情
+      html += '<div class="test-section"><div class="test-title">📋 全部测试结果</div>';
+      allResults.results.forEach(test => {
+        const statusClass = test.passed ? 'pass' : 'fail';
+        const statusText = test.passed ? '✓' : '✗';
+        if (!test.name.includes('修改')) return;
+        html += `
+          <div class="test-case ${statusClass}">
+            <span class="test-status ${statusClass}">${statusText}</span>
+            ${test.name}
+          </div>
+        `;
+      });
+
+      html += '</div>';
+
+      document.getElementById('results').innerHTML = html;
+
+      // 在控制台输出详细结果
+      console.log('=== 修改卡牌测试结果 ===');
+      modifiedCardTests.forEach(test => {
+        console.log(`${test.passed ? '✓' : '✗'} ${test.id} - ${test.name}${test.error ? ' (错误: ' + test.error + ')' : ''}`);
+      });
+      console.log(`\n总体: ${allResults.passed} 通过 / ${allResults.failed} 失败`);
+    })();
+  </script>
+</body>
+</html>

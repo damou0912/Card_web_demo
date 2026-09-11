@@ -1476,7 +1476,11 @@
   }
 
   function coreValidateV2CardData() {
-    const cards = window.CARD_LIBRARY?.cardSlots || [];
+    if (!window.CARD_LIBRARY) {
+      console.error("CARD_LIBRARY 未定义。检查 card-info.js 和 v2-card-data.js 是否正确加载。");
+      throw new Error("卡牌数据库未初始化");
+    }
+    const cards = window.CARD_LIBRARY.cardSlots || [];
     const seen = new Set();
     const duplicateIds = [];
     const invalidCards = [];
@@ -1494,7 +1498,7 @@
       if (validId && !coreCardEffectDefinition(card)) missingEffectIds.push(id);
     });
     return {
-      cardDataVersion: window.CARD_LIBRARY?.version || null,
+      cardDataVersion: window.CARD_LIBRARY.version || null,
       cardCount: cards.length,
       duplicateIds,
       invalidCards,

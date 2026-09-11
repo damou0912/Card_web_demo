@@ -5532,30 +5532,31 @@ body {
 .preset-accounts-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 12px 0;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  border: 1px solid var(--panel-border);
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border: none;
 }
 
 .preset-accounts-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
+  display: none;
 }
 
 .preset-account-btn {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: 4px;
   background: white;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 180ms ease;
   text-align: left;
@@ -5569,7 +5570,7 @@ body {
 }
 
 .preset-account-btn:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
 
 .form-group {
@@ -5610,30 +5611,41 @@ body {
 }
 
 .login-success-container {
-  text-align: center;
+  text-align: left;
+  min-height: 40px;
 }
 
-.login-welcome {
+.login-welcome-text {
   font-size: 14px;
-  color: var(--muted);
-  margin: 0;
-}
-
-.login-username-display {
-  font-size: 16px;
-  font-weight: 700;
   color: var(--ink);
-  margin: 8px 0 16px;
+  margin: 0 0 8px 0;
+  font-weight: 500;
 }
 
-.login-actions {
-  display: flex;
-  gap: 10px;
-  flex-direction: column;
+.logout-mini-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: white;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 180ms ease;
+  white-space: nowrap;
 }
 
-.login-actions button {
-  flex: 1;
+.logout-mini-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.logout-mini-btn:active {
+  transform: scale(0.95);
 }
 
 @media (max-width: 480px) {

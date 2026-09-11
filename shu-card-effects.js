@@ -205,7 +205,7 @@
     }
   };
 
-  shu["01225"] = {
+  shu["01116"] = {
     flags: { cannotMove: true },
     onPlace(ctx) {
       ctx.card.v2Locked = true;
@@ -220,7 +220,7 @@
     }
   };
 
-  shu["01226"] = {
+  shu["01117"] = {
     onTurnStart(ctx) {
       ctx.player.v2FirstPlaceThisTurn = null;  // 重置本回合第一张放置卡牌标记
     },
@@ -233,7 +233,7 @@
     }
   };
 
-  shu["01227"] = {
+  shu["01118"] = {
     onTurnStart(ctx) {
       // 获取四个方向（上下左右）
       const directions = [
@@ -261,7 +261,7 @@
     }
   };
 
-  shu["01328"] = {
+  shu["01119"] = {
     onPlace(ctx) {
       let target = ctx.pickRandom(ctx.enemies());
       if (target) {
@@ -277,7 +277,7 @@
     }
   };
 
-  shu["01429"] = {
+  shu["01120"] = {
     flags: { cannotMove: true },
     onTurnStart(ctx) {
       ctx.player.cards.forEach((card) => {
@@ -293,7 +293,7 @@
     }
   };
 
-  shu["01530"] = {
+  shu["01115"] = {
     onBeforeAllyDestroy(ctx) {
       ctx.adjust(ctx.card, -3);
       return false;

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Red Box Issue</title>
+    <style>
+        body { font-family: Arial; padding: 20px; background: #f5f5f5; }
+        .debug-section { background: white; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .red-element { border: 3px solid red; padding: 10px; margin: 5px 0; }
+        pre { background: #eee; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>红色框问题诊断</h1>
+
+    <div class="debug-section">
+        <h2>1. 页面加载状态</h2>
+        <div id="load-status"></div>
+    </div>
+
+    <div class="debug-section">
+        <h2>2. 红色元素检测</h2>
+        <div id="red-elements"></div>
+    </div>
+
+    <div class="debug-section">
+        <h2>3. 点击事件监听</h2>
+        <button id="test-btn" style="padding: 10px 20px; cursor: pointer;">测试按钮</button>
+        <div id="click-log"></div>
+    </div>
+
+    <div class="debug-section">
+        <h2>4. 元素指针事件检查</h2>
+        <div id="pointer-check"></div>
+    </div>
+
+    <script>
+        // 检查页面加载
+        window.addEventListener('load', () => {
+            const status = document.getElementById('load-status');
+            status.innerHTML = `
+                <p>✓ 页面已加载</p>
+                <p>CARD_LIBRARY: ${window.CARD_LIBRARY ? '✓ 已定义' : '✗ 未定义'}</p>
+                <p>CARD_INFO: ${window.CARD_INFO ? '✓ 已定义' : '✗ 未定义'}</p>
+            `;
+        });
+
+        // 检测红色元素
+        function findRedElements() {
+            const result = document.getElementById('red-elements');
+            const redElements = [];
+
+            document.querySelectorAll('*').forEach(el => {
+                const style = window.getComputedStyle(el);
+                const bgColor = style.backgroundColor;
+                const color = style.color;
+
+                // 检查红色背景或文本
+                if ((bgColor.includes('rgb(255') && bgColor.includes('0') && bgColor.includes('0')) ||
+                    (color.includes('rgb(255') && color.includes('0') && color.includes('0'))) {
+                    redElements.push({
+                        tag: el.tagName,
+                        id: el.id,
+                        class: el.className,
+                        bgColor,
+                        color,
+                        text: el.textContent?.substring(0, 50)
+                    });
+                }
+            });
+
+            if (redElements.length === 0) {
+                result.innerHTML = '<p>未找到红色元素</p>';
+            } else {
+                result.innerHTML = '<pre>' + JSON.stringify(redElements, null, 2) + '</pre>';
+            }
+        }
+
+        // 点击测试
+        document.getElementById('test-btn').addEventListener('click', () => {
+            const log = document.getElementById('click-log');
+            log.innerHTML += '<p style="color: green;">✓ 测试按钮点击有效</p>';
+        });
+
+        // 检查指针事件
+        function checkPointerEvents() {
+            const result = document.getElementById('pointer-check');
+            const elements = document.querySelectorAll('button, a, [role="button"]');
+            const issues = [];
+
+            elements.forEach(el => {
+                const style = window.getComputedStyle(el);
+                if (style.pointerEvents === 'none') {
+                    issues.push({
+                        tag: el.tagName,
+                        id: el.id,
+                        class: el.className,
+                        text: el.textContent?.substring(0, 50),
+                        pointerEvents: 'none ⚠️'
+                    });
+                }
+            });
+
+            if (issues.length === 0) {
+                result.innerHTML = '<p>✓ 所有可点击元素 pointer-events 正常</p>';
+            } else {
+                result.innerHTML = '<p style="color: red;">发现 ' + issues.length + ' 个元素的 pointer-events: none</p>';
+                result.innerHTML += '<pre>' + JSON.stringify(issues, null, 2) + '</pre>';
+            }
+        }
+
+        // 初始化
+        window.addEventListener('load', () => {
+            setTimeout(findRedElements, 100);
+            setTimeout(checkPointerEvents, 100);
+        });
+    </script>
+</body>
+</html>

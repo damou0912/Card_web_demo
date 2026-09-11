@@ -364,6 +364,67 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.method === "POST" && requestedPath === "/api/save-custom-deck") {
+    let bodyData = "";
+    request.on("data", (chunk) => {
+      bodyData += chunk;
+    });
+    request.on("end", () => {
+      try {
+        const body = JSON.parse(bodyData);
+        const { username, camp, modifications } = body;
+
+        if (!username || !camp || !modifications) {
+          response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ error: "参数不完整" }));
+          return;
+        }
+
+        const result = db.saveCustomDeck(username, camp, modifications);
+        response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(result));
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "请求格式无效" }));
+      }
+    });
+    return;
+  }
+
+  if (request.method === "POST" && requestedPath === "/api/reset-custom-deck") {
+    let bodyData = "";
+    request.on("data", (chunk) => {
+      bodyData += chunk;
+    });
+    request.on("end", () => {
+      try {
+        const body = JSON.parse(bodyData);
+        const { username, camp } = body;
+
+        if (!username || !camp) {
+          response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ error: "参数不完整" }));
+          return;
+        }
+
+        const result = db.resetCustomDeck(username, camp);
+        response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(result));
+      } catch (error) {
+        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "请求格式无效" }));
+      }
+    });
+    return;
+  }
+
+  if (request.method === "POST" && requestedPath === "/api/pvp/clear") {
+    const result = db.clearAllPVPData();
+    response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify(result));
+    return;
+  }
+
   const filePath = path.resolve(root, `.${requestedPath}`);
   if (!filePath.startsWith(root) || !publicExtensions.has(path.extname(filePath).toLowerCase()) || !fs.existsSync(filePath)) {
     response.writeHead(404);

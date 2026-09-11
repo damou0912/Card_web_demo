@@ -160,7 +160,7 @@ const ui = {
 };
 
 const state = {
-  selectedMode: "pvp",
+  selectedMode: "pve",
   challengeLevel: 1,
   selectedBoardSize: 5,
   playerName: "",
@@ -625,12 +625,19 @@ function saveModifiedDeck() {
     return;
   }
 
+  const username = authClient?.loadUser?.();
+  if (!username) {
+    showToast('请先登录', 'error');
+    return;
+  }
+
   const modifications = state.modifyDeck.modifications;
 
   fetch('/api/save-custom-deck', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      username,
       camp,
       modifications
     })
@@ -654,10 +661,16 @@ function resetModifiedDeck() {
   const camp = state.modifyDeck.selectedCamp;
   if (!camp) return;
 
+  const username = authClient?.loadUser?.();
+  if (!username) {
+    showToast('请先登录', 'error');
+    return;
+  }
+
   fetch('/api/reset-custom-deck', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ camp })
+    body: JSON.stringify({ username, camp })
   })
     .then(res => res.json())
     .then(data => {

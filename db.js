@@ -39,7 +39,8 @@ function ensureDB() {
         totalGames: 0,
         lastLogin: null,
         challengeProgress: 0,
-        challengeProgressSavedAt: null
+        challengeProgressSavedAt: null,
+        customDecks: {}
       };
 
       initialData.cards[username] = {
@@ -238,6 +239,27 @@ function clearChallengeProgress(username) {
   return { success: true };
 }
 
+// ===== 清空PVP数据 =====
+function clearAllPVPData() {
+  const db = readDB();
+
+  // 清空所有游戏记录
+  db.gameRecords = [];
+
+  // 重置所有玩家的PVP数据
+  Object.keys(db.profiles || {}).forEach((username) => {
+    const profile = db.profiles[username];
+    profile.pvpWins = 0;
+    profile.wins = 0;
+    profile.bestStreak = 0;
+    profile.bestDeck = null;
+    profile.totalGames = 0;
+  });
+
+  writeDB(db);
+  return { success: true, message: "已清空所有本地PVP数据" };
+}
+
 function getLeaderboard() {
   const db = readDB();
   const leaderboard = Object.entries(db.profiles || {})
@@ -256,6 +278,32 @@ function getLeaderboard() {
   return leaderboard;
 }
 
+function getCustomDecks(username) {
+  const db = readDB();
+  if (!db.profiles[username]) return null;
+  return db.profiles[username].customDecks || {};
+}
+
+function saveCustomDeck(username, campKey, deckData) {
+  const db = readDB();
+  if (!db.profiles[username]) return { error: "用户不存在" };
+  if (!db.profiles[username].customDecks) db.profiles[username].customDecks = {};
+
+  db.profiles[username].customDecks[campKey] = deckData;
+  writeDB(db);
+  return { success: true };
+}
+
+function resetCustomDeck(username, campKey) {
+  const db = readDB();
+  if (!db.profiles[username]) return { error: "用户不存在" };
+  if (!db.profiles[username].customDecks) db.profiles[username].customDecks = {};
+
+  delete db.profiles[username].customDecks[campKey];
+  writeDB(db);
+  return { success: true };
+}
+
 module.exports = {
   createUser,
   getPresetAccounts,
@@ -269,5 +317,9 @@ module.exports = {
   getLeaderboard,
   getChallengeProgress,
   saveChallengeProgress,
-  clearChallengeProgress
+  clearChallengeProgress,
+  getCustomDecks,
+  saveCustomDeck,
+  resetCustomDeck,
+  clearAllPVPData
 };

@@ -59,22 +59,22 @@
   "profiles": {
     "player1": {
       "nickname": "��ʿ",
-      "wins": 2,
+      "wins": 0,
       "bestStreak": 0,
-      "bestDeck": "deck2",
+      "bestDeck": null,
       "pveWins": 1,
-      "pvpWins": 1,
-      "totalGames": 2,
+      "pvpWins": 0,
+      "totalGames": 0,
       "lastLogin": "2026-09-10T13:18:29.605Z"
     },
     "player2": {
       "nickname": "player2",
-      "wins": 1,
+      "wins": 0,
       "bestStreak": 0,
-      "bestDeck": "deck1",
+      "bestDeck": null,
       "pveWins": 1,
       "pvpWins": 0,
-      "totalGames": 2,
+      "totalGames": 0,
       "lastLogin": "2026-09-10T13:15:43.971Z"
     },
     "player3": {
@@ -2304,54 +2304,5 @@
       }
     }
   },
-  "gameRecords": [
-    {
-      "username": "player1",
-      "gameType": "pve",
-      "result": "win",
-      "deckUsed": "deck1",
-      "score": {
-        "player1": 20,
-        "player2": 5,
-        "turns": 12
-      },
-      "timestamp": "2026-09-10T13:18:30.118Z"
-    },
-    {
-      "username": "player1",
-      "gameType": "pvp",
-      "result": "win",
-      "deckUsed": "deck2",
-      "score": {
-        "player1": 15,
-        "player2": 10,
-        "turns": 8
-      },
-      "timestamp": "2026-09-10T13:18:30.621Z"
-    },
-    {
-      "username": "player2",
-      "gameType": "pve",
-      "result": "win",
-      "deckUsed": "deck1",
-      "score": {
-        "player1": 18,
-        "player2": 6,
-        "turns": 10
-      },
-      "timestamp": "2026-09-10T13:18:30.869Z"
-    },
-    {
-      "username": "player2",
-      "gameType": "pve",
-      "result": "loss",
-      "deckUsed": "deck1",
-      "score": {
-        "player1": 8,
-        "player2": 12,
-        "turns": 15
-      },
-      "timestamp": "2026-09-10T13:18:31.104Z"
-    }
-  ]
+  "gameRecords": []
 }

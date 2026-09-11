@@ -528,7 +528,6 @@
   }
 
   function coreTrimEliteAiHand(game, owner = coreEliteAiTraitOwner(game)) {
-    if (!coreIsPveChallenge(game)) return 0;
     const ai = owner;
     if (!ai) return 0;
     let removed = 0;
@@ -1458,7 +1457,7 @@
     if (event === CORE_V2_EVENT.CARD_DRAWN && payload.player) {
       const result = coreRunV2OtherDrawEffects(game, payload.player, payload.drawnCard, payload.log || []);
       coreApplyEliteAiTraitEvent(game, "cardDrawn", { ...payload, card: payload.drawnCard }, payload.log || []);
-      if (game.currentPhase !== "开局展示") {
+      if (coreIsPveChallenge(game) && game.currentPhase !== "开局展示") {
         coreTrimEliteAiHand(game);
       }
       return result;

@@ -1520,6 +1520,24 @@
 
   function coreResolveSkillAttack(game, attacker, defender, player, log) {
     if (!attacker || !defender || !game.boardCards.includes(attacker) || !game.boardCards.includes(defender) || !coreCanCardsFight(game, attacker, defender)) return;
+
+    // Trigger onBeforeAttack effects on attacker
+    const attackerDef = coreCardEffectDefinition(attacker);
+    if (typeof attackerDef?.onBeforeAttack === "function") {
+      attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, attacker, log, {
+        targetCard: defender
+      }));
+    }
+
+    // Trigger onUnderAttack effects on defender
+    const defenderPlayer = corePlayer(game, defender.ownerId);
+    const defenderDef = coreCardEffectDefinition(defender);
+    if (typeof defenderDef?.onUnderAttack === "function") {
+      defenderDef.onUnderAttack(coreCreateCardEffectContext(game, defenderPlayer, defender, log, {
+        attacker
+      }));
+    }
+
     const attackerValue = attacker.currentAttack;
     const defenderValue = defender.currentAttack;
     const sourcePosition = { row: attacker.row, col: attacker.col };
@@ -1676,10 +1694,17 @@
   }
 
   function coreValidMoves(game, card) {
-    if (!card || card.isGuard || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || card.lastMovedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
+    if (!card || card.isGuard || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
       return [];
     }
-    if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) return [];
+    // Check if card can move (accounting for extra move from onPlace effects)
+    if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) {
+      if (!(card.v2ExtraMoveAllowed && card.v2ExtraMoveUsed !== game.turn)) return [];
+    }
+    // Mark extra move as used this turn if being used
+    if (card.v2ExtraMoveAllowed && card.v2ExtraMoveUsed !== game.turn && card.lastMovedTurn === game.turn) {
+      card.v2ExtraMoveUsed = game.turn;
+    }
     const cells = [];
     const directions = [{ row: -1, col: 0 }, { row: 1, col: 0 }, { row: 0, col: -1 }, { row: 0, col: 1 }];
     const canUseLongMove = coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed;
@@ -1814,6 +1839,7 @@
         player.v2NextPlacementExtra = null;
         player.v2NextPlacementExtraTurn = null;
       }
+      const originalPlacingPlayerId = card.ownerId;
       coreApplyV2PlacementSkill(game, player, card, skillLog);
       coreInvalidateControlCellOnEntry(game, card);
       if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
@@ -1825,7 +1851,7 @@
         }
         skillLog.push(`${coreCardName(card)} 的放置技能额外结算 1 次。`);
       }
-      coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, card.ownerId), card, log: skillLog });
+      coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, originalPlacingPlayerId), card, log: skillLog });
       if (skillLog.length) skillLog.forEach((entry) => coreAppendLog(game, entry));
       game.effectBoardCards = null;
       const restMessage = card.restedTurn === game.turn ? "该卡本回合进入休整。" : "该卡本回合不进入休整。";
@@ -1856,10 +1882,23 @@
         // after all combat and destruction effects have finished.
         card.row = targetPosition.row;
         card.col = targetPosition.col;
+        const combatLog = [];
+
+        // Trigger onBeforeAttack effects on attacker
+        const attackerDef = coreCardEffectDefinition(card);
+        if (typeof attackerDef?.onBeforeAttack === "function") {
+          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, combatLog, { targetCard: defender }));
+        }
+
+        // Trigger onUnderAttack effects on defender
+        const defenderDef = coreCardEffectDefinition(defender);
+        if (typeof defenderDef?.onUnderAttack === "function") {
+          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, combatLog, { attacker: card }));
+        }
+
         const attackerValue = Number(card.currentAttack ?? card.attack) || 0;
         const defenderValue = Number(defender.currentAttack ?? defender.attack) || 0;
         const outcome = attackerValue > defenderValue ? "a" : attackerValue < defenderValue ? "b" : "both";
-        const combatLog = [];
         let attackerDestroyed = false;
         let defenderDestroyed = false;
         if (outcome === "a") {

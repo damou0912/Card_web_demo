@@ -163,14 +163,16 @@
   };
 
   wu["03416"] = {
-    flags: { freeMove: true, watchAllDestroyed: true },
-    onBeforeDestroy(ctx) {
-      if (ctx.card.currentAttack <= 4) return;
-      ctx.adjust(ctx.card, -4);
-      ctx.log("战力大于4，保留在原格并永久战力-4。");
-      return false;
+    flags: { watchAllDestroyed: true },
+    onPlace(ctx) {
+      ctx.card.v2ExtraMoveAllowed = true;
     },
-    onOtherDestroyed(ctx) { ctx.adjust(ctx.card, 1); }
+    onOtherDestroyed(ctx) {
+      if (ctx.destroyedCard.currentAttack <= ctx.card.currentAttack) ctx.adjust(ctx.card, 1);
+    },
+    onBeforeAttack(ctx) {
+      ctx.adjust(ctx.card, 3, true);
+    }
   };
 
   wu["03517"] = {
@@ -201,6 +203,11 @@
       ctx.card.v2AllowSelfDestroy = true;
       ctx.destroy(ctx.card);
       ctx.card.v2AllowSelfDestroy = false;
+    },
+    onUnderAttack(ctx) {
+      ctx.adjacent().forEach((target) => {
+        if (target.ownerId === ctx.card.ownerId) ctx.adjust(target, -1, true);
+      });
     }
   };
 

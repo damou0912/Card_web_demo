@@ -150,6 +150,165 @@
 
   shu["01520"] = {
     onTurnStart(ctx) {
+      for (let row = 0; row < ctx.board.rows; row++) {
+        for (let col = 0; col < ctx.board.cols; col++) {
+          const cell = ctx.board.get(row, col);
+          if (!cell) ctx.board.control(row, col, ctx.card.ownerId);
+        }
+      }
+    }
+  };
+
+  // 新增蜀卡 (01121-01530)
+
+  shu["01121"] = {
+    onTurnStart(ctx) {
+      const adjacent = ctx.adjacent();  // 四方相邻（包括敌方和友方）
+      if (adjacent.length) {
+        const target = ctx.pickRandom(adjacent);
+        if (target && ctx.canSwap(ctx.card, target)) {
+          ctx.swap(ctx.card, target);
+        }
+      }
+    }
+  };
+
+  shu["01122"] = {
+    onTurnStart(ctx) {
+      const enemies = ctx.enemies();
+      const target = ctx.pickRandom(enemies);
+      if (target && ctx.canFight(ctx.card, target)) {
+        ctx.skillAttack(ctx.card, target);
+        if (target.destroyed) {  // 成功摧毁
+          ctx.adjust(ctx.card, 1);
+        }
+      }
+    }
+  };
+
+  shu["01123"] = {
+    onPlace(ctx) {
+      ctx.player.cards.forEach((card) => {
+        card.v2NoRest = true;
+      });
+    }
+  };
+
+  shu["01124"] = {
+    onTurnStart(ctx) {
+      ctx.adjust(ctx.card, -1);
+      ctx.enemies().forEach((enemy) => {
+        if (enemy.currentAttack < ctx.card.currentAttack) {
+          ctx.destroy(enemy);
+        }
+      });
+    }
+  };
+
+  shu["01225"] = {
+    flags: { cannotMove: true },
+    onPlace(ctx) {
+      ctx.card.v2Locked = true;
+      ctx.enemies().forEach((enemy) => {
+        enemy.v2Locked = true;
+      });
+    },
+    onDestroy(ctx) {
+      ctx.enemies().forEach((enemy) => {
+        enemy.v2Locked = false;
+      });
+    }
+  };
+
+  shu["01226"] = {
+    onTurnStart(ctx) {
+      ctx.player.v2FirstPlaceThisTurn = null;  // 重置本回合第一张放置卡牌标记
+    },
+    onOtherCardPlace(ctx, placedCard) {
+      // 当其他卡牌放置时
+      if (placedCard.ownerId === ctx.card.ownerId && !ctx.player.v2FirstPlaceThisTurn) {
+        ctx.player.v2FirstPlaceThisTurn = placedCard;
+        ctx.adjust(placedCard, 2);  // 第一张放置卡牌战力+2
+      }
+    }
+  };
+
+  shu["01227"] = {
+    onTurnStart(ctx) {
+      // 获取四个方向（上下左右）
+      const directions = [
+        { row: ctx.card.row - 1, col: ctx.card.col },  // 上
+        { row: ctx.card.row + 1, col: ctx.card.col },  // 下
+        { row: ctx.card.row, col: ctx.card.col - 1 },  // 左
+        { row: ctx.card.row, col: ctx.card.col + 1 }   // 右
+      ];
+
+      // 只检查战场内的有效方向
+      const validDirections = directions.filter((dir) => {
+        // 假设棋盘是5x5 (0-4)
+        return dir.row >= 0 && dir.row < 5 && dir.col >= 0 && dir.col < 5;
+      });
+
+      // 所有有效方向都必须有友军
+      const allValidDirectionsHaveAllies = validDirections.length > 0 && validDirections.every((dir) => {
+        const card = ctx.board.find((c) => c.row === dir.row && c.col === dir.col);
+        return card && card.ownerId === ctx.card.ownerId;
+      });
+
+      if (allValidDirectionsHaveAllies) {
+        ctx.addActions(ctx.player, 1);
+      }
+    }
+  };
+
+  shu["01328"] = {
+    onPlace(ctx) {
+      let target = ctx.pickRandom(ctx.enemies());
+      if (target) {
+        ctx.skillAttack(ctx.card, target);
+        if (target.destroyed) {
+          target = ctx.pickRandom(ctx.enemies());
+          if (target) ctx.skillAttack(ctx.card, target);
+        }
+      }
+    },
+    onTurnStart(ctx) {
+      ctx.adjust(ctx.card, -2, true);
+    }
+  };
+
+  shu["01429"] = {
+    flags: { cannotMove: true },
+    onTurnStart(ctx) {
+      ctx.player.cards.forEach((card) => {
+        ctx.adjust(card, 1, true);
+      });
+    },
+    onBeforeAdjust(ctx, target, amount) {
+      // 如果是敌方卡牌且是正数（增加），则阻止
+      if (target.ownerId !== ctx.card.ownerId && amount > 0) {
+        return 0;  // 阻止增加
+      }
+      // 允许其他调整
+    }
+  };
+
+  shu["01530"] = {
+    onBeforeAllyDestroy(ctx) {
+      ctx.adjust(ctx.card, -3);
+      return false;
+    },
+    onTurnEnd(ctx) {
+      ctx.player.cards.forEach((card) => {
+        if (card !== ctx.card && card.currentAttack === 0) {
+          ctx.destroy(card);
+        }
+      });
+    }
+  };
+
+  shu["01520"] = {
+    onTurnStart(ctx) {
       const cells = ctx.orthogonalCells().filter((cell) => (
         !ctx.board.some((target) => target.row === cell.row && target.col === cell.col)
         && !ctx.game.brokenCells.some((target) => target.row === cell.row && target.col === cell.col)

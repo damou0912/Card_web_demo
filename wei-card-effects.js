@@ -112,8 +112,8 @@
 
   wei["02313"] = {
     onPlace(ctx) {
-      ctx.adjust(ctx.card, 5);
-      ctx.log("放置时自身永久战力+5。");
+      ctx.adjust(ctx.card, 8);
+      ctx.log("放置时自身永久战力+8。");
     },
     onTurnStart(ctx) {
       if (ctx.card.currentAttack < 2) {

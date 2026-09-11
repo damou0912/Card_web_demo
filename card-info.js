@@ -600,7 +600,8 @@ const CARD_INFO = [
     "attack": 0,
     "rarity": "特殊",
     "effect": "入阵：全场卡牌本回合战力-2。\r\n入阵：本回合我方行动数+1。"
-  },
+  }
+  /*
   {
     "id": "01121",
     "name": "李恢",
@@ -701,6 +702,7 @@ const CARD_INFO = [
     "rarity": "特殊",
     "effect": "1、我方其他卡牌被摧毁时，此卡牌战力-3，免疫此次摧毁。\r\n2、收势：摧毁我方其他战力为0的卡牌。"
   }
+  */
 ];
 window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-display-effect-isolation-20260908";
 window.CARD_INFO = CARD_INFO;

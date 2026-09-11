@@ -37,7 +37,9 @@ function ensureDB() {
         pveWins: 0,
         pvpWins: 0,
         totalGames: 0,
-        lastLogin: null
+        lastLogin: null,
+        challengeProgress: 0,
+        challengeProgressSavedAt: null
       };
 
       initialData.cards[username] = {
@@ -191,17 +193,67 @@ function getGameHistory(username, limit = 50) {
     .reverse();
 }
 
-function getLeaderboard(type = "overall", limit = 100) {
+// ===== 挑战模式进度 =====
+function getChallengeProgress(username) {
   const db = readDB();
-  const profiles = Object.entries(db.profiles).map(([username, profile]) => ({
-    username,
-    nickname: profile.nickname,
-    wins: type === "pve" ? profile.pveWins : type === "pvp" ? profile.pvpWins : profile.wins,
-    totalGames: profile.totalGames,
-    winRate: profile.totalGames ? ((profile.wins / profile.totalGames) * 100).toFixed(2) : 0
-  }));
+  if (!db.profiles[username]) return null;
 
-  return profiles.sort((a, b) => b.wins - a.wins).slice(0, limit);
+  const profile = db.profiles[username];
+  const savedAt = profile.challengeProgressSavedAt
+    ? new Date(profile.challengeProgressSavedAt)
+    : null;
+  const now = new Date();
+
+  // 检查是否超过 72 小时
+  if (savedAt && now - savedAt > 72 * 60 * 60 * 1000) {
+    return { level: 0, expired: true };
+  }
+
+  return {
+    level: profile.challengeProgress || 0,
+    savedAt: profile.challengeProgressSavedAt || null,
+    expired: false
+  };
+}
+
+function saveChallengeProgress(username, level) {
+  const db = readDB();
+  if (!db.profiles[username]) return { error: "用户不存在" };
+
+  db.profiles[username].challengeProgress = level;
+  db.profiles[username].challengeProgressSavedAt = new Date().toISOString();
+  writeDB(db);
+
+  return { success: true, level };
+}
+
+function clearChallengeProgress(username) {
+  const db = readDB();
+  if (!db.profiles[username]) return { error: "用户不存在" };
+
+  db.profiles[username].challengeProgress = 0;
+  db.profiles[username].challengeProgressSavedAt = null;
+  writeDB(db);
+
+  return { success: true };
+}
+
+function getLeaderboard() {
+  const db = readDB();
+  const leaderboard = Object.entries(db.profiles || {})
+    .map(([username, profile]) => ({
+      username,
+      nickname: profile.nickname || username,
+      winCount: profile.winCount || 0,
+      totalGames: profile.totalGames || 0,
+      winRate: profile.totalGames > 0
+        ? ((profile.winCount || 0) / profile.totalGames * 100).toFixed(2)
+        : 0
+    }))
+    .sort((a, b) => b.winCount - a.winCount)
+    .slice(0, 100);
+
+  return leaderboard;
 }
 
 module.exports = {
@@ -214,5 +266,8 @@ module.exports = {
   addCard,
   saveGameRecord,
   getGameHistory,
-  getLeaderboard
+  getLeaderboard,
+  getChallengeProgress,
+  saveChallengeProgress,
+  clearChallengeProgress
 };

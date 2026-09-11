@@ -116,6 +116,44 @@ const authClient = (() => {
     }
   }
 
+  async function getChallengeProgress(username) {
+    try {
+      const response = await fetch(`/api/challenge/progress/${encodeURIComponent(username)}`);
+      if (response.ok) {
+        return await response.json();
+      }
+      return { level: 0, expired: false };
+    } catch (e) {
+      return { level: 0, expired: false };
+    }
+  }
+
+  async function saveChallengeProgress(username, level) {
+    try {
+      const response = await fetch("/api/challenge/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, level })
+      });
+      return await response.json();
+    } catch (e) {
+      return { error: "保存进度失败：" + e.message };
+    }
+  }
+
+  async function clearChallengeProgress(username) {
+    try {
+      const response = await fetch("/api/challenge/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username })
+      });
+      return await response.json();
+    } catch (e) {
+      return { error: "清除进度失败：" + e.message };
+    }
+  }
+
   async function saveGameRecord(username, gameType, result, deckUsed, score) {
     try {
       const response = await fetch("/api/game/record", {
@@ -137,6 +175,9 @@ const authClient = (() => {
     getCards,
     getLeaderboard,
     saveGameRecord,
+    getChallengeProgress,
+    saveChallengeProgress,
+    clearChallengeProgress,
     saveUser,
     loadUser,
     clearUser

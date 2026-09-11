@@ -158,7 +158,25 @@ const gameIntegration = (() => {
   // 游戏结束时保存记录
   async function saveGameResult(gameType, result, deckUsed, score) {
     if (!currentUser) return { message: "未登录，不记录" };
+
+    // 如果是挑战模式且胜利，保存进度
+    if (gameType === "pve-challenge" && result === "win" && score?.challengeLevel) {
+      await authClient.saveChallengeProgress(currentUser, score.challengeLevel);
+    }
+
     return await authClient.saveGameRecord(currentUser, gameType, result, deckUsed, score);
+  }
+
+  // 加载挑战模式进度
+  async function loadChallengeProgress() {
+    if (!currentUser) return { level: 0, expired: false };
+    return await authClient.getChallengeProgress(currentUser);
+  }
+
+  // 清除挑战模式进度
+  async function clearChallengeProgress() {
+    if (!currentUser) return { error: "未登录" };
+    return await authClient.clearChallengeProgress(currentUser);
   }
 
   function init() {

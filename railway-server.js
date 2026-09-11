@@ -308,6 +308,62 @@ const server = http.createServer((request, response) => {
     response.end(JSON.stringify({ ok: true, rooms: rooms.size }));
     return;
   }
+
+  // === API 端点 ===
+  if (request.method === "GET" && requestedPath.startsWith("/api/challenge/progress/")) {
+    const username = decodeURIComponent(requestedPath.slice("/api/challenge/progress/".length));
+    const progress = db.getChallengeProgress(username);
+    response.writeHead(progress ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify(progress || { error: "用户不存在" }));
+    return;
+  }
+
+  if (request.method === "POST" && requestedPath === "/api/challenge/progress") {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk.toString();
+      if (body.length > 1e6) {
+        response.writeHead(413);
+        response.end("Payload too large");
+      }
+    });
+    request.on("end", () => {
+      try {
+        const { username, level } = JSON.parse(body);
+        const result = db.saveChallengeProgress(username, level);
+        response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(result));
+      } catch (e) {
+        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "请求格式无效" }));
+      }
+    });
+    return;
+  }
+
+  if (request.method === "POST" && requestedPath === "/api/challenge/clear") {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk.toString();
+      if (body.length > 1e6) {
+        response.writeHead(413);
+        response.end("Payload too large");
+      }
+    });
+    request.on("end", () => {
+      try {
+        const { username } = JSON.parse(body);
+        const result = db.clearChallengeProgress(username);
+        response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify(result));
+      } catch (e) {
+        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "请求格式无效" }));
+      }
+    });
+    return;
+  }
+
   const filePath = path.resolve(root, `.${requestedPath}`);
   if (!filePath.startsWith(root) || !publicExtensions.has(path.extname(filePath).toLowerCase()) || !fs.existsSync(filePath)) {
     response.writeHead(404);

@@ -310,7 +310,45 @@ const server = http.createServer((request, response) => {
   }
 
   // === API 端点 ===
-  if (request.method === "GET" && requestedPath.startsWith("/api/challenge/progress/")) {
+
+  if (request.method === "GET" && requestedPath === "/api/auth/presets") {
+    const PRESET_ACCOUNTS = ["player1", "player2", "player3", "player4", "player5", "player6", "player7", "player8", "player9", "player10", "admin"];
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ accounts: PRESET_ACCOUNTS, password: "password123" }));
+    return;
+  }
+
+  if (request.method === "POST" && requestedPath === "/api/auth/login") {
+    let body = "";
+    request.on("data", (chunk) => {
+      body += chunk.toString();
+      if (body.length > 1e6) {
+        response.writeHead(413);
+        response.end("Payload too large");
+      }
+    });
+    request.on("end", () => {
+      try {
+        const { username, password } = JSON.parse(body);
+        const PRESET_ACCOUNTS = ["player1", "player2", "player3", "player4", "player5", "player6", "player7", "player8", "player9", "player10", "admin"];
+        const PRESET_PASSWORD = "password123";
+
+        if (PRESET_ACCOUNTS.includes(username) && password === PRESET_PASSWORD) {
+          response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ success: true, username }));
+        } else {
+          response.writeHead(401, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ error: "用户名或密码错误" }));
+        }
+      } catch (e) {
+        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: "请求格式无效" }));
+      }
+    });
+    return;
+  }
+
+  if (request.method === "GET" && requestedPath === "/api/challenge/progress/") {
     const username = decodeURIComponent(requestedPath.slice("/api/challenge/progress/".length));
     const progress = db.getChallengeProgress(username);
     response.writeHead(progress ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
@@ -367,25 +405,28 @@ const server = http.createServer((request, response) => {
   if (request.method === "POST" && requestedPath === "/api/save-custom-deck") {
     let bodyData = "";
     request.on("data", (chunk) => {
-      bodyData += chunk;
+      bodyData += chunk.toString();
     });
     request.on("end", () => {
       try {
+        console.log("Received body:", bodyData);
         const body = JSON.parse(bodyData);
         const { username, camp, modifications } = body;
 
-        if (!username || !camp || !modifications) {
+        if (!username || !camp || modifications === undefined) {
           response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
           response.end(JSON.stringify({ error: "参数不完整" }));
           return;
         }
 
+        console.log(`Saving custom deck for ${username}, camp: ${camp}`);
         const result = db.saveCustomDeck(username, camp, modifications);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (error) {
+        console.error("Error in save-custom-deck:", error.message);
         response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ error: "请求格式无效" }));
+        response.end(JSON.stringify({ error: "请求格式无效：" + error.message }));
       }
     });
     return;
@@ -394,10 +435,11 @@ const server = http.createServer((request, response) => {
   if (request.method === "POST" && requestedPath === "/api/reset-custom-deck") {
     let bodyData = "";
     request.on("data", (chunk) => {
-      bodyData += chunk;
+      bodyData += chunk.toString();
     });
     request.on("end", () => {
       try {
+        console.log("Received body:", bodyData);
         const body = JSON.parse(bodyData);
         const { username, camp } = body;
 
@@ -407,12 +449,14 @@ const server = http.createServer((request, response) => {
           return;
         }
 
+        console.log(`Resetting custom deck for ${username}, camp: ${camp}`);
         const result = db.resetCustomDeck(username, camp);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (error) {
+        console.error("Error in reset-custom-deck:", error.message);
         response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({ error: "请求格式无效" }));
+        response.end(JSON.stringify({ error: "请求格式无效：" + error.message }));
       }
     });
     return;

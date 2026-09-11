@@ -9,6 +9,7 @@ const sourcePath = path.join(root, "outputs", "card-info-table-xlsx", "card_info
 const targetPath = path.join(root, "card-info.js");
 const cardInfoSchemaVersion = "card-info-v2-display-effect-isolation-20260908";
 const expectedHeaders = ["卡牌ID", "卡牌名称", "势力", "技能名称", "基础战力", "品质", "技能效果描述"];
+const defaultDeckHeader = "默认卡组";
 const legacyEffectTagHeader = "触发词条";
 const cardIdPattern = /^0[1-3][1-5]\d{2}$/;
 
@@ -31,11 +32,15 @@ const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" 
 const headers = (rows.shift() || []).map(cellText);
 const baseHeadersMatch = headers.length === expectedHeaders.length
   && headers.every((header, index) => header === expectedHeaders[index]);
+// Accept the version with default deck column
+const withDefaultDeckMatch = headers.length === expectedHeaders.length + 1
+  && headers.slice(0, expectedHeaders.length).every((header, index) => header === expectedHeaders[index])
+  && headers[expectedHeaders.length] === defaultDeckHeader;
 // Accept the old workbook shape during migration, but never read its tag column.
 const legacyHeadersMatch = headers.length === expectedHeaders.length + 1
   && headers.slice(0, expectedHeaders.length).every((header, index) => header === expectedHeaders[index])
   && headers[expectedHeaders.length] === legacyEffectTagHeader;
-if (!baseHeadersMatch && !legacyHeadersMatch) {
+if (!baseHeadersMatch && !withDefaultDeckMatch && !legacyHeadersMatch) {
   fail(`列标题不匹配：${headers.join("、")}`);
 }
 
@@ -47,6 +52,10 @@ const cards = rows.filter((row) => row.some((value) => cellText(value))).map((ro
   if (!cardIdPattern.test(id)) fail(`第 ${rowNumber} 行卡牌 ID 无效：${id}`);
   if (ids.has(id)) fail(`卡牌 ID 重复：${id}`);
   ids.add(id);
+
+  // Check if card is in default deck (only if the column exists)
+  const inDefaultDeck = withDefaultDeckMatch ? Number(row[expectedHeaders.length]) === 1 : true;
+  if (!inDefaultDeck) return null; // Skip cards not in default deck
 
   const baseAttack = Number(values[4]);
   if (!Number.isInteger(baseAttack) || baseAttack < 0) fail(`第 ${rowNumber} 行基础战力无效：${cellText(values[4])}`);
@@ -64,9 +73,9 @@ const cards = rows.filter((row) => row.some((value) => cellText(value))).map((ro
   };
   if (!card.name || !card.camp || !card.skill || !card.rarity || !card.effect) fail(`第 ${rowNumber} 行存在空的卡牌基础信息：${id}`);
   return card;
-});
+}).filter(card => card !== null);
 
-if (cards.length !== 60) fail(`卡牌数量应为 60，实际为 ${cards.length}`);
+if (cards.length !== 60) fail(`卡牌数量应为 60，实际为 ${cards.length}（可能是因为"默认卡组"列过滤）`);
 const output = [
   "/* Generated from outputs/card-info-table-xlsx/card_info_v2.xlsx. */",
   "/* Run: npm run generate:card-info */",

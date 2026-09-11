@@ -4235,6 +4235,13 @@ body {
   background: var(--theme-surface-raised);
 }
 
+.icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+}
+
 .status-card.large {
   background: linear-gradient(135deg, var(--theme-status-top), var(--theme-status-bottom));
 }

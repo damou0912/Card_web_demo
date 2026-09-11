@@ -736,6 +736,20 @@ function updateLoginStatus() {
   if (ui.quickLogoutBtn) {
     ui.quickLogoutBtn.hidden = !currentUser;
   }
+  updatePlayerIdDisplay();
+}
+
+function updatePlayerIdDisplay() {
+  const currentUser = authClient.loadUser();
+  if (ui.playerIdValue) {
+    if (currentUser) {
+      ui.playerIdValue.textContent = currentUser;
+      ui.editPlayerIdBtn?.removeAttribute("disabled");
+    } else {
+      ui.playerIdValue.textContent = "临时用户";
+      ui.editPlayerIdBtn?.setAttribute("disabled", "");
+    }
+  }
 }
 
 async function handleLogin(username, password) {

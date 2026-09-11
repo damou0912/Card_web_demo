@@ -61,6 +61,20 @@ const ui = {
   themeMenuBtn: document.getElementById("theme-menu-btn"),
   themeMenuModal: document.getElementById("theme-menu-modal"),
   themeMenuClose: document.getElementById("theme-menu-close"),
+  loginMenuBtn: document.getElementById("login-menu-btn"),
+  loginMenuModal: document.getElementById("login-menu-modal"),
+  loginMenuClose: document.getElementById("login-menu-close"),
+  loginForm: document.getElementById("login-form"),
+  loginUsername: document.getElementById("login-username"),
+  loginPassword: document.getElementById("login-password"),
+  loginSubmitBtn: document.getElementById("login-submit-btn") || document.querySelector(".login-submit-btn"),
+  loginCancelBtn: document.getElementById("login-cancel-btn"),
+  logoutBtn: document.getElementById("logout-btn"),
+  closeAfterLoginBtn: document.getElementById("close-after-login-btn"),
+  loginFormContainer: document.getElementById("login-form-container"),
+  loginSuccessContainer: document.getElementById("login-success-container"),
+  loginUsernameDisplay: document.getElementById("login-username-display"),
+  loginStatusText: document.getElementById("login-status-text"),
   themeSubmenuBtn: document.getElementById("theme-submenu-btn"),
   themeSubmenu: document.getElementById("theme-submenu"),
   mapSubmenuBtn: document.getElementById("map-submenu-btn"),
@@ -131,7 +145,18 @@ const ui = {
   deckSummaryPlayer2: document.getElementById("deck-summary-player2"),
   resultRestartBtn: document.getElementById("result-restart-btn"),
   resultNextLevelBtn: document.getElementById("result-next-level-btn"),
-  resultMenuBtn: document.getElementById("result-menu-btn")
+  resultMenuBtn: document.getElementById("result-menu-btn"),
+  modifyDeckBtn: document.getElementById("modify-deck-btn"),
+  modifyDeckModal: document.getElementById("modify-deck-modal"),
+  modifyDeckClose: document.getElementById("modify-deck-close"),
+  deckOptions: document.getElementById("deck-options"),
+  raritySelector: document.getElementById("rarity-selector"),
+  rarityOptions: document.getElementById("rarity-options"),
+  cardReplacement: document.getElementById("card-replacement"),
+  currentCardsList: document.getElementById("current-cards-list"),
+  candidateCardsList: document.getElementById("candidate-cards-list"),
+  modifyDeckResetBtn: document.getElementById("modify-deck-reset-btn"),
+  modifyDeckSaveBtn: document.getElementById("modify-deck-save-btn")
 };
 
 const state = {
@@ -145,7 +170,14 @@ const state = {
   pendingChallengeRewardChoices: null,
   pendingChallengeRewardLevel: null,
   game: null,
-  online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] }
+  online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] },
+  modifyDeck: {
+    selectedCamp: null,
+    selectedRarity: null,
+    currentCards: [],
+    candidateCards: [],
+    modifications: {}
+  }
 };
 
 function getCampDisplayName(campKey) {
@@ -399,6 +431,310 @@ function setActionLogOpen(open) {
 
 function closeActionLog() {
   setActionLogOpen(false);
+}
+
+function setModifyDeckOpen(open) {
+  if (!ui.modifyDeckModal) return;
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    closeThemeMenu();
+    closeGameMenu();
+    initializeModifyDeck();
+  }
+  ui.modifyDeckModal.classList.toggle("visible", shouldOpen);
+  ui.modifyDeckModal.setAttribute("aria-hidden", String(!shouldOpen));
+}
+
+function closeModifyDeck() {
+  setModifyDeckOpen(false);
+}
+
+function initializeModifyDeck() {
+  const availableCamps = getAvailableDeckKeys().filter(key => key !== CHAOS_DECK_KEY);
+  const deckOptions = ui.deckOptions;
+  deckOptions.innerHTML = '';
+
+  availableCamps.forEach(camp => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'deck-option-btn';
+    button.textContent = getCampDisplayName(camp);
+    button.dataset.camp = camp;
+    button.addEventListener('click', () => selectCampForModify(camp));
+    deckOptions.appendChild(button);
+  });
+}
+
+function selectCampForModify(camp) {
+  state.modifyDeck.selectedCamp = camp;
+  state.modifyDeck.selectedRarity = null;
+  state.modifyDeck.modifications = {};
+
+  const originalDeck = buildCampDeck(camp);
+  state.modifyDeck.originalDeck = originalDeck;
+
+  ui.deckOptions.querySelectorAll('.deck-option-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.camp === camp);
+  });
+
+  ui.raritySelector.hidden = false;
+  ui.cardReplacement.hidden = true;
+  renderRarityOptions();
+}
+
+function renderRarityOptions() {
+  const rarityOptions = ui.rarityOptions;
+  rarityOptions.innerHTML = '';
+  const rarities = ['普通', '稀有', '史诗', '传说', '特殊'];
+
+  rarities.forEach(rarity => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'rarity-option-btn';
+    button.textContent = rarity;
+    button.dataset.rarity = rarity;
+    button.addEventListener('click', () => selectRarityForModify(rarity));
+    rarityOptions.appendChild(button);
+  });
+}
+
+function selectRarityForModify(rarity) {
+  state.modifyDeck.selectedRarity = rarity;
+
+  ui.rarityOptions.querySelectorAll('.rarity-option-btn').forEach(btn => {
+    btn.classList.toggle('selected', btn.dataset.rarity === rarity);
+  });
+
+  ui.cardReplacement.hidden = false;
+  renderCardReplacementUI(rarity);
+}
+
+function renderCardReplacementUI(rarity) {
+  const camp = state.modifyDeck.selectedCamp;
+  const originalDeck = state.modifyDeck.originalDeck;
+  const modifications = state.modifyDeck.modifications[rarity] || {};
+
+  const cardsInRarity = originalDeck.filter(card => getCardQuality(card) === rarity);
+  const allCardsInRarity = GAME_CARD_SLOT_TEMPLATES.filter(slot => slot.rarity === rarity && slot.camp === camp);
+
+  const currentCardsList = ui.currentCardsList;
+  currentCardsList.innerHTML = '';
+
+  cardsInRarity.forEach((card, index) => {
+    const cardDisplay = getCardDisplay(card);
+    const replacement = modifications[index];
+    const replacementDisplay = replacement ? getCardDisplay(replacement) : null;
+
+    const container = document.createElement('div');
+    container.className = 'current-card-item';
+    container.innerHTML = `
+      <div class="current-card">
+        <strong>${cardDisplay.name}</strong>
+        <small>${cardDisplay.skill}</small>
+      </div>
+      ${replacement ? `
+        <div class="replacement-arrow">→</div>
+        <div class="replacement-card">
+          <strong>${replacementDisplay.name}</strong>
+          <small>${replacementDisplay.skill}</small>
+        </div>
+        <button type="button" class="reset-replacement-btn" aria-label="取消替换">✕</button>
+      ` : `
+        <button type="button" class="select-replacement-btn" aria-label="选择替换">选择</button>
+      `}
+    `;
+
+    const resetBtn = container.querySelector('.reset-replacement-btn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        delete modifications[index];
+        if (Object.keys(modifications).length === 0) delete state.modifyDeck.modifications[rarity];
+        renderCardReplacementUI(rarity);
+      });
+    }
+
+    const selectBtn = container.querySelector('.select-replacement-btn');
+    if (selectBtn) {
+      selectBtn.addEventListener('click', () => {
+        showCandidateCards(rarity, index, allCardsInRarity, card);
+      });
+    }
+
+    currentCardsList.appendChild(container);
+  });
+}
+
+function showCandidateCards(rarity, cardIndex, availableCards, originalCard) {
+  const candidateCardsList = ui.candidateCardsList;
+  candidateCardsList.innerHTML = '';
+
+  const currentModifications = state.modifyDeck.modifications[rarity] || {};
+  const currentReplacement = currentModifications[cardIndex];
+
+  availableCards.forEach(candidateSlot => {
+    if (candidateSlot.id === originalCard.id) return;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'candidate-card-btn';
+    if (currentReplacement?.id === String(candidateSlot.id)) {
+      button.classList.add('selected');
+    }
+
+    button.innerHTML = `
+      <strong>${candidateSlot.name}</strong>
+      <small>${candidateSlot.skill}</small>
+    `;
+
+    button.addEventListener('click', () => {
+      if (!state.modifyDeck.modifications[rarity]) {
+        state.modifyDeck.modifications[rarity] = {};
+      }
+      state.modifyDeck.modifications[rarity][cardIndex] = makeCardTemplate(candidateSlot);
+      renderCardReplacementUI(rarity);
+    });
+
+    candidateCardsList.appendChild(button);
+  });
+}
+
+function buildModifiedDeck(camp, modifications) {
+  const originalDeck = buildCampDeck(camp);
+  const modifiedDeck = [...originalDeck];
+
+  Object.entries(modifications).forEach(([rarity, rarityMods]) => {
+    Object.entries(rarityMods).forEach(([indexStr, replacementTemplate]) => {
+      const index = parseInt(indexStr, 10);
+      const card = modifiedDeck[index];
+      if (card && getCardQuality(card) === rarity) {
+        const newCard = cloneCard(replacementTemplate);
+        newCard.ownerId = card.ownerId;
+        newCard.currentAttack = newCard.attack;
+        modifiedDeck[index] = newCard;
+      }
+    });
+  });
+
+  return modifiedDeck;
+}
+
+function saveModifiedDeck() {
+  const camp = state.modifyDeck.selectedCamp;
+  if (!camp) {
+    showToast('请先选择要修改的卡组', 'error');
+    return;
+  }
+
+  const modifications = state.modifyDeck.modifications;
+
+  fetch('/api/save-custom-deck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      camp,
+      modifications
+    })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        showToast(`${getCampDisplayName(camp)}卡组已保存`, 'success');
+        closeModifyDeck();
+      } else {
+        showToast(data.error || '保存失败', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('保存卡组失败:', err);
+      showToast('保存卡组失败', 'error');
+    });
+}
+
+function resetModifiedDeck() {
+  const camp = state.modifyDeck.selectedCamp;
+  if (!camp) return;
+
+  fetch('/api/reset-custom-deck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ camp })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        state.modifyDeck.modifications = {};
+        showToast(`${getCampDisplayName(camp)}卡组已重置为默认`, 'success');
+        selectCampForModify(camp);
+      } else {
+        showToast(data.error || '重置失败', 'error');
+      }
+    })
+    .catch(err => {
+      console.error('重置卡组失败:', err);
+      showToast('重置卡组失败', 'error');
+    });
+}
+
+function setLoginMenuOpen(open) {
+  if (!ui.loginMenuModal) return;
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) {
+    closeThemeMenu();
+    closeGameMenu();
+  }
+  ui.loginMenuModal.classList.toggle("visible", shouldOpen);
+  ui.loginMenuModal.setAttribute("aria-hidden", String(!shouldOpen));
+  ui.loginMenuBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen) {
+    const currentUser = authClient.loadUser();
+    if (currentUser) {
+      ui.loginFormContainer?.setAttribute("hidden", "");
+      ui.loginSuccessContainer?.removeAttribute("hidden");
+      if (ui.loginUsernameDisplay) ui.loginUsernameDisplay.textContent = currentUser;
+    } else {
+      ui.loginFormContainer?.removeAttribute("hidden");
+      ui.loginSuccessContainer?.setAttribute("hidden", "");
+      ui.loginUsername?.focus();
+    }
+  }
+}
+
+function closeLoginMenu() {
+  setLoginMenuOpen(false);
+}
+
+function updateLoginStatus() {
+  const currentUser = authClient.loadUser();
+  if (ui.loginStatusText) {
+    ui.loginStatusText.textContent = currentUser ? `${currentUser}` : "登录";
+  }
+}
+
+async function handleLogin(username, password) {
+  if (!username || !password) {
+    showToast("输入不完整", "请输入用户名和密码");
+    return;
+  }
+
+  try {
+    const result = await authClient.login(username, password);
+    if (result.success) {
+      updateLoginStatus();
+      showToast("登录成功", `欢迎回来，${username}！`);
+      setLoginMenuOpen(true);
+    } else {
+      showToast("登录失败", result.error || "用户名或密码错误");
+    }
+  } catch (error) {
+    showToast("错误", error.message);
+  }
+}
+
+function handleLogout() {
+  authClient.clearUser();
+  updateLoginStatus();
+  showToast("已退出登录", "下次登录需要重新输入凭证");
+  setLoginMenuOpen(false);
 }
 
 function renderActionLog() {
@@ -1289,11 +1625,32 @@ function bindEvents() {
   ui.themeMenuModal?.addEventListener("click", (event) => {
     if (event.target === ui.themeMenuModal) closeThemeMenu();
   });
+  ui.loginMenuBtn?.addEventListener("click", () => setLoginMenuOpen(true));
+  ui.loginMenuClose?.addEventListener("click", closeLoginMenu);
+  ui.loginMenuModal?.addEventListener("click", (event) => {
+    if (event.target === ui.loginMenuModal) closeLoginMenu();
+  });
+  ui.loginForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const username = ui.loginUsername?.value || "";
+    const password = ui.loginPassword?.value || "";
+    handleLogin(username, password);
+  });
+  ui.loginCancelBtn?.addEventListener("click", closeLoginMenu);
+  ui.logoutBtn?.addEventListener("click", handleLogout);
+  ui.closeAfterLoginBtn?.addEventListener("click", closeLoginMenu);
   ui.actionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.actionLogClose?.addEventListener("click", closeActionLog);
   ui.actionLogModal?.addEventListener("click", (event) => {
     if (event.target === ui.actionLogModal) closeActionLog();
   });
+  ui.modifyDeckBtn?.addEventListener("click", () => setModifyDeckOpen(true));
+  ui.modifyDeckClose?.addEventListener("click", closeModifyDeck);
+  ui.modifyDeckModal?.addEventListener("click", (event) => {
+    if (event.target === ui.modifyDeckModal) closeModifyDeck();
+  });
+  ui.modifyDeckSaveBtn?.addEventListener("click", saveModifiedDeck);
+  ui.modifyDeckResetBtn?.addEventListener("click", resetModifiedDeck);
   ui.expandActionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.themeSubmenuBtn?.addEventListener("click", () => {
     const shouldOpen = Boolean(ui.themeSubmenu?.hidden);
@@ -1309,6 +1666,10 @@ function bindEvents() {
     if (event.key !== "Escape") return;
     if (ui.actionLogModal?.classList.contains("visible")) {
       closeActionLog();
+      return;
+    }
+    if (ui.loginMenuModal?.classList.contains("visible")) {
+      closeLoginMenu();
       return;
     }
     if (ui.themeMenuModal?.classList.contains("visible")) {
@@ -1395,3 +1756,4 @@ window.leaveOnlineSession = leaveOnlineSession;
 window.closeGameMenu = closeGameMenu;
 initializeTheme();
 bindEvents();
+updateLoginStatus();

@@ -5307,3 +5307,465 @@ body {
   stroke-linejoin: round;
   fill: none;
 }
+
+/* Login System Styles */
+.top-right-controls {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 65;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.login-trigger {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 50%;
+  color: var(--blue);
+  background: var(--theme-surface-raised, rgba(255, 250, 243, 0.95));
+  box-shadow: 0 8px 18px rgba(47, 63, 56, 0.12);
+  cursor: pointer;
+  transition: all 180ms ease;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+.login-trigger svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.login-trigger:hover:not(:disabled),
+.login-trigger:focus-visible {
+  border-color: var(--blue);
+  color: var(--accent-deep);
+  background: var(--theme-surface-raised, rgba(255, 250, 243, 0.95));
+  box-shadow: 0 10px 22px rgba(70, 97, 101, 0.18);
+}
+
+.login-trigger:active {
+  transform: scale(0.92);
+}
+
+.login-menu-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 70px 14px 18px;
+  background: rgba(45, 56, 52, 0.24);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.login-menu-modal.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.login-menu-modal.visible .login-menu-card {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.login-menu-card {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transform: translateY(-8px);
+  opacity: 0;
+  transition: transform 200ms ease, opacity 200ms ease;
+}
+
+.login-menu-card .overlay-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 24px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  transition: all 180ms ease;
+}
+
+.login-menu-card .overlay-close:hover,
+.login-menu-card .overlay-close:focus-visible {
+  background: rgba(118, 104, 93, 0.1);
+  color: var(--ink);
+}
+
+.login-menu-card .phase-banner-eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.login-menu-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: var(--ink);
+}
+
+.login-menu-content,
+.login-success-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.form-group input {
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: inherit;
+  background: white;
+  color: var(--ink);
+  transition: all 180ms ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(47, 94, 145, 0.1);
+}
+
+.form-group input::placeholder {
+  color: var(--muted);
+}
+
+.login-submit-btn {
+  margin-top: 4px;
+}
+
+.login-success-container {
+  text-align: center;
+}
+
+.login-welcome {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.login-username-display {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 8px 0 16px;
+}
+
+.login-actions {
+  display: flex;
+  gap: 10px;
+  flex-direction: column;
+}
+
+.login-actions button {
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .login-menu-card {
+    max-width: 100%;
+  }
+
+  .top-right-controls {
+    gap: 8px;
+  }
+}
+
+/* Modify Deck Modal */
+.modify-deck-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.modify-deck-modal.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.modify-deck-card {
+  position: relative;
+  width: min(800px, 95vw);
+  max-height: 85vh;
+  padding: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  color: #f3f3e9;
+  background: linear-gradient(145deg, #3f4d49, #2d3b39);
+  box-shadow: 0 24px 58px rgba(38, 48, 43, 0.3);
+  transform: translateY(10px) scale(0.96);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.modify-deck-modal.visible .modify-deck-card {
+  transform: translateY(0) scale(1);
+}
+
+.modify-deck-card h2 {
+  margin: 0 0 20px 0;
+  font-size: clamp(20px, 4vw, 28px);
+}
+
+.modify-deck-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.deck-selector,
+.rarity-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modify-deck-label {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b8c5ba;
+}
+
+.deck-options,
+.rarity-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.deck-option-btn,
+.rarity-option-btn {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e8e8e8;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 200ms ease;
+}
+
+.deck-option-btn:hover,
+.rarity-option-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.deck-option-btn.selected,
+.rarity-option-btn.selected {
+  background: rgba(120, 180, 140, 0.3);
+  border-color: #78b48c;
+  color: #78b48c;
+}
+
+.card-replacement {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.replacement-area {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+}
+
+.current-cards,
+.candidate-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.current-card-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.current-card,
+.replacement-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.current-card strong,
+.replacement-card strong {
+  font-size: 13px;
+  color: #e8e8e8;
+}
+
+.current-card small,
+.replacement-card small {
+  font-size: 11px;
+  color: #b8c5ba;
+}
+
+.replacement-arrow {
+  font-size: 18px;
+  color: #78b48c;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.select-replacement-btn,
+.reset-replacement-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: rgba(120, 180, 140, 0.15);
+  color: #78b48c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 150ms ease;
+}
+
+.select-replacement-btn:hover {
+  background: rgba(120, 180, 140, 0.25);
+  border-color: #78b48c;
+}
+
+.reset-replacement-btn {
+  background: rgba(200, 80, 80, 0.15);
+  color: #d88888;
+  border-color: rgba(200, 80, 80, 0.3);
+}
+
+.reset-replacement-btn:hover {
+  background: rgba(200, 80, 80, 0.25);
+  border-color: #d88888;
+}
+
+.candidate-card-btn {
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e8e8e8;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  transition: all 150ms ease;
+}
+
+.candidate-card-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.candidate-card-btn.selected {
+  background: rgba(120, 180, 140, 0.3);
+  border-color: #78b48c;
+}
+
+.candidate-card-btn strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.candidate-card-btn small {
+  display: block;
+  font-size: 11px;
+  color: #b8c5ba;
+}
+
+.modify-deck-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

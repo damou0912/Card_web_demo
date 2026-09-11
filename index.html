@@ -33,13 +33,51 @@
       </div>
     </section>
   </div>
-  <button id="theme-menu-btn" class="theme-menu-trigger" type="button" aria-label="打开页面设置" aria-controls="theme-menu-modal" aria-expanded="false" title="页面设置">
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 6h16"></path>
-      <path d="M4 12h16"></path>
-      <path d="M4 18h16"></path>
-    </svg>
-  </button>
+  <div id="login-menu-modal" class="login-menu-modal" aria-hidden="true">
+    <section class="login-menu-card" role="dialog" aria-modal="true" aria-labelledby="login-menu-title">
+      <button id="login-menu-close" class="overlay-close" type="button" aria-label="关闭登录面板" title="关闭">×</button>
+      <p class="phase-banner-eyebrow">LOGIN SYSTEM</p>
+      <h2 id="login-menu-title">登录系统</h2>
+      <div class="login-menu-content" id="login-form-container">
+        <form id="login-form" class="login-form">
+          <div class="form-group">
+            <label for="login-username">用户名</label>
+            <input type="text" id="login-username" name="username" placeholder="输入用户名" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="login-password">密码</label>
+            <input type="password" id="login-password" name="password" placeholder="输入密码" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="primary-btn login-submit-btn">登录</button>
+          <button type="button" id="login-cancel-btn" class="secondary-btn">取消</button>
+        </form>
+      </div>
+      <div id="login-success-container" class="login-success-container" hidden>
+        <p class="login-welcome">欢迎回来</p>
+        <p class="login-username-display" id="login-username-display"></p>
+        <div class="login-actions">
+          <button id="logout-btn" class="secondary-btn">退出登录</button>
+          <button id="close-after-login-btn" class="primary-btn">关闭</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="top-right-controls">
+    <button id="login-menu-btn" class="login-trigger" type="button" aria-label="打开登录系统" aria-controls="login-menu-modal" aria-expanded="false" title="登录">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+      </svg>
+      <span id="login-status-text">登录</span>
+    </button>
+    <button id="theme-menu-btn" class="theme-menu-trigger" type="button" aria-label="打开页面设置" aria-controls="theme-menu-modal" aria-expanded="false" title="页面设置">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 6h16"></path>
+        <path d="M4 12h16"></path>
+        <path d="M4 18h16"></path>
+      </svg>
+    </button>
+  </div>
   <div id="theme-menu-modal" class="theme-menu-modal" aria-hidden="true">
     <section class="theme-menu-card" role="dialog" aria-modal="true" aria-labelledby="theme-menu-title">
       <button id="theme-menu-close" class="overlay-close theme-menu-close" type="button" aria-label="关闭页面设置" title="关闭">×</button>
@@ -124,7 +162,10 @@
           <button class="map-btn" type="button" data-board-size="4">4x4</button>
           <button class="map-btn selected" type="button" data-board-size="5">5x5</button>
         </div>
-        <button id="start-game-btn" class="primary-btn">开始游戏</button>
+        <div class="action-buttons">
+          <button id="modify-deck-btn" class="secondary-btn" type="button">修改卡组</button>
+          <button id="start-game-btn" class="primary-btn">开始游戏</button>
+        </div>
         <div class="rule-note">
           <p>规则摘要</p>
           <ul>
@@ -284,6 +325,35 @@
       </section>
     </div>
 
+    <div id="modify-deck-modal" class="modify-deck-modal" aria-hidden="true">
+      <section class="modify-deck-card" role="dialog" aria-modal="true" aria-labelledby="modify-deck-title">
+        <button id="modify-deck-close" class="overlay-close" type="button" aria-label="关闭修改卡组" title="关闭">×</button>
+        <p class="phase-banner-eyebrow">DECK MODIFIER</p>
+        <h2 id="modify-deck-title">修改卡组</h2>
+        <div class="modify-deck-content">
+          <div class="deck-selector">
+            <p class="modify-deck-label">选择卡组</p>
+            <div class="deck-options" id="deck-options" role="group" aria-label="选择要修改的卡组"></div>
+          </div>
+          <div class="rarity-selector" hidden id="rarity-selector">
+            <p class="modify-deck-label">选择品质</p>
+            <div class="rarity-options" id="rarity-options" role="group" aria-label="选择卡牌品质"></div>
+          </div>
+          <div class="card-replacement" hidden id="card-replacement">
+            <p class="modify-deck-label">替换卡牌</p>
+            <div class="replacement-area">
+              <div class="current-cards" id="current-cards-list"></div>
+              <div class="candidate-cards" id="candidate-cards-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="modify-deck-actions">
+          <button id="modify-deck-reset-btn" class="secondary-btn" type="button">重置为默认</button>
+          <button id="modify-deck-save-btn" class="primary-btn" type="button">保存修改</button>
+        </div>
+      </section>
+    </div>
+
     <section id="result-screen" class="screen">
       <div class="hero-card result-card">
         <p class="eyebrow">对局结果</p>
@@ -343,6 +413,7 @@
 
   <script src="card-info.js?v=card-info-ee5970761881"></script>
   <script src="v2-card-data.js?v=card-info-ee5970761881"></script>
+  <script src="auth-client.js"></script>
   <script src="script.js?v=20260909-chaos-deck"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>

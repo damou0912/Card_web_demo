@@ -521,7 +521,9 @@
   function coreApplyEliteAiTrait(game, ai, log = []) {
     if (!coreIsPveChallenge(game) || !ai) return;
     coreApplyEliteAiTraitEvent(game, "turnStart", { player: ai }, log);
-    coreMaintainEliteAiHand(game, ai, log);
+    if (game.currentPhase !== "开局展示") {
+      coreMaintainEliteAiHand(game, ai, log);
+    }
     coreEnforceElitePowerBounds(game);
   }
 

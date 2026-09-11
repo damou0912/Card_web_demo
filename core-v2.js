@@ -527,23 +527,6 @@
     coreEnforceElitePowerBounds(game);
   }
 
-  function coreTrimEliteAiHand(game, owner = coreEliteAiTraitOwner(game)) {
-    const ai = owner;
-    if (!ai) return 0;
-    let removed = 0;
-    while (ai.hand.length > 1) {
-      const index = randomInt(0, ai.hand.length - 1);
-      const discardedCard = ai.hand.splice(index, 1)[0];
-      if (game.currentPhase !== "开局展示" && typeof queueCardFlowAnimation === "function") {
-        queueCardFlowAnimation(game, "discard", ai, discardedCard, {
-          reason: "精英词条【断粮】",
-          flowPrompt: `${ai.name || "精英 AI"} 因精英词条【断粮】弃置 ${coreCardName(discardedCard)}。`
-        });
-      }
-      removed += 1;
-    }
-    return removed;
-  }
 
   function coreCreateEliteReinforcementCard(ai) {
     return {
@@ -744,6 +727,7 @@
           }
         }
         if (amount > 0 && targetPlayer.hand.length === 0) coreMaintainEliteAiHand(game, targetPlayer, log);
+        // Note: coreTrimEliteAiHand was removed as "断粮" trait is deleted
         return amount;
       },
       destroy: (target, cause = card) => coreDestroyV2Card(game, target, log, cause),
@@ -1457,9 +1441,6 @@
     if (event === CORE_V2_EVENT.CARD_DRAWN && payload.player) {
       const result = coreRunV2OtherDrawEffects(game, payload.player, payload.drawnCard, payload.log || []);
       coreApplyEliteAiTraitEvent(game, "cardDrawn", { ...payload, card: payload.drawnCard }, payload.log || []);
-      if (coreIsPveChallenge(game) && game.currentPhase !== "开局展示") {
-        coreTrimEliteAiHand(game);
-      }
       return result;
     }
     if (event === CORE_V2_EVENT.DRAW_FAILED && payload.player) {
@@ -1490,7 +1471,7 @@
       seen.add(card.id);
       const id = String(card.id || "");
       const sequence = Number(id.slice(3));
-      const validId = /^0[1-3][1-5]\d{2}$/.test(id) && sequence >= 1 && sequence <= 20;
+      const validId = /^0[1-3][1-5]\d{2}$/.test(id) && sequence >= 1 && sequence <= 30;
       if (!validId || !card.name || !card.skill || !card.effect || !card.camp || !card.rarity
         || !Number.isFinite(Number(card.attack))) {
         invalidCards.push(card.id || "<missing-id>");
@@ -3605,6 +3586,8 @@
   coreUi.endTurnBtn.addEventListener("click", () => {
     const game = state.game;
     if (!game || game.isAnimating || game.winner || !coreCanViewerInteract(game)) return;
+    const activePlayer = corePlayer(game, game.activePlayerId);
+    if (coreIsPveChallenge(game) && activePlayer?.isAI) return;
     if (coreHasExecutableAction(game) && !window.confirm("本回合仍有可执行操作，确定要结束回合吗？")) return;
     if (game.mode === "online") {
       if (!window.CardOnline?.send({ type: "end-turn-request" })) showToast("联网未连接", "请等待联网服务连接后再结束回合。");

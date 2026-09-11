@@ -106,8 +106,12 @@
 
   function coreCanViewerInteract(game) {
     if (!game) return false;
-    if (game.mode !== "online") return true;
-    return !coreIsSpectator() && coreViewerPlayerId(game) === game.activePlayerId;
+    if (coreIsSpectator()) return false;
+    if (game.mode === "online") {
+      return coreViewerPlayerId(game) === game.activePlayerId;
+    }
+    // PvE mode: player is always player 1
+    return coreIsPveMode(game) ? game.activePlayerId === 1 : true;
   }
 
   function coreIsOpponentTurn(game) {

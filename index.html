@@ -415,7 +415,24 @@
   </main>
 
   <script src="card-info.js?v=card-info-ee5970761881"></script>
+  <script>
+    if (!window.CARD_INFO) {
+      console.error("❌ card-info.js 加载失败或执行错误");
+      document.body.innerHTML = "<h1>错误</h1><p>卡牌信息无法加载。请刷新页面。</p>";
+    } else {
+      console.log("✓ card-info.js 已加载，" + CARD_INFO.length + " 张卡牌");
+    }
+  </script>
   <script src="v2-card-data.js?v=card-info-ee5970761881"></script>
+  <script>
+    if (!window.CARD_LIBRARY) {
+      console.error("❌ v2-card-data.js 加载失败或执行错误");
+      console.error("CARD_INFO 状态:", window.CARD_INFO ? "存在" : "缺失");
+      console.error("CARD_INFO_SCHEMA_VERSION:", window.CARD_INFO_SCHEMA_VERSION);
+    } else {
+      console.log("✓ v2-card-data.js 已加载，" + window.CARD_LIBRARY.cardSlots.length + " 张卡牌");
+    }
+  </script>
   <script src="auth-client.js"></script>
   <script src="script.js?v=20260909-chaos-deck"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>

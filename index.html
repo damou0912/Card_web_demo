@@ -39,7 +39,12 @@
       <p class="phase-banner-eyebrow">LOGIN SYSTEM</p>
       <h2 id="login-menu-title">登录系统</h2>
       <div class="login-menu-content" id="login-form-container">
-        <form id="login-form" class="login-form">
+        <div class="login-tabs">
+          <button type="button" id="login-tab-btn" class="login-tab-btn active" data-tab="login">登录</button>
+          <button type="button" id="register-tab-btn" class="login-tab-btn" data-tab="register">注册</button>
+        </div>
+
+        <form id="login-form" class="login-form active-form">
           <div class="form-group">
             <label for="login-username">用户名</label>
             <input type="text" id="login-username" name="username" placeholder="输入用户名" required autocomplete="username">
@@ -50,6 +55,23 @@
           </div>
           <button type="submit" class="primary-btn login-submit-btn">登录</button>
           <button type="button" id="login-cancel-btn" class="secondary-btn">取消</button>
+        </form>
+
+        <form id="register-form" class="login-form" hidden>
+          <div class="form-group">
+            <label for="register-username">用户名</label>
+            <input type="text" id="register-username" name="username" placeholder="输入用户名（3-16字符）" required autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label for="register-password">密码</label>
+            <input type="password" id="register-password" name="password" placeholder="输入密码（至少6字符）" required autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label for="register-confirm-password">确认密码</label>
+            <input type="password" id="register-confirm-password" name="confirm-password" placeholder="再次输入密码" required autocomplete="new-password">
+          </div>
+          <button type="submit" class="primary-btn register-submit-btn">注册</button>
+          <button type="button" id="register-cancel-btn" class="secondary-btn">取消</button>
         </form>
       </div>
       <div id="login-success-container" class="login-success-container" hidden>

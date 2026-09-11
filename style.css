@@ -5453,6 +5453,45 @@ body {
   gap: 12px;
 }
 
+.login-form.active-form {
+  display: flex;
+}
+
+.login-form[hidden] {
+  display: none;
+}
+
+.login-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.login-tab-btn {
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 180ms ease;
+  text-align: center;
+}
+
+.login-tab-btn:hover {
+  color: var(--ink);
+}
+
+.login-tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
 .form-group {
   display: flex;
   flex-direction: column;

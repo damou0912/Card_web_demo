@@ -799,6 +799,22 @@
       addBrokenCell: (position) => {
         if (!position || isBrokenCell(game, position.row, position.col) || game.brokenCells.length >= 5) return false;
         game.brokenCells.push({ row: position.row, col: position.col });
+        // 新规则：生成破坏格时，在其正上方的所有卡牌必定会被摧毁，无视任何效果
+        const destroyLog = [];
+        for (let row = position.row - 1; row >= 0; row -= 1) {
+          const cardAbove = getBoardCardAt(game, row, position.col);
+          if (!cardAbove) continue;
+          // 强制摧毁，绕过所有防护效果
+          const index = game.boardCards.findIndex((item) => item.uid === cardAbove.uid);
+          if (index >= 0) {
+            game.boardCards.splice(index, 1);
+            cardAbove.destroyedAt = { row, col: position.col };
+            const destroyedAttack = cardAbove.currentAttack;
+            coreRunOtherV2DestroyEffects(game, cardAbove, { row, col: position.col }, null, destroyLog);
+            coreEmitV2Event(game, CORE_V2_EVENT.CARD_DESTROYED, { destroyedCard: cardAbove, original: { row, col: position.col }, causeCard: null, log: destroyLog });
+            destroyLog.forEach((entry) => log.push(entry));
+          }
+        }
         return true;
       },
       spawnNeutralGuard: (position, attack = 2) => coreSpawnNeutralGuard(game, position, attack),
@@ -1440,7 +1456,9 @@
     if (event === CORE_V2_EVENT.CARD_DRAWN && payload.player) {
       const result = coreRunV2OtherDrawEffects(game, payload.player, payload.drawnCard, payload.log || []);
       coreApplyEliteAiTraitEvent(game, "cardDrawn", { ...payload, card: payload.drawnCard }, payload.log || []);
-      coreTrimEliteAiHand(game);
+      if (game.currentPhase !== "开局展示") {
+        coreTrimEliteAiHand(game);
+      }
       return result;
     }
     if (event === CORE_V2_EVENT.DRAW_FAILED && payload.player) {
@@ -2554,7 +2572,7 @@
       levelLabel.textContent = coreIsPveChallenge(game) ? `第 ${game.challengeLevel} 关` : "";
     }
     ui.phaseLabel.textContent = game.currentPhase;
-    ui.deckLabel.textContent = `P1 ${game.players[0].drawPile.length} / P2 ${game.players[1].drawPile.length}`;
+    ui.deckLabel.textContent = `${game.players[0].id} VS ${game.players[1].id}`;
     ui.statusMessage.textContent = game.flowPrompt || game.lastResolution;
     ui.statusSubtext.textContent = game.isAnimating
       ? "正在展示本次行动与交战结果。"
@@ -3353,18 +3371,6 @@
     state.game = coreCreateGame(state.selectedMode, state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, pendingTraits);
     state.pendingChallengeTraitIds = null;
 
-    // 首次进入PVE挑战模式第1关时显示词条选择
-    if (state.selectedMode === "pve-challenge" && state.challengeLevel === 1 && state.challengePlayerTraitIds.length === 0) {
-      const ownedTraitIds = [];
-      const rewardChoices = corePickChallengeRewardTraits(ownedTraitIds, 3);
-      if (rewardChoices.length) {
-        state.pendingChallengeRewardChoices = rewardChoices;
-        switchScreen("game");
-        window.setTimeout(() => window.showChallengeRewardSelection?.(rewardChoices), 500);
-        return;
-      }
-    }
-
     switchScreen("game");
     coreShowOpeningReveal(state.game);
   }
@@ -3523,7 +3529,10 @@
     const modal = ui.challengeRewardModal;
     if (modal) modal.hidden = true;
     state.pendingChallengeRewardChoices = null;
-    if (typeof window.beginNextChallengeLevel === "function") {
+    // 第1关首次选择词条后显示游戏开始动画，其他情况进入下一关
+    if (state.challengeLevel === 1) {
+      coreShowOpeningReveal(state.game);
+    } else if (typeof window.beginNextChallengeLevel === "function") {
       window.beginNextChallengeLevel();
     }
   };

@@ -1086,6 +1086,70 @@
       { const a = makeCard("03518", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 2, 1), g = makeGame([a, ally, enemy]); destroy(g, a); check("03518", "摧毁四方相邻及原位置卡牌并生成破坏格", !g.boardCards.includes(ally) && !g.boardCards.includes(enemy) && g.brokenCells.some((cell) => cell.row === 1 && cell.col === 1)); }
       { const a = makeCard("03519", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); start(g, a); const kept = g.boardCards.includes(a); const isolated = makeCard("03519", 1, 2, 2); const isolatedGame = makeGame([isolated]); start(isolatedGame, isolated); check("03519", "有相邻友军时不可摧毁，无友军时回合开始自毁", kept && !isolatedGame.boardCards.includes(isolated)); }
       { const a = makeCard("03520", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 2, 2), g = makeGame([a, ally, enemy]); place(g, a); check("03520", "放置时全场本回合减二并增加行动数", a.currentAttack === 0 && ally.currentAttack === 0 && enemy.currentAttack === 0 && g.extraActions === 1); }
+
+      // Wu: Modified cards - 03106, 03314, 03315, 03416, 03519
+      { const a = makeCard("03106", 1, 1, 1), allyA = makeCard("01101", 1, 1, 2), allyB = makeCard("01102", 1, 3, 3);
+        const guard = { uid: "guard-03106-mod", ownerId: null, row: 0, col: 0, attack: 2, currentAttack: 2, isGuard: true };
+        const enemy = makeCard("02101", 2, 2, 2);
+        const placementGame = makeGame([a, allyA, allyB, guard, enemy]);
+        place(placementGame, a);
+        const placementBoostCount = [allyA, allyB].filter((target) => target.currentAttack === target.attack + 1).length;
+        const placementTargetsScoped = a.currentAttack === a.attack && guard.currentAttack === guard.attack && enemy.currentAttack === enemy.attack;
+
+        const destroyed = makeCard("03106", 1, 1, 1), destroyedAllyA = makeCard("01101", 1, 1, 2), destroyedAllyB = makeCard("01102", 1, 3, 3);
+        const destroyGame = makeGame([destroyed, destroyedAllyA, destroyedAllyB]);
+        const destroyedCardRemoved = destroy(destroyGame, destroyed) && !destroyGame.boardCards.includes(destroyed);
+        const destroyBoostCount = [destroyedAllyA, destroyedAllyB].filter((target) => target.currentAttack === target.attack + 1).length;
+        check("03106-修改", "放置与摧毁时随机其他友军永久加一（修改：从+2改为+1）", placementBoostCount === 1 && placementTargetsScoped
+          && destroyedCardRemoved && destroyBoostCount === 1);
+      }
+
+      { const a = makeCard("03314", 1, 1, 1), g = makeGame([a]); g.players[1].drawPile = [makeCard("02101", 2, null, null)]; place(g, a); const placementDraw = a.currentAttack === a.attack + 1 && g.players[1].hand.length === 1;
+        const enemyDrawer = makeCard("01107", 2, 3, 3); g.boardCards.push(enemyDrawer); g.players[1].drawPile = [makeCard("02103", 2, null, null)]; state.game = g; coreRunV2StartSkill(g, g.players[1], enemyDrawer); const futureEnemyDraw = a.currentAttack === a.attack + 2 && g.players[1].hand.length === 2;
+        destroy(g, a); check("03314-修改", "敌方任意效果抽牌使此卡永久加一，摧毁时弃牌一张（修改：从弃2张改为弃1张）", placementDraw && futureEnemyDraw && g.players[1].hand.length === 1);
+      }
+
+      { const a = makeCard("03315", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), remote = makeCard("02102", null, 3, 3), guard = { uid: "guard-03315-mod", ownerId: null, row: 0, col: 0, attack: 3, currentAttack: 3, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }, g = makeGame([a, enemy, remote, guard]); remote.attack = 4; remote.currentAttack = 4; place(g, a);
+        const equalPlacement = enemy.currentAttack === 0 && enemy.v2PermanentBonus === -2 && remote.currentAttack === 2 && remote.v2PermanentBonus === -2 && guard.currentAttack === 1 && guard.v2PermanentBonus === -2;
+        a.currentAttack = 5;
+        const destroyedLowCards = destroy(g, a) && !g.boardCards.includes(enemy) && g.boardCards.includes(remote) && !g.boardCards.includes(guard);
+        check("03315-修改", "卡牌数相等时全场非己方永久减二，摧毁时销毁战力低于此卡的非己方卡牌（修改：遗志判定用此卡战力）", equalPlacement && destroyedLowCards);
+      }
+
+      { const a = makeCard("03416", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), lowAlly = makeCard("01102", 1, 3, 3), enemy = makeCard("02101", 2, 3, 3), g = makeGame([a, ally, lowAlly, enemy]);
+        destroy(g, lowAlly);
+        const noGainFromLowAlly = a.currentAttack === a.attack;
+        destroy(g, enemy);
+        const gainFromHighEnemy = a.currentAttack === a.attack + 1;
+
+        const sunCe = makeCard("03416", 1, 1, 1), defender = makeCard("02105", 2, 1, 2), drawn = makeCard("01101", 1, null, null), combatGame = makeGame([sunCe, defender]);
+        combatGame.players[0].drawPile = [drawn];
+        sunCe.v2ExtraMoveAllowed = true;
+        coreResolveSkillAttack(combatGame, sunCe, defender, combatGame.players[0], []);
+        const defenderDestroyedAndDrew = !combatGame.boardCards.includes(defender) && combatGame.players[0].hand.includes(drawn);
+
+        const freeMover = makeCard("03416", 1, 1, 1), freeGame = makeGame([freeMover]);
+        freeGame.actionsUsed = coreActionLimit(freeGame);
+        freeGame.selection = { handCardUid: null, boardCardUid: freeMover.uid, targetCell: { row: 1, col: 2 } };
+        const freeMoveAfterLimit = coreBuildPendingAction(freeGame);
+
+        check("03416-修改", "摧毁时战力≤此卡才加一，攻击前临时战力+3，可以额外移动一次（新效果实现）", noGainFromLowAlly && gainFromHighEnemy && defenderDestroyedAndDrew && freeMoveAfterLimit?.type === "move");
+      }
+
+      { const a = makeCard("03519", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemyAttacker = makeCard("02101", 2, 1, 0), g = makeGame([a, ally, enemyAttacker]);
+        enemyAttacker.currentAttack = 5;
+        a.currentAttack = 3;
+        const allyBeforeAttack = ally.currentAttack;
+        coreResolveSkillAttack(g, enemyAttacker, a, g.players[1], []);
+        const allyReducedOnAttack = ally.currentAttack === allyBeforeAttack - 1 && ally.v2TempBonus === -1;
+
+        start(g, a);
+        const keptWithAlly = g.boardCards.includes(a);
+        const isolated = makeCard("03519", 1, 2, 2);
+        const isolatedGame = makeGame([isolated]);
+        start(isolatedGame, isolated);
+        check("03519-修改", "被攻击时四方相邻友军本回合减一，有相邻友军时不可摧毁（新效果实现）", allyReducedOnAttack && keptWithAlly && !isolatedGame.boardCards.includes(isolated));
+      }
     } catch (error) {
       results.push({ id: "runtime", name: "边界测试执行", passed: false, error: String(error) });
     } finally {

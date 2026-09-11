@@ -4,6 +4,16 @@ const path = require("path");
 const crypto = require("crypto");
 const { WebSocketServer } = require("ws");
 
+// 自动检测数据库驱动
+let db;
+if (process.env.DATABASE_URL) {
+  console.log("🗄️  使用 PostgreSQL 数据库");
+  db = require("./db-postgres");
+} else {
+  console.log("📁 使用 JSON 文件存储");
+  db = require("./db");
+}
+
 const root = __dirname;
 const port = Number(process.env.PORT) || 4173;
 const host = process.env.HOST || "0.0.0.0";

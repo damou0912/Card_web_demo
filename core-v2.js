@@ -528,6 +528,7 @@
   }
 
   function coreTrimEliteAiHand(game, owner = coreEliteAiTraitOwner(game)) {
+    if (!coreIsPveChallenge(game)) return 0;
     const ai = owner;
     if (!ai) return 0;
     let removed = 0;

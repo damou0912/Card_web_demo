@@ -5360,6 +5360,51 @@ body {
   transform: scale(0.92);
 }
 
+.quick-logout-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--theme-surface-raised, rgba(255, 250, 243, 0.95));
+  box-shadow: 0 8px 18px rgba(47, 63, 56, 0.12);
+  cursor: pointer;
+  transition: all 180ms ease;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 44px;
+}
+
+.quick-logout-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.quick-logout-btn span {
+  display: none;
+}
+
+.quick-logout-btn:hover:not(:disabled),
+.quick-logout-btn:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  box-shadow: 0 10px 22px rgba(197, 92, 54, 0.18);
+}
+
+.quick-logout-btn:active {
+  transform: scale(0.92);
+}
+
 .login-menu-modal {
   position: fixed;
   inset: 0;

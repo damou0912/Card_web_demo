@@ -64,6 +64,7 @@ const ui = {
   loginMenuBtn: document.getElementById("login-menu-btn"),
   loginMenuModal: document.getElementById("login-menu-modal"),
   loginMenuClose: document.getElementById("login-menu-close"),
+  quickLogoutBtn: document.getElementById("quick-logout-btn"),
   loginForm: document.getElementById("login-form"),
   loginUsername: document.getElementById("login-username"),
   loginPassword: document.getElementById("login-password"),
@@ -521,9 +522,9 @@ function renderCardReplacementUI(rarity) {
   const currentCardsList = ui.currentCardsList;
   currentCardsList.innerHTML = '';
 
-  cardsInRarity.forEach((card, index) => {
+  cardsInRarity.forEach((card, rarityIndex) => {
     const cardDisplay = getCardDisplay(card);
-    const replacement = modifications[index];
+    const replacement = modifications[rarityIndex];
     const replacementDisplay = replacement ? getCardDisplay(replacement) : null;
 
     const container = document.createElement('div');
@@ -548,7 +549,7 @@ function renderCardReplacementUI(rarity) {
     const resetBtn = container.querySelector('.reset-replacement-btn');
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
-        delete modifications[index];
+        delete modifications[rarityIndex];
         if (Object.keys(modifications).length === 0) delete state.modifyDeck.modifications[rarity];
         renderCardReplacementUI(rarity);
       });
@@ -557,7 +558,7 @@ function renderCardReplacementUI(rarity) {
     const selectBtn = container.querySelector('.select-replacement-btn');
     if (selectBtn) {
       selectBtn.addEventListener('click', () => {
-        showCandidateCards(rarity, index, allCardsInRarity, card);
+        showCandidateCards(rarity, rarityIndex, allCardsInRarity, card);
       });
     }
 
@@ -565,15 +566,31 @@ function renderCardReplacementUI(rarity) {
   });
 }
 
-function showCandidateCards(rarity, cardIndex, availableCards, originalCard) {
+function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
   const candidateCardsList = ui.candidateCardsList;
   candidateCardsList.innerHTML = '';
 
   const currentModifications = state.modifyDeck.modifications[rarity] || {};
-  const currentReplacement = currentModifications[cardIndex];
+  const currentReplacement = currentModifications[rarityIndex];
+
+  // 获取该品质中所有已被使用的卡牌 ID
+  const usedCardIds = new Set();
+  const cardsInRarity = state.modifyDeck.originalDeck.filter(card => getCardQuality(card) === rarity);
+
+  cardsInRarity.forEach((card, idx) => {
+    // 跳过当前正在替换的位置
+    if (idx === rarityIndex) return;
+
+    // 检查这个位置是否被修改过
+    let finalCard = currentModifications[idx] || card;
+    usedCardIds.add(String(finalCard.id));
+  });
 
   availableCards.forEach(candidateSlot => {
-    if (candidateSlot.id === originalCard.id) return;
+    // 跳过原卡牌和已在该品质中的其他卡牌
+    if (candidateSlot.id === originalCard.id || usedCardIds.has(String(candidateSlot.id))) {
+      return;
+    }
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -591,7 +608,7 @@ function showCandidateCards(rarity, cardIndex, availableCards, originalCard) {
       if (!state.modifyDeck.modifications[rarity]) {
         state.modifyDeck.modifications[rarity] = {};
       }
-      state.modifyDeck.modifications[rarity][cardIndex] = makeCardTemplate(candidateSlot);
+      state.modifyDeck.modifications[rarity][rarityIndex] = makeCardTemplate(candidateSlot);
       renderCardReplacementUI(rarity);
     });
 
@@ -722,6 +739,9 @@ function updateLoginStatus() {
   const currentUser = authClient.loadUser();
   if (ui.loginStatusText) {
     ui.loginStatusText.textContent = currentUser ? `${currentUser}` : "登录";
+  }
+  if (ui.quickLogoutBtn) {
+    ui.quickLogoutBtn.hidden = !currentUser;
   }
 }
 
@@ -1680,6 +1700,7 @@ function bindEvents() {
   ui.loginCancelBtn?.addEventListener("click", closeLoginMenu);
   ui.logoutBtn?.addEventListener("click", handleLogout);
   ui.closeAfterLoginBtn?.addEventListener("click", closeLoginMenu);
+  ui.quickLogoutBtn?.addEventListener("click", handleLogout);
   ui.actionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.actionLogClose?.addEventListener("click", closeActionLog);
   ui.actionLogModal?.addEventListener("click", (event) => {

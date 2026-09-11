@@ -970,7 +970,6 @@
         drawOneCard(game, player);
       }
     });
-    coreMaintainEliteAiHand(game);
     return game;
   }
 

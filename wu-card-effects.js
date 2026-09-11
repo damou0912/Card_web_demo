@@ -60,11 +60,11 @@
   wu["03106"] = {
     onPlace(ctx) {
       const target = ctx.pickRandom(ctx.otherAllies());
-      if (target) ctx.adjust(target, 2);
+      if (target) ctx.adjust(target, 1);
     },
     onDestroy(ctx) {
       const target = ctx.pickRandom(ctx.otherAllies());
-      if (target) ctx.adjust(target, 2);
+      if (target) ctx.adjust(target, 1);
     }
   };
 
@@ -122,7 +122,7 @@
   wu["03212"] = {
     onPlace(ctx) { ctx.card.ownerId = ctx.otherPlayer.id; ctx.card.v2CannotDestroyTurn = ctx.game.turn; },
     onBeforeDestroy(ctx) { if (ctx.card.v2CannotDestroyTurn === ctx.game.turn) return false; },
-    onDestroy(ctx) { [...ctx.allies()].forEach((target) => ctx.destroy(target)); }
+    onDestroy(ctx) { [...ctx.allies()].filter((target) => ctx.isAdjacent(target)).forEach((target) => ctx.destroy(target)); }
   };
 
   wu["03313"] = {
@@ -136,14 +136,14 @@
 
   wu["03314"] = {
     onPlace(ctx) {
-      for (let index = 0; index < 2; index += 1) {
+      for (let index = 0; index < 1; index += 1) {
         if (!ctx.draw(ctx.otherPlayer)) break;
       }
     },
     onOtherDrawn(ctx) {
       if (ctx.drawingPlayer?.id === ctx.otherPlayer?.id) ctx.adjust(ctx.card, 1);
     },
-    onDestroy(ctx) { ctx.discard(ctx.otherPlayer, 2); }
+    onDestroy(ctx) { ctx.discard(ctx.otherPlayer, 1); }
   };
 
   wu["03315"] = {

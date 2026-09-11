@@ -595,10 +595,13 @@
   }
 
   function coreHasFreeAction(game, card) {
-    return Boolean(card && (
-      (coreCardEffectHasFlag(card, "freeAction") && card.freeActionTurn === game.turn)
-      || (coreCardEffectHasFlag(card, "freeMove") && game.boardCards?.includes(card))
-    ));
+    if (!card) return false;
+    if (coreCardEffectHasFlag(card, "freeMove") && game.boardCards?.includes(card)) return true;
+    if (!coreCardEffectHasFlag(card, "freeAction")) return false;
+    if (card.freeActionTurn !== game.turn) return false;
+    // Check if free action has already been used this turn (max 1 free move per turn)
+    if (Number(card.freeActionUsedThisTurn) >= 1) return false;
+    return true;
   }
 
   function coreCanUseAction(game, card = null) {
@@ -1918,7 +1921,12 @@
     if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
     const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
     const consumesAction = traitConsumesAction && (action.type === "place" || !coreHasFreeAction(game, card));
-    if (consumesAction) game.actionsUsed += 1;
+    if (consumesAction) {
+      game.actionsUsed += 1;
+    } else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
+      // Track that a free action was used for this card this turn
+      card.freeActionUsedThisTurn = (Number(card.freeActionUsedThisTurn) || 0) + 1;
+    }
     const won = coreCheckVictory(game);
     game.isAnimating = false;
     if (won) {
@@ -1981,6 +1989,8 @@
       const retainedEliteBonus = Number(card.eliteTraitTempBonusUntilOwnTurn) || 0;
       card.v2TempBonus = retainedEliteBonus;
       card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0) + retainedEliteBonus);
+      // Clear free action usage counter at end of turn
+      card.freeActionUsedThisTurn = 0;
     });
     coreEnforceElitePowerBounds(game);
     active.v2NextPlacementExtra = null;

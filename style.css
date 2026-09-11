@@ -5453,14 +5453,6 @@ body {
   gap: 12px;
 }
 
-.login-form.active-form {
-  display: flex;
-}
-
-.login-form[hidden] {
-  display: none;
-}
-
 .login-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5490,6 +5482,49 @@ body {
 .login-tab-btn.active {
   color: var(--blue);
   border-bottom-color: var(--blue);
+}
+
+.preset-accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+}
+
+.preset-accounts-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.preset-account-btn {
+  padding: 8px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 180ms ease;
+  text-align: left;
+  font-weight: 500;
+}
+
+.preset-account-btn:hover {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.preset-account-btn:active {
+  transform: scale(0.98);
 }
 
 .form-group {

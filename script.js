@@ -69,14 +69,7 @@ const ui = {
   loginPassword: document.getElementById("login-password"),
   loginSubmitBtn: document.getElementById("login-submit-btn") || document.querySelector(".login-submit-btn"),
   loginCancelBtn: document.getElementById("login-cancel-btn"),
-  registerForm: document.getElementById("register-form"),
-  registerUsername: document.getElementById("register-username"),
-  registerPassword: document.getElementById("register-password"),
-  registerConfirmPassword: document.getElementById("register-confirm-password"),
-  registerSubmitBtn: document.getElementById("register-submit-btn") || document.querySelector(".register-submit-btn"),
-  registerCancelBtn: document.getElementById("register-cancel-btn"),
-  loginTabBtn: document.getElementById("login-tab-btn"),
-  registerTabBtn: document.getElementById("register-tab-btn"),
+  presetAccountsList: document.getElementById("preset-accounts-list"),
   logoutBtn: document.getElementById("logout-btn"),
   closeAfterLoginBtn: document.getElementById("close-after-login-btn"),
   loginFormContainer: document.getElementById("login-form-container"),
@@ -702,6 +695,7 @@ function setLoginMenuOpen(open) {
   if (shouldOpen) {
     closeThemeMenu();
     closeGameMenu();
+    loadPresetAccounts();
   }
   ui.loginMenuModal.classList.toggle("visible", shouldOpen);
   ui.loginMenuModal.setAttribute("aria-hidden", String(!shouldOpen));
@@ -751,59 +745,29 @@ async function handleLogin(username, password) {
   }
 }
 
-async function handleRegister(username, password, confirmPassword) {
-  if (!username || !password || !confirmPassword) {
-    showToast("输入不完整", "请填写所有字段");
-    return;
-  }
-
-  if (username.length < 3 || username.length > 16) {
-    showToast("用户名错误", "用户名长度需为3-16字符");
-    return;
-  }
-
-  if (password.length < 6) {
-    showToast("密码错误", "密码长度至少为6字符");
-    return;
-  }
-
-  if (password !== confirmPassword) {
-    showToast("密码不匹配", "两次输入的密码不一致");
-    return;
-  }
-
+async function loadPresetAccounts() {
   try {
-    const result = await authClient.register(username, password);
-    if (result.error) {
-      showToast("注册失败", result.error);
-    } else {
-      showToast("注册成功", "账号创建完成，请登录");
-      switchLoginTab("login");
-      ui.loginUsername.value = username;
-      ui.loginPassword.focus();
+    const result = await authClient.getPresetAccounts?.() || { accounts: [], password: "password123" };
+    if (ui.presetAccountsList && result.accounts && result.accounts.length > 0) {
+      const html = result.accounts.map(account => `
+        <button type="button" class="preset-account-btn" data-username="${account}">
+          <span class="preset-account-name">${account}</span>
+        </button>
+      `).join('');
+      ui.presetAccountsList.innerHTML = `<div class="preset-accounts-label">快速选择</div>${html}`;
+
+      ui.presetAccountsList.querySelectorAll('.preset-account-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          const username = btn.dataset.username;
+          ui.loginUsername.value = username;
+          ui.loginPassword.value = result.password;
+          ui.loginPassword.focus();
+        });
+      });
     }
   } catch (error) {
-    showToast("错误", error.message);
-  }
-}
-
-function switchLoginTab(tab) {
-  const isLogin = tab === "login";
-
-  if (isLogin) {
-    ui.loginForm?.classList.add("active-form");
-    ui.registerForm?.classList.remove("active-form");
-    ui.loginTabBtn?.classList.add("active");
-    ui.registerTabBtn?.classList.remove("active");
-    ui.loginForm?.hidden = false;
-    ui.registerForm?.hidden = true;
-  } else {
-    ui.loginForm?.classList.remove("active-form");
-    ui.registerForm?.classList.add("active-form");
-    ui.loginTabBtn?.classList.remove("active");
-    ui.registerTabBtn?.classList.add("active");
-    ui.loginForm?.hidden = true;
-    ui.registerForm?.hidden = false;
+    console.error("加载预设账号失败:", error);
   }
 }
 
@@ -1714,16 +1678,6 @@ function bindEvents() {
     handleLogin(username, password);
   });
   ui.loginCancelBtn?.addEventListener("click", closeLoginMenu);
-  ui.registerForm?.addEventListener("submit", (event) => {
-    event.preventDefault();
-    const username = ui.registerUsername?.value || "";
-    const password = ui.registerPassword?.value || "";
-    const confirmPassword = ui.registerConfirmPassword?.value || "";
-    handleRegister(username, password, confirmPassword);
-  });
-  ui.registerCancelBtn?.addEventListener("click", closeLoginMenu);
-  ui.loginTabBtn?.addEventListener("click", () => switchLoginTab("login"));
-  ui.registerTabBtn?.addEventListener("click", () => switchLoginTab("register"));
   ui.logoutBtn?.addEventListener("click", handleLogout);
   ui.closeAfterLoginBtn?.addEventListener("click", closeLoginMenu);
   ui.actionLogBtn?.addEventListener("click", () => setActionLogOpen(true));

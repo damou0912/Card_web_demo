@@ -1,0 +1,12 @@
+{
+  "bodyHasGame": true,
+  "btnClass": "primary-btn",
+  "btnDisabled": false,
+  "btnTag": "BUTTON",
+  "btnText": "开始游戏",
+  "gameClass": "screen",
+  "hasOnclick": "undefined",
+  "menuClass": "screen active",
+  "p1Value": "三国~魏",
+  "p2Value": "三国~蜀"
+}

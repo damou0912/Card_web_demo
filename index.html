@@ -83,6 +83,10 @@
             </div>
             <p class="theme-submenu-hint">输入 6 位 GM 密码后启用。</p>
           </div>
+          <button id="action-log-btn" class="theme-menu-item" type="button" aria-controls="action-log-modal" aria-expanded="false">
+            <span>页面行动日志</span>
+            <span class="theme-menu-chevron" aria-hidden="true">›</span>
+          </button>
           <a id="test-entry-link" class="theme-menu-item theme-menu-link" href="card-test.html">
             <span>Card Test 测试台</span>
             <svg class="theme-menu-link-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -159,7 +163,7 @@
           <p id="phase-label" class="meta-value"></p>
         </div>
         <div>
-          <p class="meta-label">牌库</p>
+          <p class="meta-label">对战</p>
           <p id="deck-label" class="meta-value"></p>
         </div>
       </header>
@@ -169,6 +173,11 @@
           <div class="panel-head">
             <p class="status-title">行动日志</p>
             <span id="action-log-turn" class="badge"></span>
+            <button id="expand-action-log-btn" class="expand-btn" type="button" aria-label="展开行动日志" title="展开查看完整日志">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M4 14h16M4 10h16"></path>
+              </svg>
+            </button>
           </div>
           <div id="action-log-list" class="action-log-list"></div>
         </div>
@@ -263,6 +272,15 @@
         <div id="hand-cards" class="hand-cards"></div>
       </section>
     </section>
+
+    <div id="action-log-modal" class="action-log-modal" aria-hidden="true">
+      <section class="action-log-card" role="dialog" aria-modal="true" aria-labelledby="action-log-title">
+        <button id="action-log-close" class="overlay-close" type="button" aria-label="关闭页面行动日志" title="关闭">×</button>
+        <p class="phase-banner-eyebrow">PAGE ACTION LOG</p>
+        <h2 id="action-log-title">页面行动日志</h2>
+        <div id="action-log-content" class="action-log-content"></div>
+      </section>
+    </div>
 
     <section id="result-screen" class="screen">
       <div class="hero-card result-card">

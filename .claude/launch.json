@@ -7,6 +7,13 @@
       "runtimeArgs": ["railway-server.js"],
       "port": 4173,
       "autoPort": false
+    },
+    {
+      "name": "dev-server",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["railway-server.js"],
+      "port": 5174,
+      "autoPort": false
     }
   ]
 }

@@ -65,6 +65,11 @@ const ui = {
   themeSubmenu: document.getElementById("theme-submenu"),
   mapSubmenuBtn: document.getElementById("map-submenu-btn"),
   mapSubmenu: document.getElementById("map-submenu"),
+  actionLogBtn: document.getElementById("action-log-btn"),
+  actionLogModal: document.getElementById("action-log-modal"),
+  actionLogClose: document.getElementById("action-log-close"),
+  actionLogContent: document.getElementById("action-log-content"),
+  expandActionLogBtn: document.getElementById("expand-action-log-btn"),
   playerIdValue: document.getElementById("player-id-value"),
   editPlayerIdBtn: document.getElementById("edit-player-id-btn"),
   modeButtons: [...document.querySelectorAll(".mode-btn")],
@@ -377,6 +382,55 @@ function setThemeMenuOpen(open) {
 
 function closeThemeMenu() {
   setThemeMenuOpen(false);
+}
+
+function setActionLogOpen(open) {
+  if (!ui.actionLogModal) return;
+  const shouldOpen = Boolean(open);
+  if (shouldOpen) closeThemeMenu();
+  ui.actionLogModal.classList.toggle("visible", shouldOpen);
+  ui.actionLogModal.setAttribute("aria-hidden", String(!shouldOpen));
+  ui.actionLogBtn?.setAttribute("aria-expanded", String(shouldOpen));
+  if (shouldOpen) {
+    renderActionLog();
+    ui.actionLogClose?.focus();
+  }
+}
+
+function closeActionLog() {
+  setActionLogOpen(false);
+}
+
+function renderActionLog() {
+  if (!ui.actionLogContent) return;
+  const game = state.game;
+  if (!game) {
+    ui.actionLogContent.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary);">暂无对局数据。</p>';
+    return;
+  }
+
+  const logs = game.actionLogs || [];
+  if (logs.length === 0) {
+    ui.actionLogContent.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary);">暂无行动记录。</p>';
+    return;
+  }
+
+  const html = logs.map((log, index) => {
+    const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '';
+    const timeStr = time ? `<span class="log-time">${time}</span>` : '';
+    const content = escapeAnimationText(log.content || log.message || '');
+    return `<div class="log-entry log-entry-${log.type || 'action'}">
+      <span class="log-index">#${index + 1}</span>
+      ${timeStr}
+      <span class="log-content">${content}</span>
+    </div>`;
+  }).join('');
+
+  const container = document.createElement('div');
+  container.className = 'action-log-list-modal';
+  container.innerHTML = html;
+  ui.actionLogContent.innerHTML = '';
+  ui.actionLogContent.appendChild(container);
 }
 
 function getAvailableDeckKeys() {
@@ -1235,6 +1289,12 @@ function bindEvents() {
   ui.themeMenuModal?.addEventListener("click", (event) => {
     if (event.target === ui.themeMenuModal) closeThemeMenu();
   });
+  ui.actionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
+  ui.actionLogClose?.addEventListener("click", closeActionLog);
+  ui.actionLogModal?.addEventListener("click", (event) => {
+    if (event.target === ui.actionLogModal) closeActionLog();
+  });
+  ui.expandActionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.themeSubmenuBtn?.addEventListener("click", () => {
     const shouldOpen = Boolean(ui.themeSubmenu?.hidden);
     if (shouldOpen) setMapSubmenuOpen(false);
@@ -1247,6 +1307,10 @@ function bindEvents() {
   });
   document.addEventListener?.("keydown", (event) => {
     if (event.key !== "Escape") return;
+    if (ui.actionLogModal?.classList.contains("visible")) {
+      closeActionLog();
+      return;
+    }
     if (ui.themeMenuModal?.classList.contains("visible")) {
       if (ui.mapSubmenu && !ui.mapSubmenu.hidden) setMapSubmenuOpen(false);
       else if (ui.themeSubmenu && !ui.themeSubmenu.hidden) setThemeSubmenuOpen(false);

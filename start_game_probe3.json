@@ -1,0 +1,11 @@
+{
+  "state": {
+    "bodyText": "CARD DEMO\n\n卡组对战 Demo\n\n基于当前规则整理的可运行原型，支持本地 1v1 与 PVE，并在开局手动选择双方卡组。\n\n本地 1v1\nPVE 对战 AI\n玩家 1 卡组\n三国·魏\n三国·蜀\n三国·吴\n玩家 2 / AI 卡组\n三国·蜀\n三国·魏\n三国·吴\n开始游戏\n\n规则摘要\n\n5x5 战场，开局随机破坏 2 格\n开局手动选择卡组，双方各自携带 20 张卡牌\n抽卡只会从自己的牌库中进行\n双方同时提交行动，再统一结算\n占领 13 格及以上获胜",
+    "gameActive": false,
+    "handTitle": "手牌区",
+    "menuActive": true,
+    "status": "",
+    "subtext": "",
+    "turn": ""
+  }
+}

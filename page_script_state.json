@@ -1,0 +1,21 @@
+{
+  "hasBindEvents": "undefined",
+  "hasStartGame": "undefined",
+  "hasState": "undefined",
+  "readyState": "complete",
+  "screenNames": [
+    {
+      "className": "screen active",
+      "id": "menu-screen"
+    },
+    {
+      "className": "screen",
+      "id": "game-screen"
+    },
+    {
+      "className": "screen",
+      "id": "result-screen"
+    }
+  ],
+  "scriptCount": 2
+}

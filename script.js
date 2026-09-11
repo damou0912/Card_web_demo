@@ -1,17 +1,18 @@
 const HAND_LIMIT = 5;
-const ACTION_ANIMATION_MS = 1200;
-const ACTION_IMPACT_HOLD_MS = 280;
-const BOARD_PULSE_VISIBLE_MS = 520;
-const BOARD_PULSE_FADE_MS = 260;
-const BOARD_PULSE_STEP_GAP_MS = 140;
-const TURN_START_PULSE_VISIBLE_MS = 2200;
-const TURN_START_PULSE_FADE_MS = 320;
-const TURN_START_PULSE_STEP_GAP_MS = 220;
-const CARD_FLOW_VISIBLE_MS = 980;
-const CARD_FLOW_FADE_MS = 260;
-const CARD_FLOW_STEP_GAP_MS = 140;
-const POWER_CHANGE_VISIBLE_MS = 980;
-const POWER_CHANGE_FADE_MS = 300;
+const ACTION_ANIMATION_MS = 600;
+const ACTION_IMPACT_HOLD_MS = 140;
+const BOARD_PULSE_VISIBLE_MS = 320;
+const BOARD_PULSE_FADE_MS = 140;
+const BOARD_PULSE_STEP_GAP_MS = 80;
+const TURN_START_PULSE_VISIBLE_MS = 1200;
+const TURN_START_PULSE_FADE_MS = 200;
+const TURN_START_PULSE_STEP_GAP_MS = 120;
+const CARD_FLOW_VISIBLE_MS = 380;
+const CARD_FLOW_FADE_MS = 100;
+const CARD_FLOW_STEP_GAP_MS = 50;
+const POWER_CHANGE_VISIBLE_MS = 480;
+const POWER_CHANGE_FADE_MS = 150;
+const SKILL_DESTRUCTION_MS = 600;
 let destructionAnimationSequence = 0;
 
 const THEME_STORAGE_KEY = "card-demo-theme";
@@ -1115,7 +1116,11 @@ function createCombatCard(card, side) {
 
 function applyDestructionVisual(element, card, game) {
   const visual = card.destructionAnimation || { kind: "tear", label: "撕毁" };
-  element.classList.add(`destroy-${visual.kind}`);
+  const isSkillDestruction = visual.kind === "skill" || visual.isSkillEffect;
+  element.classList.add(`destroy-${isSkillDestruction ? "skill" : visual.kind}`);
+  if (isSkillDestruction) {
+    element.classList.add("skill-destruction-effect");
+  }
   if (visual.id) {
     if (!(game.consumedDestructionAnimationIds instanceof Set)) {
       game.consumedDestructionAnimationIds = new Set();
@@ -1134,7 +1139,11 @@ function createDestructionCard(event) {
     <span class="combat-card-skill">${display === UNKNOWN_CARD_DISPLAY ? (event.label || "被摧毁") : display.skill}</span>
     <strong>${event.label || "撕毁"}</strong>
   `;
-  ghost.classList.add(`destroy-${event.destruction?.kind || "tear"}`);
+  const destructionKind = event.destruction?.kind || "tear";
+  ghost.classList.add(`destroy-${destructionKind}`);
+  if (destructionKind === "skill" || event.destruction?.isSkillEffect) {
+    ghost.classList.add("skill-destruction-effect");
+  }
   return ghost;
 }
 

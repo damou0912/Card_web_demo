@@ -65,7 +65,17 @@
       "pveWins": 1,
       "pvpWins": 0,
       "totalGames": 0,
-      "lastLogin": "2026-09-10T13:18:29.605Z"
+      "lastLogin": "2026-09-10T13:18:29.605Z",
+      "customDecks": {
+        "三国~蜀": {
+          "普通": {
+            "0": {
+              "id": "01102",
+              "attack": 1
+            }
+          }
+        }
+      }
     },
     "player2": {
       "nickname": "player2",

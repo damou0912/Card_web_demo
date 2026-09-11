@@ -2078,27 +2078,51 @@ button:disabled {
 
 .combat-card.torn,
 .combat-card.destroy-tear {
-  animation: combat-tear 720ms cubic-bezier(0.4, 0, 0.8, 0.2) both;
+  animation: combat-tear 360ms cubic-bezier(0.4, 0, 0.8, 0.2) both;
 }
 
 .combat-card.destroy-return {
-  animation: combat-return 760ms cubic-bezier(0.3, 0.8, 0.45, 1) both;
+  animation: combat-return 380ms cubic-bezier(0.3, 0.8, 0.45, 1) both;
 }
 
 .combat-card.destroy-collapse {
-  animation: combat-collapse 700ms cubic-bezier(0.4, 0, 0.8, 0.2) both;
+  animation: combat-collapse 350ms cubic-bezier(0.4, 0, 0.8, 0.2) both;
 }
 
 .combat-card.destroy-fire {
-  animation: combat-fire 800ms cubic-bezier(0.34, 0.04, 0.2, 1) both;
+  animation: combat-fire 400ms cubic-bezier(0.34, 0.04, 0.2, 1) both;
 }
 
 .combat-card.destroy-ram {
-  animation: combat-ram 680ms cubic-bezier(0.3, 0.9, 0.5, 1) both;
+  animation: combat-ram 340ms cubic-bezier(0.3, 0.9, 0.5, 1) both;
 }
 
 .combat-card.destroy-quake {
-  animation: combat-quake 700ms cubic-bezier(0.45, 0, 0.75, 0.3) both;
+  animation: combat-quake 350ms cubic-bezier(0.45, 0, 0.75, 0.3) both;
+}
+
+.combat-card.destroy-skill {
+  animation: combat-skill-burst 600ms cubic-bezier(0.34, 1.2, 0.64, 1) both;
+}
+
+.combat-card.skill-destruction-effect::before {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  content: "";
+  background: radial-gradient(circle, rgba(138, 43, 226, 0.8) 0%, rgba(255, 165, 0, 0.6) 40%, transparent 70%);
+  animation: skill-destruction-glow 600ms ease-out both;
+  pointer-events: none;
+}
+
+.combat-card.skill-destruction-effect::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  content: "";
+  background: conic-gradient(from 0deg, rgba(138, 43, 226, 0.8), rgba(255, 165, 0, 0.8), rgba(138, 43, 226, 0.8));
+  animation: skill-destruction-spin 600ms linear both;
+  pointer-events: none;
 }
 
 .combat-card.shielded::after {
@@ -2185,10 +2209,73 @@ button:disabled {
   100% { opacity: 0; transform: translate(0, 28px) scale(0.38); filter: grayscale(1) blur(4px); }
 }
 
+@keyframes combat-skill-burst {
+  0% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+    filter: brightness(1) saturate(1);
+    box-shadow: 0 0 0 rgba(138, 43, 226, 0);
+  }
+  25% {
+    opacity: 1;
+    transform: scale(1.1) rotate(-8deg);
+    filter: brightness(1.4) saturate(1.5);
+    box-shadow: 0 0 30px rgba(138, 43, 226, 0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2) rotate(12deg);
+    filter: brightness(1.8) saturate(2) hue-rotate(20deg);
+    box-shadow: 0 0 50px rgba(255, 165, 0, 1), 0 0 30px rgba(138, 43, 226, 0.6);
+  }
+  75% {
+    opacity: 0.6;
+    transform: scale(1.08) rotate(-5deg);
+    filter: brightness(1.5) saturate(1.2) blur(1px);
+    box-shadow: 0 0 40px rgba(138, 43, 226, 0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(360deg);
+    filter: brightness(0.2) saturate(0) blur(3px);
+    box-shadow: 0 0 0 rgba(138, 43, 226, 0);
+  }
+}
+
 @keyframes combat-shield {
   0% { opacity: 0; transform: scale(1.35); }
   30% { opacity: 1; transform: scale(1); }
   100% { opacity: 0.92; transform: scale(1); }
+}
+
+@keyframes skill-destruction-glow {
+  0% {
+    opacity: 0;
+    filter: blur(0px);
+  }
+  40% {
+    opacity: 1;
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 0;
+    filter: blur(20px);
+  }
+}
+
+@keyframes skill-destruction-spin {
+  0% {
+    opacity: 1;
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(180deg) scale(1.1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(360deg) scale(0);
+  }
 }
 
 .board-pulse {
@@ -2401,7 +2488,7 @@ button:disabled {
 }
 
 .card-flow.visible .card-flow-burst {
-  animation: card-flow-burst 980ms ease-out both;
+  animation: card-flow-burst 380ms ease-out both;
 }
 
 .card-flow-route {
@@ -2544,15 +2631,15 @@ button:disabled {
 }
 
 .card-flow-draw.visible .card-flow-card {
-  animation: card-flow-draw 980ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: card-flow-draw 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card-flow-discard.visible .card-flow-card {
-  animation: card-flow-discard 980ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: card-flow-discard 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .card-flow-draw-failed.visible .card-flow-card {
-  animation: card-flow-failed 720ms ease-in-out both;
+  animation: card-flow-failed 280ms ease-in-out both;
 }
 
 @keyframes card-flow-burst {
@@ -2610,11 +2697,11 @@ button:disabled {
 }
 
 .board-pulse.visible .ripple-one {
-  animation: skill-ripple 760ms ease-out both;
+  animation: skill-ripple 380ms ease-out both;
 }
 
 .board-pulse.visible .ripple-two {
-  animation: skill-ripple 760ms 130ms ease-out both;
+  animation: skill-ripple 380ms 60ms ease-out both;
 }
 
 .board-pulse.fade {
@@ -2680,7 +2767,7 @@ button:disabled {
   border-radius: 14px;
   content: "";
   pointer-events: none;
-  animation: skill-cell-impact 940ms ease-out both;
+  animation: skill-cell-impact 480ms ease-out both;
 }
 
 .cell.skill-impact-danger { --impact-color: #f0775a; }
@@ -2692,7 +2779,7 @@ button:disabled {
 .unit.skill-casting {
   position: relative;
   z-index: 3;
-  animation: skill-caster 880ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: skill-caster 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.74), 0 0 0 4px var(--caster-color, rgba(133, 201, 237, 0.44)), 0 0 26px var(--caster-color, rgba(133, 201, 237, 0.52));
 }
 
@@ -3960,6 +4047,154 @@ h1 {
 
 .player-id-error {
   color: #f2b6a2 !important;
+}
+
+.login-menu-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(45, 56, 52, 0.48);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease, visibility 180ms ease;
+}
+
+.login-menu-modal.visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.login-menu-card {
+  position: relative;
+  width: min(400px, 92vw);
+  padding: 30px;
+  border: 1px solid rgba(229, 236, 229, 0.3);
+  border-radius: 18px;
+  color: var(--overlay-text);
+  background: linear-gradient(145deg, #46534e, #35443f);
+  box-shadow: 0 24px 58px rgba(47, 63, 56, 0.28);
+  text-align: center;
+  transform: translateY(10px) scale(0.96);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.login-menu-modal.visible .login-menu-card {
+  transform: translateY(0) scale(1);
+}
+
+.login-menu-card h2 {
+  margin: 0 0 20px;
+  font-size: 24px;
+  color: var(--overlay-text);
+}
+
+.login-menu-content,
+.login-success-container {
+  transition: opacity 280ms ease, transform 280ms ease;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+  text-align: left;
+}
+
+.form-group {
+  display: grid;
+  gap: 6px;
+}
+
+.form-group label {
+  color: var(--overlay-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.form-group input {
+  border: 1px solid rgba(229, 236, 229, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: rgba(239, 244, 238, 0.1);
+  color: var(--overlay-text);
+  font: inherit;
+}
+
+.form-group input::placeholder {
+  color: rgba(243, 244, 237, 0.5);
+}
+
+.form-group input:focus-visible {
+  outline: 2px solid rgba(168, 102, 79, 0.5);
+  outline-offset: 2px;
+  background: rgba(239, 244, 238, 0.15);
+}
+
+.preset-accounts-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.preset-accounts-label {
+  color: rgba(243, 244, 237, 0.6);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.preset-account-btn {
+  padding: 8px 12px;
+  border: 1px solid rgba(229, 236, 229, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--overlay-text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.preset-account-btn:hover {
+  border-color: rgba(229, 236, 229, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.login-form .primary-btn {
+  margin-top: 8px;
+  min-height: 42px;
+  font-size: 14px;
+}
+
+.login-welcome-text {
+  margin: 0 0 16px;
+  color: var(--overlay-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.logout-mini-btn {
+  min-height: 40px;
+  padding-inline: 16px;
+  border: 1px solid rgba(229, 236, 229, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--overlay-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.logout-mini-btn:hover {
+  border-color: rgba(229, 236, 229, 0.5);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .unit-tooltip,

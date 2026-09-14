@@ -2309,17 +2309,29 @@
 
   function corePlanAiAction(game, player) {
     const candidates = [];
+    const before = coreCalculatePositionAdvantage(game, player);
+    const addCandidate = (baseScore, action) => {
+      const simulated = coreSimulateActionOutcome(game, player, action);
+      const simulatedDelta = simulated ? simulated.totalAdvantage - before.totalAdvantage : -Infinity;
+      // Keep the positional heuristic for long-term setup, but let the actual
+      // post-skill position dominate close choices and avoid harmful trades.
+      const immediateWin = simulated?.game?.winner?.playerId === player.id;
+      const score = baseScore
+        + (Number.isFinite(simulatedDelta) ? simulatedDelta * 3 : -1000)
+        + (immediateWin ? 10000 : 0);
+      candidates.push({ score, simulatedDelta, action });
+    };
     const movableCards = game.boardCards.filter((card) => card.ownerId === player.id && !card.isGuard && coreCanUseAction(game, card));
     movableCards.forEach((card) => coreValidMoves(game, card).forEach((target) => {
       const score = coreAiMoveScore(game, player, card, target);
-      if (Number.isFinite(score)) candidates.push({ score, action: { type: "move", playerId: player.id, cardUid: card.uid, source: { row: card.row, col: card.col }, target } });
+      if (Number.isFinite(score)) addCandidate(score, { type: "move", playerId: player.id, cardUid: card.uid, source: { row: card.row, col: card.col }, target });
     }));
     if (player.hand.some((card) => coreCanUseAction(game, card) && coreCanPlaceCard(game, card))) {
       const cells = corePlacementAvailability(game).cells;
-      player.hand.filter((card) => coreCanUseAction(game, card) && coreCanPlaceCard(game, card)).forEach((card) => cells.forEach((target) => candidates.push({
-        score: coreAiPlacementScore(game, player, card, target),
-        action: { type: "place", playerId: player.id, cardUid: card.uid, target }
-      })));
+      player.hand.filter((card) => coreCanUseAction(game, card) && coreCanPlaceCard(game, card)).forEach((card) => cells.forEach((target) => addCandidate(
+        coreAiPlacementScore(game, player, card, target),
+        { type: "place", playerId: player.id, cardUid: card.uid, target }
+      )));
     }
     if (!candidates.length) return null;
     const bestScore = Math.max(...candidates.map((candidate) => candidate.score));
@@ -2376,118 +2388,181 @@
     return riskScore;
   }
 
-  function coreSimulateActionOutcome(game, player, action) {
-    const before = coreCalculatePositionAdvantage(game, player);
-    const enemy = otherPlayerId(player.id);
+  function coreCloneAiValue(value, seen = new Map()) {
+    if (value === null || typeof value !== "object") return value;
+    if (seen.has(value)) return seen.get(value);
+    if (value instanceof Date) return new Date(value.getTime());
+    if (value instanceof Set) {
+      const clone = new Set();
+      seen.set(value, clone);
+      value.forEach((entry) => clone.add(coreCloneAiValue(entry, seen)));
+      return clone;
+    }
+    if (value instanceof Map) {
+      const clone = new Map();
+      seen.set(value, clone);
+      value.forEach((entry, key) => clone.set(coreCloneAiValue(key, seen), coreCloneAiValue(entry, seen)));
+      return clone;
+    }
+    const clone = Array.isArray(value) ? [] : {};
+    seen.set(value, clone);
+    Reflect.ownKeys(value).forEach((key) => { clone[key] = coreCloneAiValue(value[key], seen); });
+    return clone;
+  }
 
-    if (action.type === "place") {
-      const cell = action.target;
-      const card = player.hand.find((c) => c.uid === action.cardUid);
-      if (!card) return null;
+  function coreAiSimulationRandom(action) {
+    const seedText = `${action?.type || ""}:${action?.cardUid || ""}:${action?.target?.row ?? ""}:${action?.target?.col ?? ""}`;
+    let seed = 2166136261;
+    [...seedText].forEach((char) => { seed = Math.imul(seed ^ char.charCodeAt(0), 16777619) >>> 0; });
+    return () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+  }
 
-      const cardAttack = Number(card.currentAttack ?? card.attack) || 0;
-      const neighbors = getOrthogonalNeighbors(cell.row, cell.col)
-        .filter((c) => coreIsInsideBoard(c.row, c.col, game))
-        .map((c) => getBoardCardAt(game, c.row, c.col))
-        .filter(Boolean);
-
-      let powerChange = cardAttack;
-      let controlChange = 1;
-      let effectRisk = coreEvaluateCardEffectRisk(game, player, card, true);
-
-      for (const neighbor of neighbors) {
-        if (neighbor.ownerId === player.id) {
-          continue;
-        }
-        const defenderAttack = Number(neighbor.currentAttack ?? neighbor.attack) || 0;
-        if (cardAttack > defenderAttack) {
-          powerChange += defenderAttack;
-          controlChange += 1;
-
-          const defenderDef = coreCardEffectDefinition(neighbor);
-          if (defenderDef?.onCombatResolved && coreCardEffectHasFlag(neighbor, "retaliate")) {
-            effectRisk -= 3;
-          }
-        } else if (cardAttack === defenderAttack) {
-          powerChange -= cardAttack;
-        } else {
-          powerChange -= cardAttack;
-          if (coreCardEffectHasFlag(neighbor, "retaliate")) {
-            effectRisk -= 4;
-          }
-        }
-      }
-
-      return {
-        controlDiff: before.controlDiff + controlChange,
-        powerDiff: before.powerDiff + powerChange,
-        totalAdvantage: before.totalAdvantage + controlChange * 10 + powerChange + effectRisk
-      };
-    } else if (action.type === "move") {
-      const card = game.boardCards.find((c) => c.uid === action.cardUid);
-      if (!card || card.ownerId !== player.id) return null;
-
-      const targetCell = action.target;
-      const targetCard = getBoardCardAt(game, targetCell.row, targetCell.col);
-
-      if (!targetCard) {
-        const moveRisk = coreEvaluateCardEffectRisk(game, player, card, false);
-        return {
-          controlDiff: before.controlDiff,
-          powerDiff: before.powerDiff,
-          totalAdvantage: before.totalAdvantage + moveRisk
-        };
-      }
-
-      if (targetCard.ownerId === player.id) {
-        return null;
-      }
-
-      const attackerAttack = Number(card.currentAttack ?? card.attack) || 0;
-      const defenderAttack = Number(targetCard.currentAttack ?? targetCard.attack) || 0;
-
-      let powerChange = 0;
-      let controlChange = 0;
-      let effectRisk = 0;
-
-      const cardDef = coreCardEffectDefinition(card);
-      const targetDef = coreCardEffectDefinition(targetCard);
-
-      if (attackerAttack > defenderAttack) {
-        powerChange = defenderAttack;
-        controlChange = 1;
-
-        if (targetDef?.onCombatResolved && coreCardEffectHasFlag(targetCard, "retaliate")) {
-          effectRisk -= 2;
-        }
-      } else if (attackerAttack === defenderAttack) {
-        powerChange = -attackerAttack - defenderAttack;
-        controlChange = 0;
-
-        if (cardDef?.onCombatResolved && coreCardEffectHasFlag(card, "hasDangerousEffect")) {
-          effectRisk -= 3;
-        }
-      } else {
-        powerChange = -attackerAttack;
-        controlChange = 0;
-
-        if (coreCardEffectHasFlag(card, "avoidCombatWhenBehind")) {
-          effectRisk -= 5;
-        }
-
-        if (targetDef?.onCombatResolved && coreCardEffectHasFlag(targetCard, "retaliate")) {
-          effectRisk -= 4;
-        }
-      }
-
-      return {
-        controlDiff: before.controlDiff + controlChange,
-        powerDiff: before.powerDiff + powerChange,
-        totalAdvantage: before.totalAdvantage + controlChange * 10 + powerChange + effectRisk
-      };
+  // Apply an action to a detached game state. This deliberately calls the same
+  // placement, movement, combat, destruction, and watcher hooks as live play.
+  function coreApplyAiSimulationAction(game, action) {
+    const player = corePlayer(game, action?.playerId);
+    const card = action?.type === "place"
+      ? player?.hand?.find((item) => item.uid === action.cardUid)
+      : game.boardCards.find((item) => item.uid === action?.cardUid);
+    if (!player || !card || (card.ownerId !== player.id && action.type !== "place")
+      || !coreCanUseAction(game, card)
+      || (action.type === "place" && (!coreCanPlaceCard(game, card)
+        || !corePlacementAvailability(game, player.id).cells.some((cell) => cell.row === action.target?.row && cell.col === action.target?.col)))
+      || (action.type === "move" && !coreValidMoves(game, card).some((cell) => cell.row === action.target?.row && cell.col === action.target?.col))) {
+      return null;
     }
 
-    return null;
+    const log = [];
+    if (action.type === "place") {
+      const handIndex = player.hand.findIndex((item) => item.uid === card.uid);
+      if (handIndex < 0) return null;
+      player.hand.splice(handIndex, 1);
+      card.ownerId = player.id;
+      card.row = action.target.row;
+      card.col = action.target.col;
+      card.restedTurn = player.v2NoRestTurn === game.turn ? null : game.turn;
+      card.lastMovedTurn = null;
+      card.v2LongMoveUsed = false;
+      card.hasPlaced = false;
+      game.boardCards.push(card);
+      game.effectBoardCards = game.boardCards;
+      const extraPlacementSourceUid = player.v2NextPlacementExtraTurn === game.turn
+        ? player.v2NextPlacementExtra
+        : null;
+      if (player.v2NextPlacementExtra && !extraPlacementSourceUid) {
+        player.v2NextPlacementExtra = null;
+        player.v2NextPlacementExtraTurn = null;
+      }
+      const originalPlacingPlayerId = card.ownerId;
+      coreApplyV2PlacementSkill(game, player, card, log);
+      coreInvalidateControlCellOnEntry(game, card);
+      if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
+        if (game.boardCards.includes(card)) coreApplyV2PlacementSkill(game, player, card, log);
+        if (player.v2NextPlacementExtra === extraPlacementSourceUid) {
+          player.v2NextPlacementExtra = null;
+          player.v2NextPlacementExtraTurn = null;
+        }
+      }
+      coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, {
+        player: corePlayer(game, originalPlacingPlayerId), card, log
+      });
+      game.effectBoardCards = null;
+    } else if (action.type === "move") {
+      const defender = getBoardCardAt(game, action.target.row, action.target.col);
+      if (defender?.uid === card.uid || (defender && defender.ownerId === player.id)) return null;
+      const sourcePosition = { row: card.row, col: card.col };
+      if (coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed) card.v2LongMoveUsed = true;
+      const movesTaken = coreMovesTakenThisTurn(game, card);
+      card.lastMovedTurn = game.turn;
+      card.v2MovesTakenTurn = game.turn;
+      card.v2MovesTakenThisTurn = movesTaken + 1;
+      card.movesTaken = Number(card.movesTaken) || 0;
+      if (!defender) {
+        card.row = action.target.row;
+        card.col = action.target.col;
+        coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, {
+          card, source: sourcePosition, target: { row: card.row, col: card.col }
+        });
+      } else {
+        game.effectBoardCards = game.boardCards;
+        const targetPosition = { row: action.target.row, col: action.target.col };
+        card.row = targetPosition.row;
+        card.col = targetPosition.col;
+        const attackerDef = coreCardEffectDefinition(card);
+        if (typeof attackerDef?.onBeforeAttack === "function") {
+          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, log, { targetCard: defender }));
+        }
+        const defenderDef = coreCardEffectDefinition(defender);
+        if (typeof defenderDef?.onUnderAttack === "function") {
+          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, log, { attacker: card }));
+        }
+        const attackerValue = Number(card.currentAttack ?? card.attack) || 0;
+        const defenderValue = Number(defender.currentAttack ?? defender.attack) || 0;
+        const outcome = attackerValue > defenderValue ? "a" : attackerValue < defenderValue ? "b" : "both";
+        let attackerDestroyed = false;
+        let defenderDestroyed = false;
+        if (outcome === "a") {
+          const defenderPosition = { row: defender.row, col: defender.col };
+          defenderDestroyed = coreDestroyV2Card(game, defender, log, card);
+          if (defenderDestroyed && game.boardCards.includes(card)) {
+            coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, { card, source: sourcePosition, target: defenderPosition });
+          }
+        } else if (outcome === "b") {
+          attackerDestroyed = coreDestroyV2Card(game, card, log, defender);
+        } else {
+          attackerDestroyed = coreDestroyV2Card(game, card, log, defender);
+          defenderDestroyed = coreDestroyV2Card(game, defender, log, card);
+        }
+        coreRunV2CombatEffects(game, card, defender, attackerDestroyed, defenderDestroyed, log);
+        if (game.boardCards.includes(card) && !(outcome === "a" && defenderDestroyed)) {
+          card.row = sourcePosition.row;
+          card.col = sourcePosition.col;
+        }
+        game.effectBoardCards = null;
+      }
+    } else {
+      return null;
+    }
+
+    coreEnforceElitePowerBounds(game);
+    syncPlayerBoardIds(game);
+    const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
+    const consumesAction = traitConsumesAction && (action.type === "place" || !coreHasFreeAction(game, card));
+    if (consumesAction) game.actionsUsed += 1;
+    else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
+      card.freeActionUsedThisTurn = (Number(card.freeActionUsedThisTurn) || 0) + 1;
+    }
+    coreCheckVictory(game);
+    return { player, card, log };
+  }
+
+  function coreSimulateActionOutcome(game, player, action) {
+    if (!game || !player || !action) return null;
+    const before = coreCalculatePositionAdvantage(game, player);
+    const simulation = coreCloneAiValue(game);
+    simulation.isAiSimulation = true;
+    simulation.isAnimating = false;
+    simulation.effectBoardCards = null;
+    simulation.roundLog = [];
+    const simulationPlayer = corePlayer(simulation, player.id);
+    if (!simulationPlayer) return null;
+    const simulationAction = { ...action, playerId: simulationPlayer.id };
+    const previousStateGame = state.game;
+    const previousRandom = Math.random;
+    state.game = simulation;
+    Math.random = coreAiSimulationRandom(simulationAction);
+    try {
+      const result = coreApplyAiSimulationAction(simulation, simulationAction);
+      if (!result) return null;
+      const after = coreCalculatePositionAdvantage(simulation, simulationPlayer);
+      return { ...after, before, skillLog: result.log, game: simulation };
+    } finally {
+      Math.random = previousRandom;
+      state.game = previousStateGame;
+    }
   }
 
   function coreIsActionBeneficial(game, player, action) {

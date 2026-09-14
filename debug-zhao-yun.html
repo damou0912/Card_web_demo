@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>赵云攻击2次Bug调试</title>
+</head>
+<body>
+  <h1>赵云攻击2次Bug调试</h1>
+  <div id="debug-log" style="white-space: pre-wrap; font-family: monospace; border: 1px solid #ccc; padding: 10px; height: 400px; overflow: auto;"></div>
+  <button onclick="runDebugTest()">运行调试</button>
+
+  <script>
+    const debugLog = document.getElementById('debug-log');
+
+    function log(msg) {
+      debugLog.textContent += msg + '\n';
+      console.log(msg);
+    }
+
+    function runDebugTest() {
+      debugLog.textContent = '';
+      log('=== 赵云(01313)攻击2次Bug调试 ===\n');
+
+      // 检查赵云的定义
+      log('1. 检查赵云卡牌定义...');
+      if (window.CARD_EFFECTS_V2?.shu?.["01313"]) {
+        const def = window.CARD_EFFECTS_V2.shu["01313"];
+        log('   ✓ 赵云已定义');
+        log('   - 拥有 onTurnStart: ' + typeof def.onTurnStart);
+        log('   - 拥有 onBeforeDestroy: ' + typeof def.onBeforeDestroy);
+        log('   - 拥有 onTurnEnd: ' + typeof def.onTurnEnd);
+        log('   - 拥有 onPlace: ' + typeof def.onPlace);
+
+        // 检查是否有攻击相关的代码
+        const src = String(def.onTurnStart) + String(def.onBeforeDestroy || '') + String(def.onPlace || '');
+        if (src.includes('skillAttack') || src.includes('attack') || src.includes('skill')) {
+          log('   ⚠ 警告: 赵云定义中可能包含攻击逻辑！');
+        } else {
+          log('   ✓ 赵云定义中没有攻击逻辑');
+        }
+      } else {
+        log('   ✗ 赵云未定义');
+      }
+
+      // 检查诸葛亮是否有repeatFriendlyTurnStart
+      log('\n2. 检查诸葛亮(01314)的repeatFriendlyTurnStart...');
+      if (window.CARD_EFFECTS_V2?.shu?.["01314"]) {
+        const def = window.CARD_EFFECTS_V2.shu["01314"];
+        log('   - repeatFriendlyTurnStart: ' + (def.flags?.repeatFriendlyTurnStart ? '✓ 是' : '✗ 否'));
+        if (def.flags?.repeatFriendlyTurnStart) {
+          log('   ⚠ 这可能导致友军的onTurnStart效果触发2次！');
+        }
+      }
+
+      // 检查是否有其他卡牌会触发赵云的技能
+      log('\n3. 检查其他卡牌是否会触发赵云攻击...');
+      const shuCards = window.CARD_EFFECTS_V2?.shu || {};
+      let found = false;
+      for (const [id, def] of Object.entries(shuCards)) {
+        if (id === '01313') continue;
+        const src = JSON.stringify(def);
+        if (src.includes('triggerTurnStart') || src.includes('skillAttack')) {
+          log(`   - ${id}: 包含可能触发其他技能的逻辑`);
+          found = true;
+        }
+      }
+      if (!found) {
+        log('   ✓ 未发现其他卡牌直接触发赵云的逻辑');
+      }
+
+      // 检查精英特性
+      log('\n4. 检查精英AI特性...');
+      const eliteEffects = window.ELITE_AI_EFFECTS_V2 || {};
+      for (const [id, def] of Object.entries(eliteEffects)) {
+        const src = JSON.stringify(def);
+        if (src.includes('01313') || src.includes('skillAttack')) {
+          log(`   - ${id}: 包含可能影响赵云的逻辑`);
+        }
+      }
+      log('   ✓ 检查完成');
+
+      log('\n=== 调试完成 ===');
+    }
+
+    // 页面加载完成后自动运行
+    window.addEventListener('load', () => {
+      log('页面已加载，等待卡牌数据...');
+    });
+  </script>
+</body>
+</html>

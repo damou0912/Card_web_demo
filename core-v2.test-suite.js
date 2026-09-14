@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSimulateActionOutcome, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const results = [];
@@ -362,6 +362,26 @@
       const aiWinGame = makeGame(aiWinningCards); aiWinGame.activePlayerId = 2; aiWinGame.actionsUsed = 0; aiWinGame.players[1].hand = [makeCard("02105", 2, null, null)];
       const aiWinningAction = corePlanAiAction(aiWinGame, aiWinGame.players[1]);
       check("AI优先选择可立即达成占领胜利的放置", aiWinningAction?.type === "place");
+
+      { const placed = makeCard("02103", 1, null, null), ally = makeCard("01101", 1, 1, 0); const game = makeGame([ally]);
+        game.players[0].hand = [placed]; state.game = game;
+        const outcome = coreSimulateActionOutcome(game, game.players[0], { type: "place", playerId: 1, cardUid: placed.uid, target: { row: 1, col: 1 } });
+        const simulatedAlly = outcome?.game?.boardCards.find((card) => card.uid === ally.uid);
+        check("AI放置模拟执行真实技能结算", simulatedAlly?.currentAttack === ally.attack + 1
+          && game.boardCards.length === 1 && game.players[0].hand.includes(placed)); }
+
+      { const attacker = makeCard("03416", 1, 1, 0), defender = makeCard("02101", 2, 1, 1); const game = makeGame([attacker, defender]);
+        attacker.currentAttack = 1; defender.currentAttack = 3; state.game = game;
+        const outcome = coreSimulateActionOutcome(game, game.players[0], { type: "move", playerId: 1, cardUid: attacker.uid, source: { row: 1, col: 0 }, target: { row: 1, col: 1 } });
+        const simulatedAttacker = outcome?.game?.boardCards.find((card) => card.uid === attacker.uid);
+        check("AI移动模拟执行攻击前技能并结算战斗", simulatedAttacker?.row === 1 && simulatedAttacker?.col === 1
+          && simulatedAttacker?.currentAttack === attacker.attack + 4 && !outcome?.game?.boardCards.some((card) => card.uid === defender.uid)
+          && attacker.row === 1 && attacker.col === 0 && game.boardCards.includes(defender)); }
+
+      { const skillCard = makeCard("02313", 1, null, null), plainCard = makeCard("02106", 1, null, null); const game = makeGame();
+        game.players[0].hand = [skillCard, plainCard]; state.game = game;
+        const action = corePlanAiAction(game, game.players[0]);
+        check("AI候选排序采用技能结算后的局面", action?.type === "place" && action.cardUid === skillCard.uid); }
 
       const tigerCavalry = makeCard("02517", 1, null, null);
       const weakTarget = makeCard("02105", 2, 1, 2);

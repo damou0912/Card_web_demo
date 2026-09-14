@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>修改卡组功能测试</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    h1 { color: #333; margin-bottom: 30px; }
+
+    .test-section {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      color: #555;
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #eee;
+    }
+
+    .feature-list {
+      list-style: none;
+    }
+
+    .feature-list li {
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #f9f9f9;
+      border-left: 4px solid #4CAF50;
+      border-radius: 4px;
+    }
+
+    .feature-list li code {
+      background: #fff3cd;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: "Courier New", monospace;
+    }
+
+    .description {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 15px;
+    }
+
+    .code-block {
+      background: #f4f4f4;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 15px 0;
+      overflow-x: auto;
+      font-family: "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 15px;
+    }
+
+    .comparison-item {
+      padding: 15px;
+      background: #f9f9f9;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+
+    .comparison-item h4 {
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .old { border-left: 4px solid #f44336; }
+    .new { border-left: 4px solid #4CAF50; }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    .status-done { background: #c8e6c9; color: #2e7d32; }
+    .status-pending { background: #fff9c4; color: #f57f17; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+
+    table th, table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    table th {
+      background: #f5f5f5;
+      font-weight: 600;
+      color: #333;
+    }
+
+    table tr:hover {
+      background: #fafafa;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎮 修改卡组功能测试文档</h1>
+
+    <div class="test-section">
+      <h2>📋 优化概述</h2>
+      <p class="description">
+        本次优化改进了卡组修改流程中的卡牌选择逻辑。当玩家选择替换某个卡牌时，
+        候选卡牌列表现在会自动过滤掉已经在卡组内的卡牌，避免重复和不必要的混淆。
+      </p>
+      <span class="status-badge status-done">✓ 已完成</span>
+    </div>
+
+    <div class="test-section">
+      <h2>🔧 核心改动</h2>
+      <div class="description">
+        修改了 <code>script.js</code> 中的 <code>showCandidateCards()</code> 函数
+      </div>
+
+      <div class="comparison">
+        <div class="comparison-item old">
+          <h4>❌ 优化前</h4>
+          <p style="font-size: 12px; color: #666;">
+            只过滤了：
+          </p>
+          <ul style="margin-left: 20px; font-size: 12px; margin-top: 8px;">
+            <li>原卡牌本身</li>
+            <li>其他位置已选择的替换卡牌</li>
+          </ul>
+          <p style="font-size: 12px; color: #d32f2f; margin-top: 12px;">
+            ⚠️ 会显示原卡组中已存在的其他卡牌
+          </p>
+        </div>
+
+        <div class="comparison-item new">
+          <h4>✓ 优化后</h4>
+          <p style="font-size: 12px; color: #666;">
+            现在过滤了：
+          </p>
+          <ul style="margin-left: 20px; font-size: 12px; margin-top: 8px;">
+            <li>原卡牌本身</li>
+            <li>其他位置已选择的替换卡牌</li>
+            <li><strong>原卡组中已存在的所有卡牌</strong></li>
+          </ul>
+          <p style="font-size: 12px; color: #2e7d32; margin-top: 12px;">
+            ✓ 只显示可选择的新卡牌
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>📊 变更详情</h2>
+
+      <h3 style="margin-top: 15px; margin-bottom: 10px; color: #555;">修改的函数：showCandidateCards()</h3>
+
+      <p class="description">添加了对原卡组卡牌的收集和过滤：</p>
+
+      <div class="code-block">
+// 新增：收集原卡组中已存在的卡牌 ID
+const cardsInOriginalDeck = new Set();
+originalDeck.forEach(card => {
+  if (card.id !== originalCard.id) {  // 排除要被替换的卡牌本身
+    cardsInOriginalDeck.add(String(card.id));
+  }
+});
+
+// 在过滤条件中添加检查
+if (candidateSlot.id === originalCard.id ||
+    replacedCardIds.has(String(candidateSlot.id)) ||
+    cardsInOriginalDeck.has(String(candidateSlot.id))) {  // 新增条件
+  return;
+}
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>🧪 测试流程</h2>
+      <ol class="feature-list">
+        <li>
+          <strong>打开主菜单</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">确保游戏处于菜单状态</p>
+        </li>
+        <li>
+          <strong>点击"修改卡组"按钮</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">打开卡组修改对话框</p>
+        </li>
+        <li>
+          <strong>选择一个势力（如"三国·蜀"）</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">该势力的所有卡牌会显示</p>
+        </li>
+        <li>
+          <strong>选择一个品质（如"普通"）</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">显示该品质中的所有卡牌</p>
+        </li>
+        <li>
+          <strong>点击某张卡牌的"选择"按钮</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">打开候选卡牌列表</p>
+        </li>
+        <li>
+          <strong>观察候选卡牌列表</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">
+            ✓ 应该不显示原卡组中已存在的卡牌<br>
+            ✓ 只显示可用的新卡牌
+          </p>
+        </li>
+      </ol>
+    </div>
+
+    <div class="test-section">
+      <h2>✅ 验证清单</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>验证项</th>
+            <th>预期结果</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>原卡牌本身被过滤</td>
+            <td>候选列表不显示要被替换的卡牌</td>
+            <td>✓ 有效</td>
+          </tr>
+          <tr>
+            <td>其他位置已选替换卡被过滤</td>
+            <td>同一品质其他位置已选的替换卡牌不显示</td>
+            <td>✓ 有效</td>
+          </tr>
+          <tr>
+            <td>原卡组内卡牌被过滤</td>
+            <td>原卡组中已存在的卡牌不显示</td>
+            <td>🆕 新增</td>
+          </tr>
+          <tr>
+            <td>可选卡牌正常显示</td>
+            <td>只有未在卡组内的卡牌显示</td>
+            <td>✓ 有效</td>
+          </tr>
+          <tr>
+            <td>卡牌替换逻辑正常</td>
+            <td>点击卡牌后正常替换</td>
+            <td>✓ 有效</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="test-section">
+      <h2>📝 示例场景</h2>
+      <div class="description">
+        <strong>场景：</strong> 修改三国·蜀卡组中普通品质的卡牌
+      </div>
+
+      <div class="code-block">
+原卡组（普通）：关羽、张飞、刘备、马超、张辽
+↓
+选择替换"关羽"
+↓
+候选卡牌列表应显示：
+- 赵云 ✓
+- 黄忠 ✓
+- 魏延 ✓
+- ... 其他未在卡组内的普通卡牌
+↓
+不显示：
+- 关羽 (原卡牌)
+- 张飞 (已在卡组内)
+- 刘备 (已在卡组内)
+- 马超 (已在卡组内)
+- 张辽 (已在卡组内)
+      </div>
+    </div>
+
+    <div class="test-section">
+      <h2>🎯 优化效果</h2>
+      <ul class="feature-list">
+        <li>
+          <strong>提升用户体验</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">
+            候选卡牌列表更清晰，避免显示无法选择的重复卡牌
+          </p>
+        </li>
+        <li>
+          <strong>减少用户困惑</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">
+            用户不会尝试选择已在卡组内的卡牌
+          </p>
+        </li>
+        <li>
+          <strong>逻辑更合理</strong>
+          <p style="font-size: 12px; color: #666; margin-top: 5px;">
+            替换操作的约束条件更明确和严格
+          </p>
+        </li>
+      </ul>
+    </div>
+
+    <div class="test-section" style="background: #e8f5e9;">
+      <h2>📍 文件位置</h2>
+      <p class="description">
+        修改文件：<code>script.js</code> (第568-611行)<br>
+        修改函数：<code>showCandidateCards()</code>
+      </p>
+      <span class="status-badge status-done">✓ 本地已完成</span>
+      <p style="font-size: 12px; color: #666; margin-top: 10px;">
+        等待推送到Railway
+      </p>
+    </div>
+  </div>
+</body>
+</html>

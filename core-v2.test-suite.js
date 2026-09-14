@@ -30,8 +30,8 @@
     };
     try {
       const challengeTraitIds = coreEliteAiTraitIds();
-      const expectedNames = ["鼓舞", "冷箭", "厚葬", "军备", "援军", "当先", "慎行", "断粮", "野望", "急奔", "无言", "战鼓擂", "羽林列", "烽火起", "关山急", "鸿门宴", "丹书诏", "古道尘", "城下盟", "振奋人心", "虚弱无力", "灵动迅捷", "凤鸣九霄", "勇冠三军", "破釜沉舟", "关山暮雪", "暗度陈仓"];
-      check("Excel 中的 27 个数字词条 ID 均已载入", challengeTraitIds.length === 27
+      const expectedNames = ["鼓舞", "冷箭", "厚葬", "军备", "援军", "当先", "慎行", "野望", "急奔", "无言", "战鼓擂", "羽林列", "烽火起", "关山急", "鸿门宴", "丹书诏", "古道尘", "城下盟", "振奋人心", "虚弱无力", "灵动迅捷", "凤鸣九霄", "勇冠三军", "破釜沉舟", "关山暮雪", "暗度陈仓"];
+      check("Excel 中的 26 个数字词条 ID 均已载入", challengeTraitIds.length === 26
         && challengeTraitIds.every((id) => /^\d{4}$/.test(id))
         && expectedNames.every((name) => Object.values(window.ELITE_AI_EFFECT_INFO_V2).some((trait) => trait.name === name))
         && Object.keys(window.ELITE_AI_EFFECT_ID_ALIASES_V2).length === 0);
@@ -43,11 +43,7 @@
       { const game = traitGame("1005"); coreDrawOneCard(game, game.players[1], []); check("1005 援军", game.players[1].hand.length === 1 && game.players[1].hand[0].customName === "援兵" && game.players[1].hand[0].currentAttack === 1); }
       { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
-      { const watcher = makeCard("02315", 2, 1, 0), placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [watcher, placed]); coreApplyV2PlacementSkill(game, game.players[1], watcher, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const amplified = placed.currentAttack === placed.attack + 4 && placed.v2PermanentBonus === 1 && placed.v2TempBonus === 3; game.turn = 2; coreStartTurn(game); check("1007 慎行可受卡牌效果放大", amplified && placed.currentAttack === placed.attack + 1); }
-      { const game = traitGame("1008"); game.players[1].hand = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null), makeCard("02103", 2, null, null)]; coreMaintainEliteAiHand(game); const trimmed = game.players[1].hand.length === 1; game.players[1].hand = []; game.players[1].drawPile = [makeCard("02104", 2, null, null)]; coreMaintainEliteAiHand(game); check("1008 断粮", trimmed && game.players[1].hand.length === 1); }
-      { const game = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1008"]); const ai = game.players[1]; const openingIsOne = ai.hand.length === 1 && coreHandLimitForPlayer(game, ai) === 1; const deckBefore = ai.drawPile.length; const blocked = coreDrawOneCard(game, ai, []).status === "hand-full" && ai.hand.length === 1 && ai.drawPile.length === deckBefore; ai.hand = []; ai.drawPile = [makeCard("02104", 2, null, null)]; coreMaintainEliteAiHand(game); const refilled = ai.hand.length === 1; check("1008 断粮开局与零手牌补抽", openingIsOne && blocked && refilled); }
-      { const game = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1008"]); const ai = game.players[1]; const discarded = makeCard("02105", 2, null, null); const replacement = makeCard("02106", 2, null, null); ai.hand = [discarded]; ai.drawPile = [replacement]; const log = []; const drawBefore = ai.hand.length; ai.hand.splice(0, 1); coreMaintainEliteAiHand(game, ai, log); check("1008 断粮弃牌归零后补抽", drawBefore === 1 && ai.hand.length === 1 && ai.hand[0] === replacement); }
-      { const game = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1008"]); const ai = game.players[1]; ai.hand = []; ai.drawPile = []; coreMaintainEliteAiHand(game, ai); const added = makeCard("02107", 2, null, null); coreAddCardsToDrawPile(game, ai, [added], []); check("1008 牌库补卡后立即抽取", ai.hand.length === 1 && ai.hand[0] === added && ai.drawPile.length === 0); }
+      { const watcher = makeCard("02315", 2, 1, 0), placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [watcher, placed]); coreApplyV2PlacementSkill(game, game.players[1], watcher, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const isolated = placed.currentAttack === placed.attack + 3 && placed.v2PermanentBonus === 3 && placed.v2TempBonus === 0; game.turn = 2; coreStartTurn(game); check("1007 慎行词条调整与卡牌增益监听隔离", isolated && placed.currentAttack === placed.attack && placed.v2PermanentBonus === 0); }
       { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1009", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1009 野望", enemy.currentAttack === Math.max(0, enemy.attack - 1) && enemy.v2TempBonus === -1); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1010", [placed]); placed.restedTurn = 1; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1010 急奔", placed.restedTurn === null); }
       { const ally = makeCard("02101", 2, 0, 0); const game = traitGame("1011", [ally]); coreApplyEliteAiTrait(game, game.players[1], []); check("1011 无言", ally.currentAttack === ally.attack); }
@@ -116,7 +112,7 @@
         && challengeGame.players[1].isAI
         && challengeGame.players[1].name === "精英 AI"
         && challengeGame.eliteAiTraitOwnerId === 2
-        && challengeGame.players[1].hand.length === (challengeGame.eliteAiEffectIds.includes("1008") ? 1 : (challengeGame.firstPlayerId === 2 ? 2 : 3))
+        && challengeGame.players[1].hand.length === (challengeGame.firstPlayerId === 2 ? 2 : 3)
         && coreActionLimit(challengeGame) === 1
         && suppliedTraitGame.eliteAiEffectIds.length === 1
         && suppliedTraitGame.eliteAiEffectIds[0] === "1001");
@@ -212,6 +208,7 @@
       const winGame = makeGame([winnerAttacker, loserDefender]);
       winGame.activePlayerId = 1;
       state.game = winGame;
+      coreResolveSkillAttack(winGame, winnerAttacker, loserDefender, winGame.players[0], []);
       const attackerInTarget = winnerAttacker.currentAttack > loserDefender.currentAttack;
       check("攻击方获胜时：攻击方进入目标格", attackerInTarget && winnerAttacker.row === 1 && winnerAttacker.col === 0);
 
@@ -249,7 +246,7 @@
       const enemy = makeCard("01102", 2, 0, 2);
       const attackGame = makeGame([order, ally, enemy]); state.game = attackGame;
       coreApplyV2PlacementSkill(attackGame, attackGame.players[0], order, []);
-      check("奉诏征伐触发相邻友军自动攻击", !attackGame.boardCards.includes(enemy));
+      check("奉诏征伐触发相邻友军自动攻击非我方卡牌", !attackGame.boardCards.includes(enemy));
 
       const firstArray = makeCard("01518", 1, 0, 0);
       const secondArray = makeCard("01518", 1, 0, 1);
@@ -266,12 +263,12 @@
       check("姜维不保留旧版斜向移动", !coreValidMoves(jiangWeiGame, jiangWei).some((cell) => cell.row === 0 && cell.col === 0));
 
       const zhuge = makeCard("01314", 1, 0, 0);
-      const attacker = makeCard("02105", 2, 0, 1);
+      const zhugeAttacker = makeCard("02105", 2, 0, 1);
       const secondEnemy = makeCard("02101", 2, 1, 1);
-      const zhugeGame = makeGame([zhuge, attacker, secondEnemy]); zhugeGame.activePlayerId = 2;
-      check("诸葛亮占领落后时双方不能主动与其交战", !coreValidMoves(zhugeGame, attacker).some((cell) => cell.row === 0 && cell.col === 0));
-      coreResolveSkillAttack(zhugeGame, attacker, zhuge, zhugeGame.players[1], []);
-      check("诸葛亮不可交战状态同样阻止技能攻击", zhugeGame.boardCards.includes(zhuge) && zhugeGame.boardCards.includes(attacker));
+      const zhugeGame = makeGame([zhuge, zhugeAttacker, secondEnemy]); zhugeGame.activePlayerId = 2;
+      check("诸葛亮占领落后时双方不能主动与其交战", !coreValidMoves(zhugeGame, zhugeAttacker).some((cell) => cell.row === 0 && cell.col === 0));
+      coreResolveSkillAttack(zhugeGame, zhugeAttacker, zhuge, zhugeGame.players[1], []);
+      check("诸葛亮不可交战状态同样阻止技能攻击", zhugeGame.boardCards.includes(zhuge) && zhugeGame.boardCards.includes(zhugeAttacker));
 
       const edict = makeCard("01520", 1, 1, 1);
       const edictGame = makeGame([edict]); edictGame.activePlayerId = 1; state.game = edictGame;
@@ -406,7 +403,8 @@
     const results = [];
     const check = (id, name, condition) => results.push({ id, name, passed: Boolean(condition) });
     const makeCard = (id, ownerId, row, col) => {
-      const template = window.CARD_LIBRARY?.cardSlots?.find((card) => card.id === id);
+      const template = window.CARD_LIBRARY?.cardSlots?.find((card) => card.id === id)
+        || window.REPLACEMENT_CARDS?.find((card) => card.id === id);
       const card = cloneCard(template);
       Object.assign(card, { ownerId, row, col, currentAttack: Number(card.attack) || 0, v2PermanentBonus: 0, v2TempBonus: 0 });
       return card;
@@ -432,7 +430,7 @@
       { const a = makeCard("01103", 1, 1, 1), weak = makeCard("01101", 1, 1, 0), high = makeCard("01210", 1, 1, 2), g = makeGame([a, weak, high]); start(g, a); check("01103", "仅最高相邻友军获得强化", high.currentAttack === high.attack + 1 && weak.currentAttack === weak.attack); }
       { const a = makeCard("01104", 1, 1, 1), ally = makeCard("01210", 1, 1, 2), enemy = makeCard("02105", 2, 1, 3), g = makeGame([a, ally, enemy]); start(g, a); check("01104", "相邻最高友军自动攻击", !g.boardCards.includes(enemy)); }
       { const a = makeCard("01105", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); start(g, a); check("01105", "相邻敌军触发永久强化", a.currentAttack === a.attack + 1); }
-      { const a = makeCard("01106", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); start(g, a); check("01106", "随机相邻敌军获得本回合减益", enemy.currentAttack === 0); }
+      { const a = makeCard("01106", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), g = makeGame([a, enemy]); start(g, a); const enemyReduced = enemy.currentAttack === 0; const guard = { uid: "guard-01106", ownerId: null, row: 1, col: 2, attack: 2, currentAttack: 2, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }; const guardGame = makeGame([makeCard("01106", 1, 1, 1), guard]); start(guardGame, guardGame.boardCards[0]); check("01106", "随机相邻非我方卡牌含中立守军获得本回合减益", enemyReduced && guard.currentAttack === 0 && guard.v2TempBonus === -2); }
       {
         const belowThree = makeCard("01107", 1, 1, 1), belowThreeGame = makeGame([belowThree]);
         belowThreeGame.players[0].hand = Array.from({ length: 2 }, () => makeCard("01101", 1, null, null));
@@ -622,6 +620,170 @@
         check("01520", "回合开始占领会保留、失效、恢复并在来源离场后继续存在", placementDoesNothing && firstStartControlsOpenCells && secondStartRetainsAndAdds && friendlyEntryInvalidates && leavingDoesNotRestore && nextStartReoccupies && otherControlInvalidates && survivesSourceLeaving);
       }
 
+      {
+        const allySource = makeCard("01121", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), allyGame = makeGame([allySource, ally]);
+        start(allyGame, allySource);
+        const swapsWithAlly = allySource.row === 1 && allySource.col === 2 && ally.row === 1 && ally.col === 1;
+
+        const enemySource = makeCard("01121", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), enemyGame = makeGame([enemySource, enemy]);
+        start(enemyGame, enemySource);
+        const swapsWithEnemy = enemySource.row === 1 && enemySource.col === 2 && enemy.row === 1 && enemy.col === 1;
+
+        const guardSource = makeCard("01121", 1, 1, 1);
+        const guard = { uid: "guard-01121", ownerId: null, row: 1, col: 2, attack: 2, currentAttack: 2, isGuard: true };
+        const guardGame = makeGame([guardSource, guard]);
+        start(guardGame, guardSource);
+        const swapsWithGuard = guardSource.row === 1 && guardSource.col === 2 && guard.row === 1 && guard.col === 1;
+
+        const isolated = makeCard("01121", 1, 2, 2), isolatedGame = makeGame([isolated]);
+        start(isolatedGame, isolated);
+        const noTargetDoesNothing = isolated.row === 2 && isolated.col === 2;
+        check("01121", "回合开始随机交换任一四方相邻卡牌且包含友军敌军与守军", swapsWithAlly && swapsWithEnemy && swapsWithGuard && noTargetDoesNothing);
+      }
+
+      {
+        const winner = makeCard("01122", 1, 1, 1), weaker = makeCard("02101", 2, 1, 2), winGame = makeGame([winner, weaker]);
+        start(winGame, winner);
+        const winGainsOne = winGame.boardCards.includes(winner) && !winGame.boardCards.includes(weaker)
+          && winner.currentAttack === winner.attack + 1 && winner.v2PermanentBonus === 1 && winner.v2TempBonus === 0;
+        coreRunV2EndSkills(winGame, winGame.players[0], []);
+        check("01122", "合法攻击获胜后永久加一且回合结束保留", winGainsOne && winner.currentAttack === winner.attack + 1);
+
+        const loser = makeCard("01122", 1, 1, 1), stronger = makeCard("02101", 2, 1, 2), loseGame = makeGame([loser, stronger]);
+        stronger.currentAttack = stronger.attack + 2; stronger.v2PermanentBonus = 2;
+        start(loseGame, loser);
+        check("01122", "合法攻击失败仍永久加一但不免除摧毁", !loseGame.boardCards.includes(loser)
+          && loseGame.boardCards.includes(stronger) && loser.currentAttack === loser.attack + 1 && loser.v2PermanentBonus === 1);
+
+        const equalAttacker = makeCard("01122", 1, 1, 1), equalDefender = makeCard("02103", 2, 1, 2), equalGame = makeGame([equalAttacker, equalDefender]);
+        start(equalGame, equalAttacker);
+        check("01122", "合法攻击平局仍永久加一但双方正常摧毁", !equalGame.boardCards.includes(equalAttacker)
+          && !equalGame.boardCards.includes(equalDefender) && equalAttacker.v2PermanentBonus === 1);
+
+        const noTarget = makeCard("01122", 1, 1, 1), friend = makeCard("01101", 1, 1, 2), diagonal = makeCard("02101", 2, 2, 2), noTargetGame = makeGame([noTarget, friend, diagonal]);
+        start(noTargetGame, noTarget);
+        check("01122", "无四方相邻非己方目标时不攻击也不加战力", noTargetGame.boardCards.length === 3
+          && noTarget.currentAttack === noTarget.attack && noTarget.v2PermanentBonus === 0);
+
+        const blocked = makeCard("01122", 1, 1, 1), locked = makeCard("01314", 2, 1, 2), ownAlly = makeCard("01101", 1, 2, 2), blockedGame = makeGame([blocked, locked, ownAlly]);
+        start(blockedGame, blocked);
+        check("01122", "目标禁止交战时不攻击也不加战力", blockedGame.boardCards.length === 3
+          && blocked.row === 1 && blocked.col === 1 && blocked.currentAttack === blocked.attack && blocked.v2PermanentBonus === 0);
+      }
+
+      {
+        const a = makeCard("01123", 1, 1, 1), g = makeGame([a]);
+        a.restedTurn = g.turn;
+        const existing = makeCard("01101", 1, 1, 2); existing.restedTurn = g.turn; g.boardCards.push(existing);
+        let error = null;
+        try { place(g, a); } catch (caught) { error = String(caught); }
+        const currentCardsReady = a.restedTurn === null && existing.restedTurn === null && g.players[0].v2NoRestTurn === g.turn;
+        results.push({ id: "01123", name: "放置时自身与当前己方卡牌不进入休整", passed: error === null && currentCardsReady, ...(error ? { error } : {}) });
+      }
+      {
+        const a = makeCard("01124", 1, 1, 1), lowA = makeCard("02101", 2, 1, 0), lowB = makeCard("02101", 2, 1, 2), high = makeCard("02101", 2, 0, 1);
+        const g = makeGame([a, lowA, lowB, high]);
+        a.currentAttack = a.attack;
+        lowA.currentAttack = 0; lowB.currentAttack = 0; high.currentAttack = 3;
+        start(g, a);
+        const oneLowerDestroyed = [lowA, lowB].filter((target) => !g.boardCards.includes(target)).length === 1;
+        const highUntouched = g.boardCards.includes(high) && high.currentAttack === 3;
+        const selfReduced = a.currentAttack === a.attack - 1;
+        const noTarget = makeCard("01124", 1, 1, 1), noTargetGame = makeGame([noTarget]);
+        start(noTargetGame, noTarget);
+        check("01124", "回合开始自身减一并随机摧毁一张低于自身的四方相邻非己方卡牌", oneLowerDestroyed && highUntouched && selfReduced
+          && noTargetGame.boardCards.includes(noTarget) && noTarget.currentAttack === noTarget.attack - 1);
+      }
+      {
+        const lock = makeCard("01225", 1, 1, 1), adjacentEnemy = makeCard("02101", 2, 1, 2), remoteEnemy = makeCard("02101", 2, 3, 3);
+        const g = makeGame([lock, adjacentEnemy, remoteEnemy], 2);
+        place(g, lock);
+        const sourceCannotMove = coreValidMoves({ ...g, activePlayerId: 1 }, lock).length === 0;
+        const adjacentLocked = adjacentEnemy.v2Locked === true && coreValidMoves(g, adjacentEnemy).length === 0;
+        const remoteUnlocked = !remoteEnemy.v2Locked;
+        destroy(g, lock);
+        const adjacentUnlockedAfterSourceLeaves = !adjacentEnemy.v2Locked;
+        check("01225", "自身无法移动并锁定四方相邻敌方，来源摧毁后解除锁定", sourceCannotMove && adjacentLocked && remoteUnlocked && adjacentUnlockedAfterSourceLeaves);
+      }
+      {
+        const source = makeCard("01226", 1, 1, 1), first = makeCard("01101", 1, 1, 2), second = makeCard("01102", 1, 2, 1);
+        const g = makeGame([source, first, second]);
+        start(g, source);
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], first, []);
+        const firstBoosted = first.currentAttack === first.attack + 2 && first.v2PermanentBonus === 2;
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], second, []);
+        const secondUnchanged = second.currentAttack === second.attack && second.v2PermanentBonus === 0;
+        g.turn += 1;
+        start(g, source);
+        const third = makeCard("01103", 1, 2, 2);
+        coreTriggerOtherV2PlacementEffects(g, g.players[0], third, []);
+        const nextTurnResets = third.currentAttack === third.attack + 2 && third.v2PermanentBonus === 2;
+        check("01226", "每回合第一张其他己方放置卡牌永久加二", firstBoosted && secondUnchanged && nextTurnResets);
+      }
+      {
+        const center = makeCard("01227", 1, 1, 1), allies = [
+          makeCard("01101", 1, 0, 1), makeCard("01101", 1, 2, 1), makeCard("01101", 1, 1, 0), makeCard("01101", 1, 1, 2)
+        ];
+        const fullGame = makeGame([center, ...allies]);
+        start(fullGame, center);
+        const allOccupiedByAllies = fullGame.extraActions === 1;
+        const missingGame = makeGame([center, ...allies.slice(0, 3)]);
+        start(missingGame, center);
+        const missingNeighborNoAction = !missingGame.extraActions;
+        const edge = makeCard("01227", 1, 0, 0), edgeAllyA = makeCard("01101", 1, 0, 1), edgeAllyB = makeCard("01101", 1, 1, 0);
+        const edgeGame = makeGame([edge, edgeAllyA, edgeAllyB]);
+        start(edgeGame, edge);
+        const edgeUsesOnlyLegalDirections = edgeGame.extraActions === 1;
+        check("01227", "四方合法格均为友军时增加行动数并适配棋盘边缘", allOccupiedByAllies && missingNeighborNoAction && edgeUsesOnlyLegalDirections);
+      }
+      {
+        const attacker = makeCard("01328", 1, 1, 1), first = makeCard("02101", 2, 1, 0), second = makeCard("02101", 2, 0, 0);
+        attacker.currentAttack = 4; first.currentAttack = 1; second.currentAttack = 1;
+        const g = makeGame([attacker, first, second]);
+        place(g, attacker);
+        const firstAndSecondDestroyed = !g.boardCards.includes(first) && !g.boardCards.includes(second);
+        const attackerSurvivesAndNoExtraPermanentLoss = g.boardCards.includes(attacker) && attacker.v2PermanentBonus === 0;
+        const isolated = makeCard("01328", 1, 1, 1), isolatedGame = makeGame([isolated]);
+        place(isolatedGame, isolated);
+        check("01328", "入阵攻击并在首次成功摧毁后再次攻击", firstAndSecondDestroyed && attackerSurvivesAndNoExtraPermanentLoss && isolatedGame.boardCards.includes(isolated));
+      }
+      {
+        const commander = makeCard("01429", 1, 1, 1);
+        const ally = makeCard("01101", 1, 2, 2);
+        const enemy = makeCard("02101", 2, 1, 2);
+        const guard = { uid: "guard-01429", ownerId: null, row: 0, col: 0, attack: 2, currentAttack: 2, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 };
+        const g = makeGame([commander, ally, enemy, guard]);
+        start(g, commander);
+        const alliesGainPermanently = commander.currentAttack === commander.attack + 1
+          && ally.currentAttack === ally.attack + 1
+          && commander.v2PermanentBonus === 1
+          && ally.v2PermanentBonus === 1;
+        coreAdjustAttack(enemy, 1);
+        const enemyIncreaseBlocked = enemy.currentAttack === enemy.attack;
+        coreAdjustAttack(enemy, -1);
+        const enemyReductionAllowed = enemy.currentAttack === enemy.attack - 1;
+        coreAdjustAttack(guard, 1);
+        const neutralIncreaseAllowed = guard.currentAttack === guard.attack + 1;
+        const cannotMove = coreValidMoves(g, commander).length === 0;
+        check("01429", "起势我方全体永久加一且阻止敌方增加战力，不影响敌方减益与中立守军", alliesGainPermanently
+          && enemyIncreaseBlocked && enemyReductionAllowed && neutralIncreaseAllowed && cannotMove);
+      }
+      {
+        const lamp = makeCard("01530", 1, 1, 1);
+        const remoteAlly = makeCard("01101", 1, 3, 3);
+        const zeroAlly = makeCard("01102", 1, 0, 0);
+        zeroAlly.currentAttack = 0;
+        zeroAlly.v2PermanentBonus = -zeroAlly.attack;
+        const g = makeGame([lamp, remoteAlly, zeroAlly]);
+        const protectedDestroy = !destroy(g, remoteAlly);
+        const protectionApplied = g.boardCards.includes(remoteAlly)
+          && lamp.currentAttack === Math.max(0, lamp.attack - 3)
+          && lamp.v2PermanentBonus === -3;
+        coreRunV2EndSkills(g, g.players[0], []);
+        const endSkillDestroyedZeroCards = !g.boardCards.includes(zeroAlly) && g.boardCards.includes(lamp);
+        check("01530", "全场保护其他友军并在回合结束摧毁其他归零友军", protectedDestroy && protectionApplied && endSkillDestroyedZeroCards);
+      }
+
       // Wei: placement, protection and movement boundaries.
       {
         const equal = makeCard("02101", 1, 1, 1), equalGame = makeGame([equal]);
@@ -798,17 +960,19 @@
         const a = makeCard("02313", 1, 1, 1), g = makeGame([a]);
         a.attack = 1; a.currentAttack = 1; a.v2PermanentBonus = 0;
         place(g, a);
-        const placementAddsFivePermanently = a.currentAttack === 6 && a.v2PermanentBonus === 5;
+        const placementAddsEightPermanently = a.currentAttack === 9 && a.v2PermanentBonus === 8;
 
         coreStartTurn(g);
-        const firstStartReducesToFour = a.currentAttack === 4 && a.v2PermanentBonus === 3;
+        const firstStartReducesToSeven = a.currentAttack === 7 && a.v2PermanentBonus === 6;
         g.turn = 2; coreStartTurn(g);
-        const secondStartReducesToTwo = a.currentAttack === 2 && a.v2PermanentBonus === 1;
+        const secondStartReducesToFive = a.currentAttack === 5 && a.v2PermanentBonus === 4;
         g.turn = 3; coreStartTurn(g);
-        const exactTwoBecomesZero = g.boardCards.includes(a) && a.currentAttack === 0 && a.v2PermanentBonus === -1;
+        const thirdStartReducesToThree = g.boardCards.includes(a) && a.currentAttack === 3 && a.v2PermanentBonus === 2;
         g.turn = 4; coreStartTurn(g);
+        const fourthStartReducesToOne = g.boardCards.includes(a) && a.currentAttack === 1 && a.v2PermanentBonus === 0;
+        g.turn = 5; coreStartTurn(g);
         const belowTwoSelfDestructs = !g.boardCards.includes(a);
-        check("02313", "放置永久加五，回合开始战力不足二自毁否则永久减二", placementAddsFivePermanently && firstStartReducesToFour && secondStartReducesToTwo && exactTwoBecomesZero && belowTwoSelfDestructs);
+        check("02313", "放置永久加八，回合开始战力不足二自毁否则永久减二", placementAddsEightPermanently && firstStartReducesToSeven && secondStartReducesToFive && thirdStartReducesToThree && fourthStartReducesToOne && belowTwoSelfDestructs);
       }
       {
         const a = makeCard("02314", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02102", 2, 1, 0), guard = { uid: "guard-02314", ownerId: null, row: 0, col: 1, attack: 2, currentAttack: 2, isGuard: true };
@@ -853,6 +1017,7 @@
         g.players[1].hand = [makeCard("02101", 2, null, null)];
         place(g, a);
         const placementBoostedAlly = ally.currentAttack === ally.attack + 1;
+        const ownPlacementDoesNotBoostCommander = a.currentAttack === a.attack;
         const handComparisonAddsAction = g.extraActions === 1;
         coreAdjustAttack(ally, -1);
         const reductionIsAllowed = ally.currentAttack === ally.attack;
@@ -868,7 +1033,7 @@
         behindGame.players[1].hand = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)];
         place(behindGame, behind);
         const fewerHandDoesNotAddAction = !behindGame.extraActions;
-        check("02416", "放置强化其他友军、按手牌比较增加行动并监听己方放置", placementBoostedAlly && handComparisonAddsAction && reductionIsAllowed && placementWatcherBoostedCommander && enemyPlacementDoesNotBoost && fewerHandDoesNotAddAction);
+        check("02416", "自身放置不加战力，其他我方卡牌放置时永久加一", placementBoostedAlly && ownPlacementDoesNotBoostCommander && handComparisonAddsAction && reductionIsAllowed && placementWatcherBoostedCommander && enemyPlacementDoesNotBoost && fewerHandDoesNotAddAction && behind.currentAttack === behind.attack);
       }
       {
         const a = makeCard("02517", 1, 1, 1), enemy = makeCard("01101", 2, 1, 2), g = makeGame([a, enemy]);
@@ -918,7 +1083,12 @@
         const isolated = makeCard("02519", 1, 2, 2), isolatedAlly = makeCard("01210", 1, 2, 3), isolatedGame = makeGame([isolated, isolatedAlly]);
         place(isolatedGame, isolated);
         const noTargetAllyDoesNotAttack = isolatedGame.boardCards.includes(isolatedAlly) && isolatedAlly.row === 2 && isolatedAlly.col === 3;
-        check("02519", "相邻友军本回合加一并逐张自动攻击可交战敌军", allyBoostedAndAttacked && diagonalEnemyUntouched && boostExpires && noTargetAllyDoesNotAttack);
+        const guardOrder = makeCard("02519", 1, 1, 1), guardAlly = makeCard("01210", 1, 1, 2);
+        const guard = { uid: "guard-02519", ownerId: null, row: 1, col: 3, attack: 2, currentAttack: 2, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 };
+        const guardGame = makeGame([guardOrder, guardAlly, guard]);
+        place(guardGame, guardOrder);
+        const neutralGuardCanBeAttacked = !guardGame.boardCards.includes(guard);
+        check("02519", "相邻友军本回合加一并逐张自动攻击可交战的非我方卡牌，包含守军", allyBoostedAndAttacked && diagonalEnemyUntouched && boostExpires && noTargetAllyDoesNotAttack && neutralGuardCanBeAttacked);
       }
       {
         const watcher = makeCard("02520", 1, 1, 1);
@@ -1032,14 +1202,16 @@
         const enemy = makeCard("02101", 2, 2, 2);
         const placementGame = makeGame([a, allyA, allyB, guard, enemy]);
         place(placementGame, a);
-        const placementBoostCount = [allyA, allyB].filter((target) => target.currentAttack === target.attack + 2).length;
+        const placementBoostCount = [allyA, allyB].filter((target) => target.currentAttack === target.attack + 1
+          && target.v2PermanentBonus === 1).length;
         const placementTargetsScoped = a.currentAttack === a.attack && guard.currentAttack === guard.attack && enemy.currentAttack === enemy.attack;
 
         const destroyed = makeCard("03106", 1, 1, 1), destroyedAllyA = makeCard("01101", 1, 1, 2), destroyedAllyB = makeCard("01102", 1, 3, 3);
         const destroyGame = makeGame([destroyed, destroyedAllyA, destroyedAllyB]);
         const destroyedCardRemoved = destroy(destroyGame, destroyed) && !destroyGame.boardCards.includes(destroyed);
-        const destroyBoostCount = [destroyedAllyA, destroyedAllyB].filter((target) => target.currentAttack === target.attack + 2).length;
-        check("03106", "放置与摧毁时随机其他友军永久加二", placementBoostCount === 1 && placementTargetsScoped
+        const destroyBoostCount = [destroyedAllyA, destroyedAllyB].filter((target) => target.currentAttack === target.attack + 1
+          && target.v2PermanentBonus === 1).length;
+        check("03106", "放置与摧毁时随机其他友军永久加一", placementBoostCount === 1 && placementTargetsScoped
           && destroyedCardRemoved && destroyBoostCount === 1);
       }
       {
@@ -1058,97 +1230,54 @@
       }
       { const a = makeCard("03208", 1, 1, 1), enemyDeckCard = makeCard("02101", 2, null, null), g = makeGame([a]); g.players[1].drawPile = [enemyDeckCard]; place(g, a); const placedDraw = g.players[0].hand.includes(enemyDeckCard) && enemyDeckCard.ownerId === 1; const second = makeCard("03208", 1, 2, 2); g.boardCards.push(second); g.players[1].drawPile = [makeCard("02102", 2, null, null)]; destroy(g, second); check("03208", "放置与摧毁时从敌方牌库抽牌", placedDraw && g.players[0].hand.length === 2); }
       { const a = makeCard("03209", 1, 1, 1), enemyA = makeCard("02101", 2, 1, 0), guard = { uid: "guard-test", ownerId: null, row: 0, col: 1, currentAttack: 2, attack: 2, isGuard: true }, g = makeGame([a, enemyA, guard]); g.players[0].drawPile = [makeCard("01101", 1, null, null), makeCard("01102", 1, null, null)]; destroy(g, a); const directDestroy = g.players[0].hand.length === 2 && g.boardCards.length === 2;
+        check("03209", "直接被摧毁时按原格四方相邻非我方卡牌数量抽牌", directDestroy);
         const attacker = makeCard("03209", 1, 1, 1), defender = makeCard("02101", 2, 1, 2), targetNeighbor = makeCard("02102", 2, 0, 2), sourceNeighbor = makeCard("02103", 2, 1, 0), combatGame = makeGame([attacker, defender, targetNeighbor, sourceNeighbor]);
         attacker.currentAttack = 1; defender.currentAttack = 2; combatGame.players[0].drawPile = [makeCard("01103", 1, null, null), makeCard("01104", 1, null, null)];
         coreResolveSkillAttack(combatGame, attacker, defender, combatGame.players[0], []);
         const targetPositionUsed = combatGame.players[0].hand.length === 1 && !combatGame.boardCards.includes(attacker);
-        const protectedAttacker = makeCard("03416", 1, 1, 1), strongerDefender = makeCard("02101", 2, 1, 2), protectedGame = makeGame([protectedAttacker, strongerDefender]);
+        check("03209", "主动攻击被摧毁时按目标格四方相邻非我方卡牌数量抽牌", targetPositionUsed);
+        const protectedAttacker = makeCard("01313", 1, 1, 1), strongerDefender = makeCard("02101", 2, 1, 2), protectedGame = makeGame([protectedAttacker, strongerDefender]);
         protectedAttacker.currentAttack = 5; strongerDefender.currentAttack = 6; coreResolveSkillAttack(protectedGame, protectedAttacker, strongerDefender, protectedGame.players[0], []);
         const returnedAfterProtection = protectedGame.boardCards.includes(protectedAttacker) && protectedAttacker.row === 1 && protectedAttacker.col === 1;
-        check("03209", "按战斗结算时的目标格判定相邻抽牌，保护后回到原格", directDestroy && targetPositionUsed && returnedAfterProtection); }
+        check("03209", "主动攻击被免毁后在摧毁判定结束时返回原格", returnedAfterProtection); }
       { const a = makeCard("03210", 1, 1, 1), allyA = makeCard("01101", 1, 1, 2), allyB = makeCard("01101", 1, 2, 1), enemyA = makeCard("02101", 2, 1, 3), enemyB = makeCard("02101", 2, 3, 1), g = makeGame([a, allyA, allyB, enemyA, enemyB]); destroy(g, a); const allBoosted = [allyA, allyB].every((target) => target.currentAttack === target.attack + 2 && target.v2TempBonus === 2); const bothAttacked = !g.boardCards.includes(enemyA) && !g.boardCards.includes(enemyB); check("03210", "四方相邻友军本回合加二并分别随机攻击相邻敌军", allBoosted && bothAttacked); }
       { const a = makeCard("03211", 1, 1, 1), enemyA = makeCard("02101", 2, 0, 0), enemyB = makeCard("02101", 2, 0, 1), guard = { uid: "guard-03211", ownerId: null, row: 0, col: 2, attack: 2, currentAttack: 2, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }, fewerGame = makeGame([a, enemyA, enemyB, guard]); destroy(fewerGame, a); const fewerBranch = enemyA.currentAttack === 0 && enemyB.currentAttack === 0 && guard.currentAttack === 1 && enemyA.v2PermanentBonus === -1 && guard.v2PermanentBonus === -1;
         const leader = makeCard("03211", 1, 1, 1), allyA = makeCard("01101", 1, 1, 2), allyB = makeCard("01101", 1, 2, 1), enemy = makeCard("02101", 2, 0, 0), greaterGame = makeGame([leader, allyA, allyB, enemy]); destroy(greaterGame, leader); const greaterBranch = allyA.currentAttack === allyA.attack + 1 && allyB.currentAttack === allyB.attack + 1 && allyA.v2PermanentBonus === 1 && enemy.currentAttack === enemy.attack;
         check("03211", "按双方玩家卡牌数量分支，少于时敌方含守军永久减一，多于时其他友军永久加一", fewerBranch && greaterBranch); }
-      { const a = makeCard("03212", 1, 1, 1), ally = makeCard("01101", 2, 1, 2), g = makeGame([a, ally]); place(g, a); const converted = a.ownerId === 2 && !destroy(g, a); g.turn = 2; const destroyed = destroy(g, a); check("03212", "放置转为对方所有且本回合免毁，之后摧毁相邻友军", converted && destroyed && !g.boardCards.includes(ally)); }
+      { const a = makeCard("03212", 1, 1, 1), currentAlly = makeCard("01101", 2, 1, 2), formerAlly = makeCard("01102", 1, 0, 1), g = makeGame([a, currentAlly, formerAlly]); place(g, a); const converted = a.ownerId === 2 && !destroy(g, a); g.turn = 2; const destroyed = destroy(g, a); check("03212", "放置转为对方所有且本回合免毁，之后只摧毁当前阵营相邻友军", converted && destroyed && !g.boardCards.includes(currentAlly) && g.boardCards.includes(formerAlly)); }
       { const a = makeCard("03313", 1, 1, 1), enemy = makeCard("02105", 2, 1, 2), guard = { uid: "guard-zero", ownerId: null, row: 0, col: 1, currentAttack: 2, attack: 2, isGuard: true }, g = makeGame([a, enemy, guard]); destroy(g, a); check("03313", "所有敌方含守军本回合减二并销毁归零卡", enemy.currentAttack === 0 && enemy.v2TempBonus === -2 && !g.boardCards.includes(enemy) && guard.currentAttack === 0 && guard.v2TempBonus === -2); }
-      { const a = makeCard("03314", 1, 1, 1), g = makeGame([a]); g.players[1].drawPile = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)]; place(g, a); const placementDraw = a.currentAttack === a.attack + 2 && g.players[1].hand.length === 2;
-        const enemyDrawer = makeCard("01107", 2, 3, 3); g.boardCards.push(enemyDrawer); g.players[1].drawPile = [makeCard("02103", 2, null, null)]; state.game = g; coreRunV2StartSkill(g, g.players[1], enemyDrawer); const futureEnemyDraw = a.currentAttack === a.attack + 3 && g.players[1].hand.length === 3;
-        destroy(g, a); check("03314", "敌方任意效果抽牌使此卡永久加一，摧毁时弃牌两张", placementDraw && futureEnemyDraw && g.players[1].hand.length === 1); }
+      { const a = makeCard("03314", 1, 1, 1), g = makeGame([a]); g.players[1].drawPile = [makeCard("02101", 2, null, null)]; place(g, a); const placementDraw = a.currentAttack === a.attack + 1 && a.v2PermanentBonus === 1 && g.players[1].hand.length === 1;
+        const enemyDrawer = makeCard("01107", 2, 3, 3); g.boardCards.push(enemyDrawer); g.players[1].drawPile = [makeCard("02103", 2, null, null)]; state.game = g; coreRunV2StartSkill(g, g.players[1], enemyDrawer); const futureEnemyDraw = a.currentAttack === a.attack + 2 && a.v2PermanentBonus === 2 && g.players[1].hand.length === 2;
+        destroy(g, a); check("03314", "敌方任意效果抽牌使此卡永久加一，放置抽一张且摧毁时弃一张", placementDraw && futureEnemyDraw && g.players[1].hand.length === 1); }
       { const a = makeCard("03315", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), remote = makeCard("02102", null, 3, 3), guard = { uid: "guard-03315", ownerId: null, row: 0, col: 0, attack: 3, currentAttack: 3, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }, g = makeGame([a, enemy, remote, guard]); remote.attack = 4; remote.currentAttack = 4; place(g, a); const equalPlacement = enemy.currentAttack === 0 && enemy.v2PermanentBonus === -2 && remote.currentAttack === 2 && remote.v2PermanentBonus === -2 && guard.currentAttack === 1 && guard.v2PermanentBonus === -2; const destroyedLowCards = destroy(g, a) && !g.boardCards.includes(enemy) && g.boardCards.includes(remote) && g.boardCards.includes(guard);
         const leader = makeCard("03315", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), otherEnemy = makeCard("02101", 2, 3, 3), otherGuard = { uid: "guard-03315-unequal", ownerId: null, row: 0, col: 0, attack: 3, currentAttack: 3, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }, unequalGame = makeGame([leader, ally, otherEnemy, otherGuard]); place(unequalGame, leader); const unequalPlacement = otherEnemy.currentAttack === 0 && otherEnemy.v2PermanentBonus === -1 && otherGuard.currentAttack === 2 && otherGuard.v2PermanentBonus === -1;
         check("03315", "全场非己方按双方玩家卡牌数量永久减益，摧毁时销毁低于自身战力的非己方卡牌", equalPlacement && destroyedLowCards && unequalPlacement); }
-      { const a = makeCard("03416", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 3, 3), g = makeGame([a, ally, enemy]); destroy(g, ally); const gainedFromAlly = a.currentAttack === a.attack + 1; destroy(g, enemy); const gainedFromAnyCard = a.currentAttack === a.attack + 2; a.currentAttack = 5; a.v2PermanentBonus = 1; const saved = !destroy(g, a) && a.currentAttack === 1; const freeMove = coreHasFreeAction(g, a); check("03416", "其他任意卡牌被摧毁时永久加一，战力大于四被摧毁时减四免毁且移动攻击免费", gainedFromAlly && gainedFromAnyCard && saved && freeMove); }
-      { const mover = makeCard("03416", 1, 1, 1), g = makeGame([mover]); g.actionsUsed = coreActionLimit(g); g.selection = { handCardUid: null, boardCardUid: mover.uid, targetCell: { row: 1, col: 2 } }; const actionAllowedAtLimit = coreCanUseAction(g, mover); const pendingMove = coreBuildPendingAction(g); check("03416", "行动数用尽后仍可构建免费移动", actionAllowedAtLimit && pendingMove?.type === "move"); }
-      { const a = makeCard("03416", 1, 1, 1), enemy = makeCard("01313", 2, 1, 2), g = makeGame([a, enemy]); a.v2PermanentBonus = 1; a.currentAttack = 5; enemy.v2PermanentBonus = 2; enemy.currentAttack = 6; coreResolveSkillAttack(g, a, enemy, g.players[0], []); check("03416", "交战后不再额外削弱对手", g.boardCards.includes(a) && g.boardCards.includes(enemy) && a.currentAttack === 1 && enemy.currentAttack === 6); }
+      { const a = makeCard("03416", 1, 1, 1), lower = makeCard("01101", 1, 3, 3), higher = makeCard("02101", 2, 3, 2), g = makeGame([a, lower, higher]); lower.currentAttack = 3; higher.currentAttack = 6; destroy(g, lower); const gainedFromLowerCard = a.currentAttack === a.attack + 1 && a.v2PermanentBonus === 1; destroy(g, higher); const ignoredHigherCard = a.currentAttack === a.attack + 1 && a.v2PermanentBonus === 1; coreRunV2EndSkills(g, g.players[0], []); check("03416", "不高于自身战力的其他卡牌被摧毁时永久加一", gainedFromLowerCard && ignoredHigherCard && a.currentAttack === a.attack + 1); }
+      { const a = makeCard("03416", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), g = makeGame([a, enemy]); enemy.currentAttack = 6; coreResolveSkillAttack(g, a, enemy, g.players[0], []); const attackBoostedThisTurn = g.boardCards.includes(a) && !g.boardCards.includes(enemy) && a.currentAttack === a.attack + 4 && a.v2TempBonus === 3 && a.v2PermanentBonus === 1; coreRunV2EndSkills(g, g.players[0], []); check("03416", "攻击前本回合加三且摧毁较弱卡牌后再永久加一", attackBoostedThisTurn && a.currentAttack === a.attack + 1 && a.v2TempBonus === 0 && a.v2PermanentBonus === 1); }
+      { const a = makeCard("03416", 1, 1, 1), regular = makeCard("01101", 1, 3, 3), g = makeGame([a, regular]); start(g, a); a.lastMovedTurn = g.turn; a.v2MovesTakenTurn = g.turn; a.v2MovesTakenThisTurn = 1; regular.lastMovedTurn = g.turn; regular.v2MovesTakenTurn = g.turn; regular.v2MovesTakenThisTurn = 1; const extraMoveAvailable = a.v2ExtraMovesTurn === g.turn && a.v2ExtraMoves === 1 && coreValidMoves(g, a).length > 0; const regularSecondMoveBlocked = coreValidMoves(g, regular).length === 0; a.v2MovesTakenThisTurn = 2; const thirdMoveBlocked = coreValidMoves(g, a).length === 0; g.actionsUsed = coreActionLimit(g); const stillConsumesActions = !coreCanUseAction(g, a); check("03416", "普通卡牌本回合移动一次后不可再次移动", regularSecondMoveBlocked); check("03416", "回合开始后本回合可额外移动一次且仍消耗行动数", extraMoveAvailable && stillConsumesActions); check("03416", "额外移动使用后本回合不可第三次移动", thirdMoveBlocked); }
       { const ship = makeCard("03517", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([ship, ally]); const original = { row: ally.row, col: ally.col }; const destroyed = destroy(g, ally); check("03517", "相邻友军免于摧毁，楼船阵自毁并将其移动到楼船位置", !destroyed && !g.boardCards.includes(ship) && g.boardCards.includes(ally) && ally.row === 1 && ally.col === 1 && (original.row !== ally.row || original.col !== ally.col)); }
       { const sima = makeCard("02314", 1, 0, 0), ship = makeCard("03517", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([sima, ship, ally]); ally.v2StartTurn = 1; ally.v2StartAttack = ally.attack; ally.currentAttack = ally.attack + 1; destroy(g, ally); coreRunV2EndSkills(g, g.players[0], []); check("02314", "司马懿回合结束结算不影响楼船阵保护后的存活", g.boardCards.includes(ally) && !g.boardCards.includes(ship) && ally.row === 1 && ally.col === 1); }
       { const a = makeCard("03518", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 2, 1), g = makeGame([a, ally, enemy]); destroy(g, a); check("03518", "摧毁四方相邻及原位置卡牌并生成破坏格", !g.boardCards.includes(ally) && !g.boardCards.includes(enemy) && g.brokenCells.some((cell) => cell.row === 1 && cell.col === 1)); }
       { const a = makeCard("03519", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), g = makeGame([a, ally]); start(g, a); const kept = g.boardCards.includes(a); const isolated = makeCard("03519", 1, 2, 2); const isolatedGame = makeGame([isolated]); start(isolatedGame, isolated); check("03519", "有相邻友军时不可摧毁，无友军时回合开始自毁", kept && !isolatedGame.boardCards.includes(isolated)); }
       { const a = makeCard("03520", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemy = makeCard("02101", 2, 2, 2), g = makeGame([a, ally, enemy]); place(g, a); check("03520", "放置时全场本回合减二并增加行动数", a.currentAttack === 0 && ally.currentAttack === 0 && enemy.currentAttack === 0 && g.extraActions === 1); }
 
-      // Wu: Modified cards - 03106, 03314, 03315, 03416, 03519
-      { const a = makeCard("03106", 1, 1, 1), allyA = makeCard("01101", 1, 1, 2), allyB = makeCard("01102", 1, 3, 3);
-        const guard = { uid: "guard-03106-mod", ownerId: null, row: 0, col: 0, attack: 2, currentAttack: 2, isGuard: true };
-        const enemy = makeCard("02101", 2, 2, 2);
-        const placementGame = makeGame([a, allyA, allyB, guard, enemy]);
-        place(placementGame, a);
-        const placementBoostCount = [allyA, allyB].filter((target) => target.currentAttack === target.attack + 1).length;
-        const placementTargetsScoped = a.currentAttack === a.attack && guard.currentAttack === guard.attack && enemy.currentAttack === enemy.attack;
-
-        const destroyed = makeCard("03106", 1, 1, 1), destroyedAllyA = makeCard("01101", 1, 1, 2), destroyedAllyB = makeCard("01102", 1, 3, 3);
-        const destroyGame = makeGame([destroyed, destroyedAllyA, destroyedAllyB]);
-        const destroyedCardRemoved = destroy(destroyGame, destroyed) && !destroyGame.boardCards.includes(destroyed);
-        const destroyBoostCount = [destroyedAllyA, destroyedAllyB].filter((target) => target.currentAttack === target.attack + 1).length;
-        check("03106-修改", "放置与摧毁时随机其他友军永久加一（修改：从+2改为+1）", placementBoostCount === 1 && placementTargetsScoped
-          && destroyedCardRemoved && destroyBoostCount === 1);
-      }
-
-      { const a = makeCard("03314", 1, 1, 1), g = makeGame([a]); g.players[1].drawPile = [makeCard("02101", 2, null, null)]; place(g, a); const placementDraw = a.currentAttack === a.attack + 1 && g.players[1].hand.length === 1;
-        const enemyDrawer = makeCard("01107", 2, 3, 3); g.boardCards.push(enemyDrawer); g.players[1].drawPile = [makeCard("02103", 2, null, null)]; state.game = g; coreRunV2StartSkill(g, g.players[1], enemyDrawer); const futureEnemyDraw = a.currentAttack === a.attack + 2 && g.players[1].hand.length === 2;
-        destroy(g, a); check("03314-修改", "敌方任意效果抽牌使此卡永久加一，摧毁时弃牌一张（修改：从弃2张改为弃1张）", placementDraw && futureEnemyDraw && g.players[1].hand.length === 1);
-      }
-
-      { const a = makeCard("03315", 1, 1, 1), enemy = makeCard("02101", 2, 1, 2), remote = makeCard("02102", null, 3, 3), guard = { uid: "guard-03315-mod", ownerId: null, row: 0, col: 0, attack: 3, currentAttack: 3, isGuard: true, v2PermanentBonus: 0, v2TempBonus: 0 }, g = makeGame([a, enemy, remote, guard]); remote.attack = 4; remote.currentAttack = 4; place(g, a);
-        const equalPlacement = enemy.currentAttack === 0 && enemy.v2PermanentBonus === -2 && remote.currentAttack === 2 && remote.v2PermanentBonus === -2 && guard.currentAttack === 1 && guard.v2PermanentBonus === -2;
-        a.currentAttack = 5;
-        const destroyedLowCards = destroy(g, a) && !g.boardCards.includes(enemy) && g.boardCards.includes(remote) && !g.boardCards.includes(guard);
-        check("03315-修改", "卡牌数相等时全场非己方永久减二，摧毁时销毁战力低于此卡的非己方卡牌（修改：遗志判定用此卡战力）", equalPlacement && destroyedLowCards);
-      }
-
-      { const a = makeCard("03416", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), lowAlly = makeCard("01102", 1, 3, 3), enemy = makeCard("02101", 2, 3, 3), g = makeGame([a, ally, lowAlly, enemy]);
-        destroy(g, lowAlly);
-        const noGainFromLowAlly = a.currentAttack === a.attack;
-        destroy(g, enemy);
-        const gainFromHighEnemy = a.currentAttack === a.attack + 1;
-
-        const sunCe = makeCard("03416", 1, 1, 1), defender = makeCard("02105", 2, 1, 2), drawn = makeCard("01101", 1, null, null), combatGame = makeGame([sunCe, defender]);
-        combatGame.players[0].drawPile = [drawn];
-        sunCe.v2ExtraMoveAllowed = true;
-        coreResolveSkillAttack(combatGame, sunCe, defender, combatGame.players[0], []);
-        const defenderDestroyedAndDrew = !combatGame.boardCards.includes(defender) && combatGame.players[0].hand.includes(drawn);
-
-        const freeMover = makeCard("03416", 1, 1, 1), freeGame = makeGame([freeMover]);
-        freeGame.actionsUsed = coreActionLimit(freeGame);
-        freeGame.selection = { handCardUid: null, boardCardUid: freeMover.uid, targetCell: { row: 1, col: 2 } };
-        const freeMoveAfterLimit = coreBuildPendingAction(freeGame);
-
-        check("03416-修改", "摧毁时战力≤此卡才加一，攻击前临时战力+3，可以额外移动一次（新效果实现）", noGainFromLowAlly && gainFromHighEnemy && defenderDestroyedAndDrew && freeMoveAfterLimit?.type === "move");
-      }
-
+      // Wu: Modified card - 03519
       { const a = makeCard("03519", 1, 1, 1), ally = makeCard("01101", 1, 1, 2), enemyAttacker = makeCard("02101", 2, 1, 0), g = makeGame([a, ally, enemyAttacker]);
         enemyAttacker.currentAttack = 5;
         a.currentAttack = 3;
         const allyBeforeAttack = ally.currentAttack;
         coreResolveSkillAttack(g, enemyAttacker, a, g.players[1], []);
-        const allyReducedOnAttack = ally.currentAttack === allyBeforeAttack - 1 && ally.v2TempBonus === -1;
+        const allyReducedOnAttack = ally.currentAttack === allyBeforeAttack - 1
+          && ally.v2PermanentBonus === -1 && ally.v2TempBonus === 0;
+        coreRunV2EndSkills(g, g.players[1], []);
+        const allyReductionPersists = ally.currentAttack === allyBeforeAttack - 1 && ally.v2PermanentBonus === -1;
 
         start(g, a);
         const keptWithAlly = g.boardCards.includes(a);
         const isolated = makeCard("03519", 1, 2, 2);
         const isolatedGame = makeGame([isolated]);
         start(isolatedGame, isolated);
-        check("03519-修改", "被攻击时四方相邻友军本回合减一，有相邻友军时不可摧毁（新效果实现）", allyReducedOnAttack && keptWithAlly && !isolatedGame.boardCards.includes(isolated));
+        check("03519", "被攻击时四方相邻友军永久减一，有相邻友军时不可摧毁", allyReducedOnAttack && allyReductionPersists && keptWithAlly && !isolatedGame.boardCards.includes(isolated));
       }
     } catch (error) {
       results.push({ id: "runtime", name: "边界测试执行", passed: false, error: String(error) });

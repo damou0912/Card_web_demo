@@ -102,7 +102,11 @@
       ctx.log("首次被摧毁时保留在原格，战力变为1。");
       return false;
     },
-    onTurnEnd(ctx) { ctx.card.v2Protected = false; }
+    onTurnEnd(ctx) {
+      ctx.card.v2Protected = false;
+      // 防护: 赵云不应该有攻击逻辑，确保没有被其他机制意外触发
+      ctx.card.v2ZhaoYunSkipAttack = true;
+    }
   };
 
   shu["01314"] = {
@@ -148,28 +152,17 @@
     }
   };
 
-  shu["01520"] = {
-    onTurnStart(ctx) {
-      for (let row = 0; row < ctx.board.rows; row++) {
-        for (let col = 0; col < ctx.board.cols; col++) {
-          const cell = ctx.board.get(row, col);
-          if (!cell) ctx.board.control(row, col, ctx.card.ownerId);
-        }
-      }
-    }
-  };
-
   // 新增蜀卡 (01121-01530)
 
   shu["01121"] = {
     onTurnStart(ctx) {
-      const adjacent = ctx.adjacent();  // 四方相邻（包括敌方和友方）
-      if (adjacent.length) {
-        const target = ctx.pickRandom(adjacent);
-        if (target && ctx.canSwap(ctx.card, target)) {
-          ctx.swap(ctx.card, target);
-        }
-      }
+      const target = ctx.pickRandom(ctx.adjacent());
+      if (!target) return;
+      const cardFrom = ctx.position(ctx.card);
+      const targetFrom = ctx.position(target);
+      ctx.swapPositions(ctx.card, target);
+      ctx.emitMoved(ctx.card, cardFrom, ctx.position(ctx.card));
+      ctx.emitMoved(target, targetFrom, ctx.position(target));
     }
   };
 
@@ -179,29 +172,22 @@
       const target = ctx.pickRandom(enemies);
       if (target && ctx.canFight(ctx.card, target)) {
         ctx.skillAttack(ctx.card, target);
-        if (target.destroyed) {  // 成功摧毁
-          ctx.adjust(ctx.card, 1);
-        }
+        ctx.adjust(ctx.card, 1);
       }
     }
   };
 
   shu["01123"] = {
     onPlace(ctx) {
-      ctx.player.cards.forEach((card) => {
-        card.v2NoRest = true;
-      });
+      ctx.preventRestThisTurn();
     }
   };
 
   shu["01124"] = {
     onTurnStart(ctx) {
       ctx.adjust(ctx.card, -1);
-      ctx.enemies().forEach((enemy) => {
-        if (enemy.currentAttack < ctx.card.currentAttack) {
-          ctx.destroy(enemy);
-        }
-      });
+      const target = ctx.pickRandom(ctx.enemies().filter((enemy) => enemy.currentAttack < ctx.card.currentAttack));
+      if (target) ctx.destroy(target);
     }
   };
 
@@ -224,10 +210,11 @@
     onTurnStart(ctx) {
       ctx.player.v2FirstPlaceThisTurn = null;  // 重置本回合第一张放置卡牌标记
     },
-    onOtherCardPlace(ctx, placedCard) {
+    onOtherPlaced(ctx) {
       // 当其他卡牌放置时
-      if (placedCard.ownerId === ctx.card.ownerId && !ctx.player.v2FirstPlaceThisTurn) {
-        ctx.player.v2FirstPlaceThisTurn = placedCard;
+      const placedCard = ctx.placedCard;
+      if (placedCard?.ownerId === ctx.card.ownerId && !ctx.player.v2FirstPlaceThisTurn) {
+        ctx.player.v2FirstPlaceThisTurn = placedCard.uid;
         ctx.adjust(placedCard, 2);  // 第一张放置卡牌战力+2
       }
     }
@@ -235,29 +222,12 @@
 
   shu["01227"] = {
     onTurnStart(ctx) {
-      // 获取四个方向（上下左右）
-      const directions = [
-        { row: ctx.card.row - 1, col: ctx.card.col },  // 上
-        { row: ctx.card.row + 1, col: ctx.card.col },  // 下
-        { row: ctx.card.row, col: ctx.card.col - 1 },  // 左
-        { row: ctx.card.row, col: ctx.card.col + 1 }   // 右
-      ];
-
-      // 只检查战场内的有效方向
-      const validDirections = directions.filter((dir) => {
-        // 假设棋盘是5x5 (0-4)
-        return dir.row >= 0 && dir.row < 5 && dir.col >= 0 && dir.col < 5;
+      const cells = ctx.orthogonalCells();
+      const allValidDirectionsHaveAllies = cells.length > 0 && cells.every((cell) => {
+        const target = ctx.board.find((card) => card.row === cell.row && card.col === cell.col);
+        return target?.ownerId === ctx.card.ownerId;
       });
-
-      // 所有有效方向都必须有友军
-      const allValidDirectionsHaveAllies = validDirections.length > 0 && validDirections.every((dir) => {
-        const card = ctx.board.find((c) => c.row === dir.row && c.col === dir.col);
-        return card && card.ownerId === ctx.card.ownerId;
-      });
-
-      if (allValidDirectionsHaveAllies) {
-        ctx.addActions(ctx.player, 1);
-      }
+      if (allValidDirectionsHaveAllies) ctx.addActions(1);
     }
   };
 
@@ -266,7 +236,7 @@
       let target = ctx.pickRandom(ctx.enemies());
       if (target) {
         ctx.skillAttack(ctx.card, target);
-        if (target.destroyed) {
+        if (!ctx.isOnBoard(target)) {
           target = ctx.pickRandom(ctx.enemies());
           if (target) ctx.skillAttack(ctx.card, target);
         }
@@ -280,30 +250,28 @@
   shu["01429"] = {
     flags: { cannotMove: true },
     onTurnStart(ctx) {
-      ctx.player.cards.forEach((card) => {
-        ctx.adjust(card, 1, true);
-      });
+      ctx.board
+        .filter((card) => card.ownerId === ctx.card.ownerId)
+        .forEach((card) => ctx.adjust(card, 1));
     },
     onBeforeAdjust(ctx, target, amount) {
-      // 如果是敌方卡牌且是正数（增加），则阻止
-      if (target.ownerId !== ctx.card.ownerId && amount > 0) {
-        return 0;  // 阻止增加
-      }
-      // 允许其他调整
+      if (target?.ownerId && target.ownerId !== ctx.card.ownerId && amount > 0) return 0;
     }
   };
 
   shu["01530"] = {
     onBeforeAllyDestroy(ctx) {
+      if (ctx.card.v2ResolvingEndDestruction) return;
       ctx.adjust(ctx.card, -3);
       return false;
     },
     onTurnEnd(ctx) {
-      ctx.player.cards.forEach((card) => {
-        if (card !== ctx.card && card.currentAttack === 0) {
-          ctx.destroy(card);
-        }
-      });
+      ctx.board
+        .filter((card) => card.ownerId === ctx.card.ownerId && card.uid !== ctx.card.uid && card.currentAttack === 0)
+        .forEach((card) => {
+          ctx.card.v2ResolvingEndDestruction = true;
+          try { ctx.destroy(card); } finally { ctx.card.v2ResolvingEndDestruction = false; }
+        });
     }
   };
 

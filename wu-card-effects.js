@@ -122,7 +122,7 @@
   wu["03212"] = {
     onPlace(ctx) { ctx.card.ownerId = ctx.otherPlayer.id; ctx.card.v2CannotDestroyTurn = ctx.game.turn; },
     onBeforeDestroy(ctx) { if (ctx.card.v2CannotDestroyTurn === ctx.game.turn) return false; },
-    onDestroy(ctx) { [...ctx.allies()].filter((target) => ctx.isAdjacent(target)).forEach((target) => ctx.destroy(target)); }
+    onDestroy(ctx) { [...ctx.allies()].forEach((target) => ctx.destroy(target)); }
   };
 
   wu["03313"] = {
@@ -164,9 +164,7 @@
 
   wu["03416"] = {
     flags: { watchAllDestroyed: true },
-    onPlace(ctx) {
-      ctx.card.v2ExtraMoveAllowed = true;
-    },
+    onTurnStart(ctx) { ctx.grantExtraMoves(1); },
     onOtherDestroyed(ctx) {
       if (ctx.destroyedCard.currentAttack <= ctx.card.currentAttack) ctx.adjust(ctx.card, 1);
     },
@@ -206,7 +204,7 @@
     },
     onUnderAttack(ctx) {
       ctx.adjacent().forEach((target) => {
-        if (target.ownerId === ctx.card.ownerId) ctx.adjust(target, -1, true);
+        if (target.ownerId === ctx.card.ownerId) ctx.adjust(target, -1);
       });
     }
   };

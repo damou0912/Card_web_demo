@@ -8,7 +8,6 @@
     "1005": Object.freeze({ name: "援军", description: "卡组抽光后，将会抽出一张战力为1的“援兵”。", level: "beginner", levelLabel: "初级" }),
     "1006": Object.freeze({ name: "当先", description: "每回合放置的第一张卡牌，额外触发一次“入阵效果”。", level: "beginner", levelLabel: "初级" }),
     "1007": Object.freeze({ name: "慎行", description: "每回合放置第一张卡牌，直至下一个我方回合开始前战力+3。", level: "beginner", levelLabel: "初级" }),
-    "1008": Object.freeze({ name: "断粮", description: "手牌始终为1张。", level: "beginner", levelLabel: "初级" }),
     "1009": Object.freeze({ name: "野望", description: "回合开始时，敌方卡牌本回合战力-1。", level: "beginner", levelLabel: "初级" }),
     "1010": Object.freeze({ name: "急奔", description: "我方卡牌被放置后，将不会进入休整。", level: "beginner", levelLabel: "初级" }),
     "1011": Object.freeze({ name: "无言", description: "此条无效果", level: "beginner", levelLabel: "初级" }),

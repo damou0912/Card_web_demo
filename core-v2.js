@@ -551,7 +551,7 @@
     if (!ai || ai.hand.length >= coreHandLimitForPlayer(game, ai)) return { status: "not-created" };
     const card = coreCreateEliteReinforcementCard(ai);
     ai.hand.push(card);
-    if (game.currentPhase !== "开局展示" && typeof queueCardFlowAnimation === "function") {
+    if (!game.isAiSimulation && game.currentPhase !== "开局展示" && typeof queueCardFlowAnimation === "function") {
       queueCardFlowAnimation(game, "draw", ai, card, {
         sourceLabel: "援军效果",
         flowPrompt: `${ai.name || "精英 AI"} 从援军效果抽取援兵。`
@@ -718,6 +718,14 @@
         target.restedTurn = null;
         return true;
       },
+      preventRestThisTurn: () => {
+        if (!player) return false;
+        player.v2NoRestTurn = game.turn;
+        game.boardCards
+          .filter((target) => target.ownerId === card.ownerId)
+          .forEach((target) => { target.restedTurn = null; });
+        return true;
+      },
       setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
       draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
       addToDrawPile: (targetPlayer, cards) => coreAddCardsToDrawPile(game, targetPlayer, cards, log),
@@ -727,7 +735,7 @@
         const amount = Math.min(count, targetPlayer.hand.length);
         for (let index = 0; index < amount; index += 1) {
           const discardedCard = targetPlayer.hand.splice(randomInt(0, targetPlayer.hand.length - 1), 1)[0];
-          if (typeof queueCardFlowAnimation === "function") {
+          if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
             queueCardFlowAnimation(game, "discard", targetPlayer, discardedCard, {
               flowPrompt: `${targetPlayer.name || `玩家 ${targetPlayer.id}`} 弃置 ${coreCardName(discardedCard)}。`
             });
@@ -812,6 +820,16 @@
       },
       spawnNeutralGuard: (position, attack = 2) => coreSpawnNeutralGuard(game, position, attack),
       addActions: (count = 1) => { game.extraActions = (game.extraActions || 0) + count; },
+      grantExtraMoves: (count = 1) => {
+        const amount = Math.max(0, Math.floor(Number(count) || 0));
+        if (!amount) return 0;
+        if (card.v2ExtraMovesTurn !== game.turn) {
+          card.v2ExtraMovesTurn = game.turn;
+          card.v2ExtraMoves = 0;
+        }
+        card.v2ExtraMoves += amount;
+        return card.v2ExtraMoves;
+      },
       triggerTurnStart: (target) => {
         const startContext = game.v2StartContext;
         const targetPlayer = corePlayer(game, target.ownerId);
@@ -1079,9 +1097,33 @@
     }
   }
 
+  function coreResolveV2AdjustAmount(game, target, amount) {
+    if (!game || !target || !amount || !Array.isArray(game.boardCards)) return amount;
+    let resolvedAmount = amount;
+    const watchers = game.boardCards.filter((watcher) => (
+      typeof coreCardEffectDefinition(watcher)?.onBeforeAdjust === "function"
+    ));
+    for (const watcher of watchers) {
+      const effectDefinition = coreCardEffectDefinition(watcher);
+      const result = effectDefinition.onBeforeAdjust(coreCreateCardEffectContext(
+        game,
+        corePlayer(game, watcher.ownerId),
+        watcher,
+        game.roundLog || [],
+        { adjustedCard: target, adjustAmount: resolvedAmount }
+      ), target, resolvedAmount);
+      if (result === false || result === 0) return 0;
+      if (Number.isFinite(Number(result))) resolvedAmount = Number(result);
+      if (!resolvedAmount) return 0;
+    }
+    return resolvedAmount;
+  }
+
   function coreAdjustAttack(card, delta, temporary = false, isolated = false) {
     if (!card || !delta) return;
     const game = state.game;
+    delta = coreResolveV2AdjustAmount(game, card, delta);
+    if (!delta) return;
     const previous = Number(card.currentAttack ?? card.attack) || 0;
     if (delta < 0 && !isolated && !coreCanReduceAttack(game, card)) return;
     if (temporary) card.v2TempBonus = (Number(card.v2TempBonus) || 0) + delta;
@@ -1089,7 +1131,7 @@
     card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0) + (Number(card.v2TempBonus) || 0));
     if (game) coreEnforceElitePowerBounds(game);
     const actualDelta = card.currentAttack - previous;
-    if (game && actualDelta && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+    if (game && !game.isAiSimulation && actualDelta && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
       queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
     }
     if (card.currentAttack > previous && !isolated) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
@@ -1098,7 +1140,9 @@
   function coreSetAttack(game, card, nextAttack, temporary = true) {
     if (!card) return false;
     const previous = Number(card.currentAttack ?? card.attack) || 0;
-    const next = Math.max(0, Number(nextAttack) || 0);
+    const requestedDelta = (Number(nextAttack) || 0) - previous;
+    const resolvedDelta = coreResolveV2AdjustAmount(game, card, requestedDelta);
+    const next = Math.max(0, previous + resolvedDelta);
     if (next < previous && !coreCanReduceAttack(game, card)) return false;
     const base = Number(card.attack) || 0;
     const permanent = Number(card.v2PermanentBonus) || 0;
@@ -1108,7 +1152,7 @@
     card.currentAttack = next;
     if (game) coreEnforceElitePowerBounds(game);
     const actualDelta = card.currentAttack - previous;
-    if (actualDelta && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+    if (actualDelta && !game?.isAiSimulation && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
       queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
     }
     if (next > previous) coreNotifyV2AttackIncrease(game, card, next - previous, temporary);
@@ -1206,7 +1250,7 @@
         const log = game.roundLog || (game.roundLog = []);
         const logStart = log.length;
         const snapshot = coreCaptureStartSkillState(game);
-        const visualEvent = typeof queueSkillAnimation === "function"
+        const visualEvent = !game.isAiSimulation && typeof queueSkillAnimation === "function"
           ? queueSkillAnimation(game, card, null, "turn-start")
           : null;
         let result;
@@ -1262,12 +1306,12 @@
       ? { status: "hand-full" }
       : drawOneCard(game, player);
     if (result.status === "drawn") {
-      if (typeof queueCardFlowAnimation === "function") {
+      if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
         queueCardFlowAnimation(game, "draw", player, result.card);
       }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_DRAWN, { player, drawnCard: result.card, log });
     } else {
-      if (typeof queueCardFlowAnimation === "function") {
+      if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
         queueCardFlowAnimation(game, "draw-failed", player, null, { reason: result.status });
       }
       coreEmitV2Event(game, CORE_V2_EVENT.DRAW_FAILED, { player, reason: result.status, log });
@@ -1294,7 +1338,7 @@
     for (let index = 0; index < count; index += 1) {
       if (!owner || !enemy) break;
       if (owner.hand.length >= HAND_LIMIT) {
-        if (typeof queueCardFlowAnimation === "function") {
+        if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
           queueCardFlowAnimation(game, "draw-failed", owner, null, {
             reason: "hand-full",
             sourceLabel: `${enemy?.name || "敌方"}牌库`,
@@ -1305,7 +1349,7 @@
         break;
       }
       if (!enemy.drawPile.length) {
-        if (typeof queueCardFlowAnimation === "function") {
+        if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
           queueCardFlowAnimation(game, "draw-failed", owner, null, {
             reason: "deck-empty",
             sourceLabel: `${enemy.name || "敌方"}牌库`,
@@ -1319,7 +1363,7 @@
       card.ownerId = owner.id;
       owner.hand.push(card);
       drawn += 1;
-      if (typeof queueCardFlowAnimation === "function") {
+      if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
         queueCardFlowAnimation(game, "draw", owner, card, {
           sourceLabel: `${enemy.name || "敌方"}牌库`,
           flowPrompt: `${owner.name || `玩家 ${owner.id}`} 从${enemy.name || "敌方"}牌库抽取 ${coreCardName(card)}。`
@@ -1355,7 +1399,7 @@
     card.v2EnteredTurn = game.turn;
     card.row = position.row;
     card.col = position.col;
-    card.restedTurn = game.turn;
+    card.restedTurn = corePlayer(game, card.ownerId)?.v2NoRestTurn === game.turn ? null : game.turn;
     card.lastMovedTurn = null;
     card.v2LongMoveUsed = false;
     game.boardCards.push(card);
@@ -1437,7 +1481,7 @@
       return result;
     }
     if (event === CORE_V2_EVENT.CARD_MOVED && payload.card && payload.source && payload.target) {
-      if (payload.visual === "skill-move" && typeof queueSkillMoveAnimation === "function") {
+      if (!game.isAiSimulation && payload.visual === "skill-move" && typeof queueSkillMoveAnimation === "function") {
         queueSkillMoveAnimation(game, payload.card, payload.source, payload.target, payload.detail || "技能移动");
       }
       const result = coreRunV2MoveEffects(game, payload.card, payload.source, payload.target, payload.successful !== false);
@@ -1633,6 +1677,21 @@
       ));
       if (result === false) return false;
     }
+    const allyProtectionSources = game.boardCards.filter((item) => (
+      item.ownerId === card.ownerId
+      && item.uid !== card.uid
+      && typeof coreCardEffectDefinition(item)?.onBeforeAllyDestroy === "function"
+    ));
+    for (const protector of allyProtectionSources) {
+      const result = coreCardEffectDefinition(protector).onBeforeAllyDestroy(coreCreateCardEffectContext(
+        game,
+        corePlayer(game, protector.ownerId),
+        protector,
+        log,
+        { protectedCard: card, original, causeCard }
+      ));
+      if (result === false) return false;
+    }
     const index = game.boardCards.findIndex((item) => item.uid === card.uid);
     game.boardCards.splice(index, 1);
     card.destroyedAt = original;
@@ -1686,18 +1745,28 @@
     return coreEliteAiRuleAllows(game, "allowPlacement", { card });
   }
 
+  function coreMovesTakenThisTurn(game, card) {
+    if (!card) return 0;
+    if (card.v2MovesTakenTurn === game.turn) return Math.max(0, Number(card.v2MovesTakenThisTurn) || 0);
+    return card.lastMovedTurn === game.turn ? 1 : 0;
+  }
+
+  function coreMoveLimitThisTurn(game, card) {
+    const extraMoves = card?.v2ExtraMovesTurn === game.turn
+      ? Math.max(0, Number(card.v2ExtraMoves) || 0)
+      : 0;
+    return 1 + extraMoves;
+  }
+
+  function coreCanMoveCardThisTurn(game, card) {
+    return coreMovesTakenThisTurn(game, card) < coreMoveLimitThisTurn(game, card);
+  }
+
   function coreValidMoves(game, card) {
-    if (!card || card.isGuard || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn) {
+    if (!card || card.isGuard || card.v2Locked || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn || !coreCanMoveCardThisTurn(game, card)) {
       return [];
     }
-    // Check if card can move (accounting for extra move from onPlace effects)
-    if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) {
-      if (!(card.v2ExtraMoveAllowed && card.v2ExtraMoveUsed !== game.turn)) return [];
-    }
-    // Mark extra move as used this turn if being used
-    if (card.v2ExtraMoveAllowed && card.v2ExtraMoveUsed !== game.turn && card.lastMovedTurn === game.turn) {
-      card.v2ExtraMoveUsed = game.turn;
-    }
+    if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) return [];
     const cells = [];
     const directions = [{ row: -1, col: 0 }, { row: 1, col: 0 }, { row: 0, col: -1 }, { row: 0, col: 1 }];
     const canUseLongMove = coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed;
@@ -1800,6 +1869,11 @@
       || !action.target || (card.row === action.target.row && card.col === action.target.col))) {
       return false;
     }
+    if (action.type === "move" && !coreValidMoves(game, card).some((target) => (
+      target.row === action.target.row && target.col === action.target.col
+    ))) {
+      return false;
+    }
     game.isAnimating = true;
     game.flowPrompt = "";
     game.currentPhase = "行动阶段";
@@ -1818,7 +1892,7 @@
       card.ownerId = player.id;
       card.row = action.target.row;
       card.col = action.target.col;
-      card.restedTurn = game.turn;
+      card.restedTurn = player.v2NoRestTurn === game.turn ? null : game.turn;
       card.lastMovedTurn = null;
       card.v2LongMoveUsed = false;
       card.hasPlaced = false;
@@ -1859,7 +1933,10 @@
       }
       const sourcePosition = { row: card.row, col: card.col };
       if (coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed) card.v2LongMoveUsed = true;
+      const movesTaken = coreMovesTakenThisTurn(game, card);
       card.lastMovedTurn = game.turn;
+      card.v2MovesTakenTurn = game.turn;
+      card.v2MovesTakenThisTurn = movesTaken + 1;
       card.movesTaken = Number(card.movesTaken) || 0;
       if (!defender) {
         card.row = action.target.row;
@@ -2793,7 +2870,7 @@
     if (target?.ownerId === active.id) {
       if (target.restedTurn === game.turn) {
         showToast("卡牌休整中", `${coreCardName(target)} 是本回合新放置的卡牌，不能主动移动。`);
-      } else if (target.lastMovedTurn === game.turn) {
+      } else if (!coreCanMoveCardThisTurn(game, target)) {
         showToast("已完成移动", `${coreCardName(target)} 本回合已经主动移动过一次。`);
       } else {
         game.selection = { handCardUid: null, boardCardUid: game.selection.boardCardUid === target.uid ? null : target.uid, targetCell: null };

@@ -68,10 +68,10 @@
 
       const previousOnlinePlayerId = state.online?.playerId;
       const previousOnlineRole = state.online?.role;
-      const localViewGame = makeGame(); localViewGame.mode = "pvp";
-      localViewGame.activePlayerId = 2;
-      const localViewerId = coreViewerPlayerId(localViewGame);
-      const localOpponentTurn = coreIsOpponentTurn(localViewGame);
+      const cardTestViewGame = makeGame(); cardTestViewGame.mode = "card-test";
+      cardTestViewGame.activePlayerId = 2;
+      const cardTestViewerId = coreViewerPlayerId(cardTestViewGame);
+      const cardTestOpponentTurn = coreIsOpponentTurn(cardTestViewGame);
       const onlineViewGame = makeGame(); onlineViewGame.mode = "online";
       state.online.playerId = 2;
       onlineViewGame.activePlayerId = 1;
@@ -88,11 +88,23 @@
       const spectatorIsReadOnly = coreIsSpectator() && !coreCanViewerInteract(onlineViewGame);
       state.online.playerId = previousOnlinePlayerId;
       state.online.role = previousOnlineRole;
-      check("左侧玩家信息固定为本机视角", localViewerId === 1
+      check("左侧玩家信息固定为本机视角", cardTestViewerId === 1
         && onlineViewerDuringOpponentTurn === 2
         && onlineViewerDuringOwnTurn === 2);
-      check("行动数颜色按固定视角区分敌我回合", localOpponentTurn && onlineOpponentTurn && onlineOwnTurn);
+      check("行动数颜色按固定视角区分敌我回合", cardTestOpponentTurn && onlineOpponentTurn && onlineOwnTurn);
       check("观战模式始终为只读", playerCanActOnOwnTurn && playerCannotActOnOpponentTurn && spectatorIsReadOnly);
+
+      const removedMode = ["p", "vp"].join("");
+      let removedLocalModeRejected = false;
+      try {
+        coreCreateGame(removedMode, { 1: "三国~蜀", 2: "三国~魏" }, 5);
+      } catch (_error) {
+        removedLocalModeRejected = true;
+      }
+      const selectedModeBeforeInvalidStart = state.selectedMode;
+      const hiddenLocalStartRejected = window.startRandomGame(removedMode) === false
+        && state.selectedMode === selectedModeBeforeInvalidStart;
+      check("已移除的旧双人模式无法创建或从隐藏路径启动", removedLocalModeRejected && hiddenLocalStartRejected);
 
       const timerGame = makeGame();
       const deadline = coreStartTurnTimer(timerGame, 1000);
@@ -146,7 +158,7 @@
 
       // 回合自动结束超时机制测试
       const autoEndGame = makeGame();
-      autoEndGame.mode = "pvp";
+      autoEndGame.mode = "card-test";
       autoEndGame.currentPhase = "行动阶段";
       autoEndGame.activePlayerId = 1;
       autoEndGame.players[0].name = "玩家 1";
@@ -157,7 +169,7 @@
       check("回合计时：起点 300 秒，终点 0 秒", autoEndSecsAtStart === 300 && autoEndSecsAtEnd === 0);
 
       const noAnimationGame = makeGame();
-      noAnimationGame.mode = "pvp";
+      noAnimationGame.mode = "card-test";
       noAnimationGame.currentPhase = "行动阶段";
       noAnimationGame.activePlayerId = 1;
       noAnimationGame.isAnimating = false;
@@ -169,7 +181,7 @@
       check("无技能/动画时：倒计时 0 应自动结束", shouldAutoEnd);
 
       const withAnimationGame = makeGame();
-      withAnimationGame.mode = "pvp";
+      withAnimationGame.mode = "card-test";
       withAnimationGame.currentPhase = "行动阶段";
       withAnimationGame.activePlayerId = 1;
       withAnimationGame.isAnimating = true;
@@ -408,7 +420,7 @@
       const startVictoryGame = makeGame(winningCards); startVictoryGame.boardSize = 4; state.game = startVictoryGame;
       check("回合开始技能阶段会立即检查占领胜负", coreStartTurn(startVictoryGame) && startVictoryGame.winner?.playerId === 1);
 
-      const mapSizes = [3, 4, 5].map((size) => coreCreateGame("pvp", { 1: "三国~蜀", 2: "三国~魏" }, size));
+      const mapSizes = [3, 4, 5].map((size) => coreCreateGame("card-test", { 1: "三国~蜀", 2: "三国~魏" }, size));
       check("3x3、4x4、5x5 地图尺寸与胜利阈值正确", mapSizes.every((map, index) => map.boardSize === index + 3 && map.boardCards.length === 2 && coreVictoryTarget(map) === [5, 9, 13][index]));
     } catch (error) {
       results.push({ name: "回归测试执行", passed: false, error: String(error) });

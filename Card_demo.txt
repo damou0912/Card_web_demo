@@ -3,7 +3,7 @@
 本项目正式规则以 CORE_RULES_V2.md 为准，卡牌信息唯一来源为 `outputs/card-info-table-xlsx/card_info_v2.xlsx`，运行时由 `card-info.js` 加载该表格导出的数据。修改表格后运行 `npm run generate:card-info` 即可同步网站卡牌内容。
 
 一、运行模式
-1. 本地 1v1、PVE 和联网对战。
+1. PVE、PVE 挑战和联网对战。
 2. 战场支持 3x3、4x4、5x5；联网创建房间时由房主设定地图。
 3. 蜀、魏、吴各自 20 张 V2 卡牌，双方独立牌库。
 

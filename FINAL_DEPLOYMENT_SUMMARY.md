@@ -55,7 +55,7 @@
 - 支持排行榜查询
 
 **数据**：
-- 游戏类型（PVP/PVE）
+- 游戏类型（联网/PVE）
 - 胜负结果
 - 使用卡组
 - 最终分数
@@ -94,11 +94,13 @@ game-data.json
 ├── profiles
 │   └── {username}: {nickname, wins, pvpWins, pveWins, totalGames, 
 │                     bestDeck, lastLogin, challengeProgress, 
-│                     challengeProgressSavedAt}
+│                     challengeProgressSavedAt, customDecks}
 ├── cards
-│   └── {username}: {owned, deckSlots}
+│   └── {username}: {owned}
 └── gameRecords: [{username, gameType, result, deckUsed, score, timestamp}]
 ```
+
+`customDecks` 以势力为键；蜀、魏、吴各自最多保存一套卡组，同势力再次保存时覆盖原数据。
 
 ### PostgreSQL 模式（生产）
 

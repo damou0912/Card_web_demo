@@ -16,7 +16,7 @@
 每个用户拥有独立档案记录：
 - `nickname` - 昵称（可随意更改）
 - `wins` - 总通关次数
-- `pvpWins` - PVP 模式通关数
+- `pvpWins` - 联网对战胜场数（沿用的兼容字段名）
 - `pveWins` - PVE 模式通关数
 - `totalGames` - 总游戏局数
 - `bestDeck` - 最成功的卡组
@@ -25,12 +25,12 @@
 ### 3. 卡牌系统
 - **默认卡牌** - 用户初始拥有 60 张卡牌（3 套完整卡组）
 - **卡牌追踪** - 记录每张卡牌的拥有状态
-- **预设卡组** - 3 个卡组槽位（deck1/deck2/deck3）
+- **势力卡组** - 蜀、魏、吴每个势力各保存一套；再次保存同势力卡组时覆盖原卡组
 - **预留接口** - 支持卡牌交易和额外卡牌转资源功能
 
 ### 4. 游戏记录
 游戏结束时自动保存：
-- 游戏类型（PVP/PVE）
+- 游戏类型（联网/PVE）
 - 胜负结果
 - 使用的卡组
 - 最终分数（占领比例、回合数）
@@ -61,13 +61,20 @@
       "pveWins": 数字,
       "totalGames": 数字,
       "bestDeck": "卡组名",
-      "lastLogin": "ISO8601时间戳"
+      "lastLogin": "ISO8601时间戳",
+      "customDecks": {
+        "三国~蜀": { "version": 2, "cardIds": ["20 张卡牌 ID"] },
+        "三国~魏": { "version": 2, "cardIds": ["20 张卡牌 ID"] },
+        "三国~吴": { "version": 2, "cardIds": ["20 张卡牌 ID"] }
+      }
     }
   },
   "cards": {
     "username": {
-      "cardCount": 60,
-      "cards": { "cardId": 拥有数 }
+      "owned": {
+        "cardCount": 60,
+        "cards": { "cardId": 拥有数 }
+      }
     }
   },
   "gameRecords": [
@@ -141,7 +148,7 @@
 1. 自动检测当前登录用户
 2. 保存游戏记录到服务器
 3. 记录内容包括：
-   - 游戏类型（PVP/PVE）
+   - 游戏类型（联网/PVE）
    - 胜负结果
    - 使用的卡组
    - 最终分数
@@ -155,7 +162,7 @@
 
 ### 场景 1：新玩家
 1. 进入游戏，玩家 ID 栏显示"未登录"
-2. 可直接开始游戏（PVP/PVE）
+2. 可直接开始游戏（联网/PVE）
 3. 游戏结束，数据不被记录
 4. 点击登录按钮，选择"注册"
 5. 输入账号（如：player123）、密码、确认密码
@@ -308,7 +315,7 @@ curl -X POST http://localhost:4173/api/game/record \
     "username":"testuser",
     "gameType":"pve",
     "result":"win",
-    "deckUsed":"deck1",
+    "deckUsed":"三国~蜀",
     "score":{"player1":15,"player2":8,"turns":12}
   }'
 ```

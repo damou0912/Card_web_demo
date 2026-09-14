@@ -1,8 +1,20 @@
 const assert = require("assert");
+const fs = require("fs");
+const http = require("http");
 const net = require("net");
+const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
+
+function makeDefaultDeckIds(campPrefix) {
+  return [
+    ["1", 1, 7], ["2", 8, 12], ["3", 13, 15], ["4", 16, 16], ["5", 17, 20]
+  ].flatMap(([rarity, start, end]) => Array.from(
+    { length: end - start + 1 },
+    (_, index) => `${campPrefix}${rarity}${String(start + index).padStart(2, "0")}`
+  ));
+}
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -12,6 +24,32 @@ function reservePort() {
       const { port } = server.address();
       server.close((error) => error ? reject(error) : resolve(port));
     });
+  });
+}
+
+function requestJson(port, method, requestPath, body = null) {
+  return new Promise((resolve, reject) => {
+    const payload = body === null ? null : JSON.stringify(body);
+    const request = http.request({
+      hostname: "127.0.0.1",
+      port,
+      path: requestPath,
+      method,
+      headers: payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}
+    }, (response) => {
+      let raw = "";
+      response.on("data", (chunk) => { raw += chunk; });
+      response.on("end", () => {
+        try {
+          resolve({ status: response.statusCode, body: JSON.parse(raw) });
+        } catch (error) {
+          reject(error);
+        }
+      });
+    });
+    request.once("error", reject);
+    if (payload) request.write(payload);
+    request.end();
   });
 }
 
@@ -98,14 +136,77 @@ function waitForServer(child, port) {
 
 (async () => {
   const port = await reservePort();
+  const testDataFile = path.join(os.tmpdir(), `card-demo-integration-${process.pid}-${Date.now()}.json`);
   const child = spawn(process.execPath, [path.join(__dirname, "railway-server.js")], {
     cwd: __dirname,
-    env: { ...process.env, HOST: "127.0.0.1", PORT: String(port) },
+    env: { ...process.env, DATABASE_URL: "", GAME_DATA_FILE: testDataFile, HOST: "127.0.0.1", PORT: String(port) },
     stdio: ["ignore", "pipe", "pipe"]
   });
   const clients = [];
   try {
     await waitForServer(child, port);
+    const initialProfile = await requestJson(port, "GET", "/api/profile/player1");
+    assert.equal(initialProfile.status, 200);
+    assert.equal(initialProfile.body.challengeHighestLevel, 0);
+    assert.equal(initialProfile.body.challengeClearCount, 0);
+
+    assert.equal((await requestJson(port, "GET", "/api/challenge/progress/player1")).body.level, 0);
+    assert.equal((await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 5 })).status, 200);
+    let challengeProfile = (await requestJson(port, "GET", "/api/profile/player1")).body;
+    assert.equal(challengeProfile.challengeHighestLevel, 5);
+    assert.equal(challengeProfile.challengeClearCount, 0);
+
+    await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 3 });
+    challengeProfile = (await requestJson(port, "GET", "/api/profile/player1")).body;
+    assert.equal(challengeProfile.challengeHighestLevel, 5);
+
+    await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 12 });
+    await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 12 });
+    challengeProfile = (await requestJson(port, "GET", "/api/profile/player1")).body;
+    assert.equal(challengeProfile.challengeHighestLevel, 12);
+    assert.equal(challengeProfile.challengeClearCount, 1);
+
+    await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 1 });
+    await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 12 });
+    assert.equal((await requestJson(port, "GET", "/api/profile/player1")).body.challengeClearCount, 2);
+    assert.equal((await requestJson(port, "POST", "/api/challenge/clear", { username: "player1" })).status, 200);
+    assert.equal((await requestJson(port, "GET", "/api/challenge/progress/player1")).body.level, 0);
+    challengeProfile = (await requestJson(port, "GET", "/api/profile/player1")).body;
+    assert.equal(challengeProfile.challengeHighestLevel, 12);
+    assert.equal(challengeProfile.challengeClearCount, 2);
+    assert.equal((await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 13 })).status, 400);
+
+    const defaultShuDeck = makeDefaultDeckIds("01");
+    const customShuDeck = [...defaultShuDeck];
+    customShuDeck[0] = "01121";
+    const initialDecks = await requestJson(port, "GET", "/api/custom-decks/player1");
+    assert.equal(initialDecks.status, 200);
+    assert.deepEqual(initialDecks.body.decks, {});
+    const initializedData = JSON.parse(fs.readFileSync(testDataFile, "utf8"));
+    assert.deepEqual(Object.keys(initializedData.cards.player1), ["owned"]);
+    assert.equal("deckSlots" in initializedData.cards.player1, false);
+    const saveDeck = await requestJson(port, "POST", "/api/save-custom-deck", {
+      username: "player1", camp: "三国~蜀", deckData: { version: 2, cardIds: customShuDeck }
+    });
+    assert.equal(saveDeck.status, 200);
+    const savedDecks = await requestJson(port, "GET", "/api/custom-decks/player1");
+    assert.deepEqual(savedDecks.body.decks["三国~蜀"].cardIds, customShuDeck);
+    const replacementShuDeck = [...defaultShuDeck];
+    replacementShuDeck[0] = "01122";
+    const overwriteDeck = await requestJson(port, "POST", "/api/save-custom-deck", {
+      username: "player1", camp: "三国~蜀", deckData: { version: 2, cardIds: replacementShuDeck }
+    });
+    assert.equal(overwriteDeck.status, 200);
+    const overwrittenDecks = await requestJson(port, "GET", "/api/custom-decks/player1");
+    assert.deepEqual(Object.keys(overwrittenDecks.body.decks), ["三国~蜀"]);
+    assert.deepEqual(overwrittenDecks.body.decks["三国~蜀"].cardIds, replacementShuDeck);
+    const invalidDeck = await requestJson(port, "POST", "/api/save-custom-deck", {
+      username: "player1", camp: "三国~蜀", deckData: { version: 2, cardIds: makeDefaultDeckIds("02") }
+    });
+    assert.equal(invalidDeck.status, 400);
+    const resetDeck = await requestJson(port, "POST", "/api/reset-custom-deck", { username: "player1", camp: "三国~蜀" });
+    assert.equal(resetDeck.status, 200);
+    assert.deepEqual((await requestJson(port, "GET", "/api/custom-decks/player1")).body.decks, {});
     const makeClient = async () => {
       const client = new TestClient(`ws://127.0.0.1:${port}`);
       clients.push(client);
@@ -174,11 +275,15 @@ function waitForServer(child, port) {
     const fullError = await spectatorThree.waitForType("error");
     assert.match(fullError.message, /观战席/);
 
-    host.send({ type: "set-deck", deckKey: "三国~蜀" });
+    const hostDeckCardIds = makeDefaultDeckIds("01");
+    const playerTwoDeckCardIds = makeDefaultDeckIds("02");
+    host.send({ type: "set-deck", deckKey: "三国~蜀", deckCardIds: hostDeckCardIds });
     host.send({ type: "set-ready", ready: true });
-    playerTwo.send({ type: "set-deck", deckKey: "三国~魏" });
+    playerTwo.send({ type: "set-deck", deckKey: "三国~魏", deckCardIds: playerTwoDeckCardIds });
     playerTwo.send({ type: "set-ready", ready: true });
-    await host.waitForType("match-start");
+    const matchStart = await host.waitForType("match-start");
+    assert.deepEqual(matchStart.deckCardIds[1], hostDeckCardIds);
+    assert.deepEqual(matchStart.deckCardIds[2], playerTwoDeckCardIds);
     await spectatorOne.waitForType("match-start");
 
     const gameState = JSON.stringify({
@@ -242,10 +347,11 @@ function waitForServer(child, port) {
     assert.equal(host.socket.readyState, WebSocket.OPEN);
     assert.equal(resumedPlayerTwo.socket.readyState, WebSocket.OPEN);
 
-    console.log("Railway room, spectator, and reconnect integration test passed");
+    console.log("Railway custom deck, room, spectator, and reconnect integration test passed");
   } finally {
     clients.forEach((client) => client.close());
     child.kill();
+    fs.rmSync(testDataFile, { force: true });
   }
 })().catch((error) => {
   console.error(error);

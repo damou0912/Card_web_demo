@@ -10,6 +10,8 @@
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
   const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260909";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
+  const CORE_GAME_MODES = new Set(["pve", "pve-challenge", "online", "card-test"]);
+  const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", "online"]);
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
   let coreRuntimeReady = true;
@@ -110,8 +112,8 @@
     if (game.mode === "online") {
       return coreViewerPlayerId(game) === game.activePlayerId;
     }
-    // PvE mode: player is always player 1
-    return coreIsPveMode(game) ? game.activePlayerId === 1 : true;
+    if (coreIsPveMode(game)) return game.activePlayerId === 1;
+    return game.mode === "card-test";
   }
 
   function coreIsOpponentTurn(game) {
@@ -588,7 +590,8 @@
     if (mode === "pve-challenge") return "PVE 挑战";
     if (mode === "pve") return "PVE";
     if (mode === "online") return "联网";
-    return "本地 1v1";
+    if (mode === "card-test") return "卡牌测试";
+    return "未知模式";
   }
 
   function coreActionLimit(game) {
@@ -909,11 +912,16 @@
     return guards;
   }
 
-  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null, challengeLevel = state.challengeLevel || 1, challengeTraitIds = null, playerTraitIds = null) {
+  function coreCreateGame(mode, selectedDecks, boardSize = state.selectedBoardSize || CORE_BOARD_SIZE, firstPlayerIdOverride = null, challengeLevel = state.challengeLevel || 1, challengeTraitIds = null, playerTraitIds = null, selectedDeckCardIds = null) {
+    if (!CORE_GAME_MODES.has(mode)) throw new RangeError(`不支持的对局模式：${String(mode)}`);
     const selectedSize = Number(boardSize);
     const size = Number.isInteger(selectedSize) && selectedSize >= 3 && selectedSize <= 5 ? selectedSize : CORE_BOARD_SIZE;
-    const playerOneCatalog = buildCampDeck(selectedDecks[1]);
-    const playerTwoCatalog = buildCampDeck(selectedDecks[2]);
+    const playerOneCardIds = mode === "online"
+      ? selectedDeckCardIds?.[1]
+      : coreIsPveMode(mode) ? getConfiguredDeckCardIds(selectedDecks[1]) : null;
+    const playerTwoCardIds = mode === "online" ? selectedDeckCardIds?.[2] : null;
+    const playerOneCatalog = buildCampDeck(selectedDecks[1], playerOneCardIds);
+    const playerTwoCatalog = buildCampDeck(selectedDecks[2], playerTwoCardIds);
     const challengeMode = coreIsPveChallenge(mode);
     const playerTwoName = coreIsPveMode(mode) ? (challengeMode ? "精英 AI" : "AI") : "玩家 2";
     const firstPlayerId = [1, 2].includes(Number(firstPlayerIdOverride)) ? Number(firstPlayerIdOverride) : (Math.random() < 0.5 ? 1 : 2);
@@ -3118,6 +3126,9 @@
     const roomCode = coreEscapeHtml(state.online.roomCode);
     const ownId = state.online.playerId;
     const ownDeck = state.online.deckKey || "三国~蜀";
+    if (!Array.isArray(state.online.deckCardIds) || state.online.deckCardIds.length !== 20) {
+      state.online.deckCardIds = getConfiguredDeckCardIds(ownDeck);
+    }
     const deckOptions = getAvailableDeckKeys().map((deck) => `<option value="${deck}" ${deck === ownDeck ? "selected" : ""}>${getCampDisplayName(deck)}</option>`).join("");
     const playerStateText = (id) => roomState.names?.[id] && roomState.connectedPlayers?.[id] === false
       ? "等待重连"
@@ -3155,12 +3166,16 @@
     });
     document.getElementById("online-deck-choice")?.addEventListener("change", (event) => {
       state.online.deckKey = event.target.value;
-      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey });
+      state.online.deckCardIds = getConfiguredDeckCardIds(state.online.deckKey);
+      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey, deckCardIds: state.online.deckCardIds });
     });
     document.getElementById("online-ready-btn")?.addEventListener("click", () => {
       const nextReady = !ownReady;
       if (!state.online.deckKey) state.online.deckKey = ownDeck;
-      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey });
+      if (!Array.isArray(state.online.deckCardIds) || state.online.deckCardIds.length !== 20) {
+        state.online.deckCardIds = getConfiguredDeckCardIds(state.online.deckKey);
+      }
+      window.CardOnline?.send({ type: "set-deck", deckKey: state.online.deckKey, deckCardIds: state.online.deckCardIds });
       window.CardOnline?.send({ type: "set-ready", ready: nextReady });
     });
   }
@@ -3168,13 +3183,14 @@
   function coreStartOnlineHost() {
     state.game = null;
     state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
+    state.online.deckCardIds = getConfiguredDeckCardIds(state.online.deckKey);
     coreShowOnlineWaiting({ roomCode: state.online.roomCode, boardSize: state.selectedBoardSize, names: { 1: state.playerName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: false } });
   }
 
   function coreStartOnlineMatch(message) {
     state.selectedDecks = message.decks;
     state.selectedBoardSize = Number(message.boardSize) || 4;
-    state.game = coreCreateGame("online", state.selectedDecks, state.selectedBoardSize, message.firstPlayerId);
+    state.game = coreCreateGame("online", state.selectedDecks, state.selectedBoardSize, message.firstPlayerId, 1, null, null, message.deckCardIds);
     state.game.players[0].name = message.names?.[1] || "玩家 1";
     state.game.players[1].name = message.names?.[2] || "玩家 2";
     switchScreen("game");
@@ -3236,6 +3252,7 @@
     coreCloseOverlay();
     state.selectedBoardSize = message.boardSize || state.selectedBoardSize;
     state.online.deckKey = getAvailableDeckKeys()[0] || "三国~蜀";
+    state.online.deckCardIds = getConfiguredDeckCardIds(state.online.deckKey);
     showToast("已加入房间", `你已加入 ${message.opponentName || "另一位玩家"} 所在的房间。`);
     coreShowOnlineWaiting({ roomCode: message.roomCode, boardSize: state.selectedBoardSize, names: { [playerId]: state.playerName, [otherPlayerId(playerId)]: message.opponentName }, ready: { 1: false, 2: false }, hasPlayers: { 1: true, 2: true } });
   }
@@ -3278,7 +3295,7 @@
 
   function coreHandleOnlineRoomResumed(message) {
     const playerName = message.playerName || state.online.playerName || state.playerName;
-    state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, playerName, sessionToken: message.sessionToken, deckKey: message.deckKey || state.online.deckKey, host: message.playerId === 1, role: "player", reconnecting: false, roomState: message.roomState };
+    state.online = { ...state.online, playerId: message.playerId, roomCode: message.roomCode, playerName, sessionToken: message.sessionToken, deckKey: message.deckKey || state.online.deckKey, deckCardIds: message.deckCardIds || state.online.deckCardIds, host: message.playerId === 1, role: "player", reconnecting: false, roomState: message.roomState };
     state.playerName = playerName;
     if (ui.playerIdValue) ui.playerIdValue.textContent = playerName;
     corePersistPlayerId(playerName);
@@ -3518,7 +3535,7 @@
       const template = entry && window.CARD_LIBRARY?.cardSlots?.find((card) => String(card.id) === String(entry.id));
       return template?.camp || fallback;
     };
-    const game = coreCreateGame("pvp", {
+    const game = coreCreateGame("card-test", {
       1: firstCamp(1, "三国~蜀"),
       2: firstCamp(2, "三国~魏")
     });
@@ -3664,12 +3681,17 @@
   window.startRandomGame = (mode) => {
     if (!coreRuntimeReady) {
       showToast("卡牌数据不可用", "请刷新页面以加载当前版本的卡牌数据与技能文件。");
-      return;
+      return false;
+    }
+    if (!CORE_PRODUCT_GAME_MODES.has(mode)) {
+      showToast("模式不可用", "请选择 PVE、PVE 挑战或联网对战。");
+      return false;
     }
     state.selectedMode = mode;
     if (mode === "pve-challenge" && !state.challengeLevel) state.challengeLevel = 1;
     state.game = null;
     coreShowDeckSelector(mode);
+    return true;
   };
   window.beginGame = coreBeginGame;
   window.beginNextChallengeLevel = coreBeginNextChallengeLevel;

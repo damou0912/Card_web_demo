@@ -14,7 +14,7 @@
       // Keep the default palette when browser storage is unavailable.
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20260909-night-theme">
+  <link rel="stylesheet" href="style.css?v=20260914-no-total-power">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -53,8 +53,22 @@
         </form>
       </div>
       <div id="login-success-container" class="login-success-container" hidden>
-        <p class="login-welcome-text" id="login-username-display"></p>
-        <button id="logout-btn" class="logout-mini-btn" title="退出登录">退出</button>
+        <div class="profile-identity">
+          <span>当前账号</span>
+          <strong id="login-username-display"></strong>
+        </div>
+        <dl class="profile-stats" aria-label="PVE 挑战资料">
+          <div>
+            <dt>PVE 挑战最高关卡</dt>
+            <dd id="profile-challenge-highest">--</dd>
+          </div>
+          <div>
+            <dt>PVE 挑战通关次数</dt>
+            <dd id="profile-challenge-clears">--</dd>
+          </div>
+        </dl>
+        <p id="profile-load-status" class="profile-load-status" role="status" aria-live="polite"></p>
+        <button id="logout-btn" class="logout-mini-btn" type="button">退出登录</button>
       </div>
     </section>
   </div>
@@ -150,7 +164,7 @@
         <p class="eyebrow">Card Demo</p>
         <h1>卡组对战 Demo</h1>
         <p class="hero-copy">
-          支持本地 1v1、PVE 与 PVE 挑战的卡组对战原型。开局选择预设势力牌库或混沌卡组，系统随机决定先后手；当前先验证 V2 核心对局流程。
+          支持 PVE、PVE 挑战与联网对战。开局选择预设势力牌库或混沌卡组，系统随机决定先后手；当前先验证 V2 核心对局流程。
         </p>
         <div class="menu-options">
           <button class="mode-btn selected" data-mode="pve" data-description="与标准 AI 对战，系统随机为 AI 选择势力牌库。">PVE 对战 AI</button>
@@ -399,7 +413,6 @@
             <p id="deck-summary-player2" class="panel-copy"></p>
           </div>
         </div>
-        <div id="winner-comparison" class="winner-comparison" aria-live="polite"></div>
         <div class="action-buttons centered">
           <button id="result-next-level-btn" class="primary-btn" hidden>进入下一关</button>
           <button id="result-restart-btn" class="primary-btn">再来一局</button>
@@ -447,13 +460,13 @@
     }
   </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260909-chaos-deck"></script>
+  <script src="script.js?v=20260914-no-total-power"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="elite-ai-info.js?v=20260909-challenge-levels"></script>
   <script src="elite-ai-effects.js?v=20260909-challenge-levels"></script>
-  <script src="core-v2.js?v=20260909-chaos-deck"></script>
+  <script src="core-v2.js?v=20260914-custom-decks"></script>
 </body>
 </html>

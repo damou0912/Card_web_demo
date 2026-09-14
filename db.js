@@ -2,7 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
-const DB_FILE = path.join(__dirname, "game-data.json");
+const DB_FILE = process.env.GAME_DATA_FILE
+  ? path.resolve(process.env.GAME_DATA_FILE)
+  : path.join(__dirname, "game-data.json");
 
 // 预设账号列表
 const PRESET_ACCOUNTS = [
@@ -40,16 +42,13 @@ function ensureDB() {
         lastLogin: null,
         challengeProgress: 0,
         challengeProgressSavedAt: null,
+        challengeHighestLevel: 0,
+        challengeClearCount: 0,
         customDecks: {}
       };
 
       initialData.cards[username] = {
-        owned: generateDefaultCards(),
-        deckSlots: {
-          deck1: Array.from({ length: 60 }, (_, i) => i),
-          deck2: Array.from({ length: 60 }, (_, i) => i),
-          deck3: Array.from({ length: 60 }, (_, i) => i)
-        }
+        owned: generateDefaultCards()
       };
     });
 
@@ -111,7 +110,17 @@ function loginUser(username, password) {
 function getUserProfile(username) {
   const db = readDB();
   if (!db.profiles[username]) return null;
-  return db.profiles[username];
+  const profile = db.profiles[username];
+  const currentProgress = Math.max(0, Math.floor(Number(profile.challengeProgress) || 0));
+  const recordedHighest = Math.max(0, Math.floor(Number(profile.challengeHighestLevel) || 0));
+  const hasRecordedClearCount = Object.prototype.hasOwnProperty.call(profile, "challengeClearCount");
+  return {
+    ...profile,
+    challengeHighestLevel: Math.max(currentProgress, recordedHighest),
+    challengeClearCount: hasRecordedClearCount
+      ? Math.max(0, Math.floor(Number(profile.challengeClearCount) || 0))
+      : (currentProgress >= 12 ? 1 : 0)
+  };
 }
 
 function updateNickname(username, nickname) {
@@ -221,11 +230,31 @@ function saveChallengeProgress(username, level) {
   const db = readDB();
   if (!db.profiles[username]) return { error: "用户不存在" };
 
-  db.profiles[username].challengeProgress = level;
-  db.profiles[username].challengeProgressSavedAt = new Date().toISOString();
+  const normalizedLevel = Number(level);
+  if (!Number.isInteger(normalizedLevel) || normalizedLevel < 1 || normalizedLevel > 12) {
+    return { error: "挑战关卡无效" };
+  }
+
+  const profile = db.profiles[username];
+  const previousProgress = Math.max(0, Math.floor(Number(profile.challengeProgress) || 0));
+  const previousHighest = Math.max(previousProgress, Math.floor(Number(profile.challengeHighestLevel) || 0));
+  const previousClearCount = Object.prototype.hasOwnProperty.call(profile, "challengeClearCount")
+    ? Math.max(0, Math.floor(Number(profile.challengeClearCount) || 0))
+    : (previousProgress >= 12 ? 1 : 0);
+  const completedNewRun = normalizedLevel === 12 && previousProgress < 12;
+
+  profile.challengeProgress = normalizedLevel;
+  profile.challengeProgressSavedAt = new Date().toISOString();
+  profile.challengeHighestLevel = Math.max(previousHighest, normalizedLevel);
+  profile.challengeClearCount = previousClearCount + (completedNewRun ? 1 : 0);
   writeDB(db);
 
-  return { success: true, level };
+  return {
+    success: true,
+    level: normalizedLevel,
+    challengeHighestLevel: profile.challengeHighestLevel,
+    challengeClearCount: profile.challengeClearCount
+  };
 }
 
 function clearChallengeProgress(username) {

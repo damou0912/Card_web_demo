@@ -170,7 +170,7 @@ curl -X POST https://<your-railway-url>/api/game/record \
     "username":"player1",
     "gameType":"pve",
     "result":"win",
-    "deckUsed":"deck1",
+    "deckUsed":"三国~蜀",
     "score":{"player1":20,"player2":5,"turns":12}
   }'
 

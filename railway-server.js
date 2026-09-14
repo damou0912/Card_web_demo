@@ -21,6 +21,10 @@ const rooms = new Map();
 const SPECTATOR_CAPACITY = 2;
 const RECONNECT_GRACE_MS = Math.max(100, Number(process.env.RECONNECT_GRACE_MS) || 5 * 60 * 1000);
 const PLAYER_ID_ALLOWED = /^[A-Za-z0-9_\-\.\!\?@#\+=\u3400-\u9fff]+$/;
+const CUSTOM_DECK_CAMPS = new Set(["三国~蜀", "三国~魏", "三国~吴"]);
+const GAME_DECK_KEYS = new Set([...CUSTOM_DECK_CAMPS, "混沌"]);
+const DECK_CAMP_PREFIX = Object.freeze({ "三国~蜀": "01", "三国~魏": "02", "三国~吴": "03" });
+const DECK_RARITY_COUNTS = Object.freeze({ "1": 7, "2": 5, "3": 3, "4": 1, "5": 4 });
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -40,6 +44,26 @@ function isValidPlayerName(value) {
   const name = normalizePlayerName(value);
   const units = [...name].reduce((total, character) => total + (/^[\u3400-\u9fff]$/.test(character) ? 2 : 1), 0);
   return Boolean(name) && PLAYER_ID_ALLOWED.test(name) && units <= 12;
+}
+
+function sanitizeDeckCardIds(cardIds, deckKey) {
+  if (!Array.isArray(cardIds) || cardIds.length !== 20) return null;
+  const normalized = cardIds.map((id) => String(id));
+  if (new Set(normalized).size !== normalized.length || normalized.some((id) => !/^0[1-3][1-5]\d{2}$/.test(id))) return null;
+  const campPrefix = DECK_CAMP_PREFIX[deckKey];
+  if (campPrefix && normalized.some((id) => !id.startsWith(campPrefix))) return null;
+  const rarityCounts = normalized.reduce((counts, id) => {
+    counts[id[2]] = (counts[id[2]] || 0) + 1;
+    return counts;
+  }, {});
+  if (!Object.entries(DECK_RARITY_COUNTS).every(([rarity, count]) => rarityCounts[rarity] === count)) return null;
+  return normalized;
+}
+
+function sanitizeCustomDeck(camp, deckData) {
+  if (!CUSTOM_DECK_CAMPS.has(camp) || Number(deckData?.version) !== 2) return null;
+  const cardIds = sanitizeDeckCardIds(deckData.cardIds, camp);
+  return cardIds ? { version: 2, cardIds } : null;
 }
 
 function send(socket, message) {
@@ -140,6 +164,7 @@ function releasePlayerSeat(room, playerId) {
   room.names[playerId] = null;
   room.tokens[playerId] = null;
   room.decks[playerId] = null;
+  room.deckCardIds[playerId] = null;
   room.ready[playerId] = false;
   room.disconnectedAt[playerId] = null;
 }
@@ -300,7 +325,7 @@ function validateActionRequest(room, playerId, action) {
   return null;
 }
 
-const server = http.createServer((request, response) => {
+const server = http.createServer(async (request, response) => {
   let requestedPath = decodeURIComponent((request.url || "/").split("?")[0]);
   if (requestedPath === "/") requestedPath = "/index.html";
   if (requestedPath === "/health") {
@@ -348,9 +373,17 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  if (request.method === "GET" && requestedPath === "/api/challenge/progress/") {
-    const username = decodeURIComponent(requestedPath.slice("/api/challenge/progress/".length));
-    const progress = db.getChallengeProgress(username);
+  if (request.method === "GET" && requestedPath.startsWith("/api/profile/")) {
+    const username = requestedPath.slice("/api/profile/".length);
+    const profile = await db.getUserProfile(username);
+    response.writeHead(profile ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify(profile || { error: "用户不存在" }));
+    return;
+  }
+
+  if (request.method === "GET" && requestedPath.startsWith("/api/challenge/progress/")) {
+    const username = requestedPath.slice("/api/challenge/progress/".length);
+    const progress = await db.getChallengeProgress(username);
     response.writeHead(progress ? 200 : 404, { "Content-Type": "application/json; charset=utf-8" });
     response.end(JSON.stringify(progress || { error: "用户不存在" }));
     return;
@@ -365,10 +398,10 @@ const server = http.createServer((request, response) => {
         response.end("Payload too large");
       }
     });
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
         const { username, level } = JSON.parse(body);
-        const result = db.saveChallengeProgress(username, level);
+        const result = await db.saveChallengeProgress(username, level);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (e) {
@@ -388,10 +421,10 @@ const server = http.createServer((request, response) => {
         response.end("Payload too large");
       }
     });
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
         const { username } = JSON.parse(body);
-        const result = db.clearChallengeProgress(username);
+        const result = await db.clearChallengeProgress(username);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (e) {
@@ -407,20 +440,20 @@ const server = http.createServer((request, response) => {
     request.on("data", (chunk) => {
       bodyData += chunk.toString();
     });
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
-        console.log("Received body:", bodyData);
         const body = JSON.parse(bodyData);
-        const { username, camp, modifications } = body;
+        const { username, camp } = body;
+        const deckData = sanitizeCustomDeck(camp, body.deckData);
 
-        if (!username || !camp || modifications === undefined) {
+        if (!username || !deckData) {
           response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-          response.end(JSON.stringify({ error: "参数不完整" }));
+          response.end(JSON.stringify({ error: "卡组数据无效" }));
           return;
         }
 
         console.log(`Saving custom deck for ${username}, camp: ${camp}`);
-        const result = db.saveCustomDeck(username, camp, modifications);
+        const result = await db.saveCustomDeck(username, camp, deckData);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (error) {
@@ -432,12 +465,26 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && requestedPath.startsWith("/api/custom-decks/")) {
+    const username = decodeURIComponent(requestedPath.slice("/api/custom-decks/".length));
+    try {
+      const decks = await db.getCustomDecks(username);
+      response.writeHead(decks === null ? 404 : 200, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify(decks === null ? { error: "用户不存在" } : { success: true, decks }));
+    } catch (error) {
+      console.error("Error in custom-decks:", error.message);
+      response.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "读取卡组失败" }));
+    }
+    return;
+  }
+
   if (request.method === "POST" && requestedPath === "/api/reset-custom-deck") {
     let bodyData = "";
     request.on("data", (chunk) => {
       bodyData += chunk.toString();
     });
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
         console.log("Received body:", bodyData);
         const body = JSON.parse(bodyData);
@@ -450,7 +497,12 @@ const server = http.createServer((request, response) => {
         }
 
         console.log(`Resetting custom deck for ${username}, camp: ${camp}`);
-        const result = db.resetCustomDeck(username, camp);
+        if (!CUSTOM_DECK_CAMPS.has(camp)) {
+          response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
+          response.end(JSON.stringify({ error: "卡组势力无效" }));
+          return;
+        }
+        const result = await db.resetCustomDeck(username, camp);
         response.writeHead(result.error ? 400 : 200, { "Content-Type": "application/json; charset=utf-8" });
         response.end(JSON.stringify(result));
       } catch (error) {
@@ -507,7 +559,7 @@ websocket.on("connection", (socket) => {
       const roomCode = makeRoomCode();
       const boardSize = [3, 4, 5].includes(Number(message.boardSize)) ? Number(message.boardSize) : 4;
       const sessionToken = makeSessionToken();
-      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, ended: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimers: { 1: null, 2: null }, players: { 1: socket, 2: null }, spectators: { 1: null, 2: null }, spectatorNames: { 1: null, 2: null } };
+      const room = { code: roomCode, createdAt: Date.now(), boardSize, names: { 1: playerName, 2: null }, tokens: { 1: sessionToken, 2: null }, decks: { 1: null, 2: null }, deckCardIds: { 1: null, 2: null }, ready: { 1: false, 2: false }, started: false, ended: false, state: null, disconnectedAt: { 1: null, 2: null }, disconnectTimers: { 1: null, 2: null }, players: { 1: socket, 2: null }, spectators: { 1: null, 2: null }, spectatorNames: { 1: null, 2: null } };
       rooms.set(roomCode, room);
       socket.roomCode = roomCode;
       socket.playerId = 1;
@@ -587,7 +639,7 @@ websocket.on("connection", (socket) => {
       socket.playerId = playerId;
       socket.role = "player";
       socket.sessionToken = room.tokens[playerId];
-      send(socket, { type: "room-resumed", roomCode, playerId, playerName: room.names[playerId], boardSize: room.boardSize, deckKey: room.decks[playerId], started: room.started, state: stateForViewer(room.state, playerId), roomState: roomState(room), sessionToken: room.tokens[playerId] });
+      send(socket, { type: "room-resumed", roomCode, playerId, playerName: room.names[playerId], boardSize: room.boardSize, deckKey: room.decks[playerId], deckCardIds: room.deckCardIds[playerId], started: room.started, state: stateForViewer(room.state, playerId), roomState: roomState(room), sessionToken: room.tokens[playerId] });
       broadcast(room, { type: "peer-reconnected", playerId }, socket);
       broadcast(room, { type: "room-state", state: roomState(room) }, socket);
       broadcastRoomList();
@@ -630,18 +682,22 @@ websocket.on("connection", (socket) => {
       return;
     }
     if (message.type === "set-deck" && !room.started) {
-      room.decks[socket.playerId] = String(message.deckKey || "");
+      const deckKey = String(message.deckKey || "");
+      const deckCardIds = sanitizeDeckCardIds(message.deckCardIds, deckKey);
+      if (!GAME_DECK_KEYS.has(deckKey) || !deckCardIds) return send(socket, { type: "error", message: "卡组数据无效，请重新选择卡组。" });
+      room.decks[socket.playerId] = deckKey;
+      room.deckCardIds[socket.playerId] = deckCardIds;
       room.ready[socket.playerId] = false;
       broadcast(room, { type: "room-state", state: roomState(room) });
       return;
     }
     if (message.type === "set-ready" && !room.started) {
-      room.ready[socket.playerId] = Boolean(message.ready) && Boolean(room.decks[socket.playerId]);
+      room.ready[socket.playerId] = Boolean(message.ready) && Boolean(room.decks[socket.playerId]) && Boolean(room.deckCardIds[socket.playerId]);
       broadcast(room, { type: "room-state", state: roomState(room) });
       if (room.players[1] && room.players[2] && room.ready[1] && room.ready[2]) {
         room.started = true;
         const firstPlayerId = Math.random() < 0.5 ? 1 : 2;
-        broadcast(room, { type: "match-start", roomCode: room.code, boardSize: room.boardSize, names: room.names, decks: room.decks, firstPlayerId });
+        broadcast(room, { type: "match-start", roomCode: room.code, boardSize: room.boardSize, names: room.names, decks: room.decks, deckCardIds: room.deckCardIds, firstPlayerId });
         broadcastRoomList();
       }
       return;

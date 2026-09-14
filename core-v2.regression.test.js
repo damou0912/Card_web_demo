@@ -75,8 +75,8 @@ const chaosRarityCounts = chaosDeck.reduce((counts, card) => {
   counts[rarity] = (counts[rarity] || 0) + 1;
   return counts;
 }, {});
-const chaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pvp", { 1: "混沌", 2: "混沌" }, 5, 1);
-const nextChaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pvp", { 1: "混沌", 2: "混沌" }, 5, 1);
+const chaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("card-test", { 1: "混沌", 2: "混沌" }, 5, 1);
+const nextChaosGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("card-test", { 1: "混沌", 2: "混沌" }, 5, 1);
 const firstChaosCatalog = chaosGame.players[0].deckCatalog;
 const secondChaosCatalog = chaosGame.players[1].deckCatalog;
 const firstGameCards = [...firstChaosCatalog, ...secondChaosCatalog];
@@ -102,6 +102,62 @@ const chaosDeckValidation = {
   recreatingGameBuildsNewCards: firstGameCards.every((card) => !nextGameCards.includes(card))
 };
 const chaosDeckPassed = Object.values(chaosDeckValidation).every(Boolean);
+const deckDebug = context.__CARD_DEMO_DEBUG__;
+const defaultShuIds = context.CARD_INFO.filter((card) => card.camp === "三国~蜀").map((card) => String(card.id));
+const defaultWeiIds = context.CARD_INFO.filter((card) => card.camp === "三国~魏").map((card) => String(card.id));
+const replacementCommon = context.REPLACEMENT_CARDS.find((card) => card.camp === "三国~蜀" && card.rarity === "普通");
+const replacementRare = context.REPLACEMENT_CARDS.find((card) => card.camp === "三国~蜀" && card.rarity === "稀有");
+const customShuIds = [...defaultShuIds];
+customShuIds[0] = replacementCommon.id;
+const rareModifications = { "稀有": { 0: { id: replacementRare.id, attack: replacementRare.attack } } };
+const rareModifiedIds = deckDebug.buildCustomDeckCardIds("三国~蜀", rareModifications);
+const previousCustomDecks = deckDebug.state.customDecks;
+deckDebug.state.customDecks = { "三国~蜀": { version: 2, cardIds: customShuIds } };
+const configuredShuIds = deckDebug.getConfiguredDeckCardIds("三国~蜀");
+const pveCustomGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pve", { 1: "三国~蜀", 2: "三国~蜀" }, 5, 1);
+const onlineCustomGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame(
+  "online", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, null, null,
+  { 1: customShuIds, 2: defaultWeiIds }
+);
+deckDebug.state.customDecks = previousCustomDecks;
+const crossCampIds = [...defaultShuIds];
+crossCampIds[0] = defaultWeiIds[0];
+const wrongRarityIds = [...defaultShuIds];
+wrongRarityIds[0] = replacementRare.id;
+const replacementCommonDetails = deckDebug.getModifyDeckCardDetails(replacementCommon);
+const previousModifyDeck = deckDebug.state.modifyDeck;
+deckDebug.state.modifyDeck = {
+  selectedCamp: "三国~蜀",
+  selectedRarity: "普通",
+  currentCards: [],
+  candidateCards: [],
+  modifications: {},
+  originalDeck: deckDebug.buildCampDeck("三国~蜀")
+};
+const initialCommonCandidates = deckDebug.getAvailableModifyDeckCandidates("普通");
+deckDebug.state.modifyDeck = previousModifyDeck;
+const customDeckValidation = {
+  savedDeckIsResolved: configuredShuIds[0] === replacementCommon.id,
+  pvePlayerUsesCustomDeck: pveCustomGame.players[0].deckCatalog.some((card) => card.id === replacementCommon.id),
+  pveAiKeepsDefaultDeck: !pveCustomGame.players[1].deckCatalog.some((card) => card.id === replacementCommon.id),
+  onlineUsesEachResolvedDeck: onlineCustomGame.players[0].deckCatalog.some((card) => card.id === replacementCommon.id)
+    && onlineCustomGame.players[1].deckCatalog.every((card) => defaultWeiIds.includes(card.id)),
+  nonCommonRarityUsesCorrectSlot: rareModifiedIds?.[7] === replacementRare.id && rareModifiedIds?.[0] === defaultShuIds[0],
+  crossCampRejected: deckDebug.normalizeCustomDeckData("三国~蜀", { version: 2, cardIds: crossCampIds }) === null,
+  rarityChangeRejected: deckDebug.normalizeCustomDeckData("三国~蜀", { version: 2, cardIds: wrongRarityIds }) === null,
+  legacyFormatMigrates: deckDebug.normalizeCustomDeckData("三国~蜀", { "普通": { 0: replacementCommon } })?.cardIds[0] === replacementCommon.id,
+  modifyDeckPreviewUsesFullCardDetails: replacementCommonDetails.name === replacementCommon.name
+    && replacementCommonDetails.skill === replacementCommon.skill
+    && replacementCommonDetails.effect === replacementCommon.effect
+    && replacementCommonDetails.baseAttack === replacementCommon.baseAttack,
+  candidatesVisibleBeforeTargetSelection: initialCommonCandidates.length > 0
+    && initialCommonCandidates.every((card) => card.camp === "三国~蜀" && card.rarity === "普通")
+    && initialCommonCandidates.every((card) => !defaultShuIds.includes(String(card.id)))
+};
+const customDeckPassed = Object.values(customDeckValidation).every(Boolean);
+const loginPromptPolicyValid = deckDebug.shouldAutoOpenLogin(null)
+  && deckDebug.shouldAutoOpenLogin("")
+  && !deckDebug.shouldAutoOpenLogin("player1");
 const legacyContext = { window: null, CARD_INFO_SCHEMA_VERSION: "legacy", CARD_INFO: [{ id: "old-card", attack: 99 }] };
 legacyContext.window = legacyContext;
 vm.createContext(legacyContext);
@@ -185,8 +241,8 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed) {
-  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
+if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed || !customDeckPassed || !loginPromptPolicyValid) {
+  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, customDeckValidation, loginPromptPolicyValid, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);
@@ -200,4 +256,6 @@ if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-202609
   console.log(`Stale online runtime rejection: ${staleOnlineRuntimeRejected ? "passed" : "failed"}`);
   console.log(`Legacy data isolation: ${legacyLibraryReplaced && legacySchemaRejected ? "passed" : "failed"}`);
   console.log(`Chaos deck generation: ${Object.keys(chaosDeckValidation).length}/${Object.keys(chaosDeckValidation).length}`);
+  console.log(`Custom deck integration: ${Object.keys(customDeckValidation).length}/${Object.keys(customDeckValidation).length}`);
+  console.log(`Guest login prompt policy: ${loginPromptPolicyValid ? "passed" : "failed"}`);
 }

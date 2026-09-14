@@ -91,7 +91,7 @@ node railway-server.js
       "pvpWins": 0,
       "pveWins": 1,
       "totalGames": 1,
-      "bestDeck": "deck1",
+      "bestDeck": "三国~蜀",
       "lastLogin": "2026-09-10T12:05:00.000Z"
     }
   },
@@ -100,7 +100,7 @@ node railway-server.js
       "username": "alice",
       "gameType": "pve",
       "result": "win",
-      "deckUsed": "deck1",
+      "deckUsed": "三国~蜀",
       "score": {
         "player1": 18,
         "player2": 7,
@@ -179,7 +179,7 @@ curl http://localhost:4173/api/profile/alice
   "pvpWins":0,
   "pveWins":1,
   "totalGames":1,
-  "bestDeck":"deck1",
+  "bestDeck":"三国~蜀",
   "lastLogin":"2026-09-10T12:05:00.000Z"
 }
 ```

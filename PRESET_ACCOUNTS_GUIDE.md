@@ -167,7 +167,7 @@ curl -X POST http://localhost:4173/api/game/record \
     "username":"player1",
     "gameType":"pve",
     "result":"win",
-    "deckUsed":"deck1",
+    "deckUsed":"三国~蜀",
     "score":{"player1":18,"player2":7,"turns":12}
   }'
 ```
@@ -229,21 +229,25 @@ const PRESET_PASSWORD = "your_new_password";
     "pveWins": 数字,
     "totalGames": 数字,
     "bestDeck": "卡组名",
-    "lastLogin": "ISO时间戳"
+    "lastLogin": "ISO时间戳",
+    "customDecks": {
+      "三国~蜀": { "version": 2, "cardIds": ["20 张卡牌 ID"] },
+      "三国~魏": { "version": 2, "cardIds": ["20 张卡牌 ID"] },
+      "三国~吴": { "version": 2, "cardIds": ["20 张卡牌 ID"] }
+    }
   }
 }
 ```
+
+每个势力最多保存一套卡组；再次保存同势力卡组时覆盖原数据，不创建额外槽位。
 
 ### cards 表（卡牌所有权）
 ```json
 {
   "username": {
-    "cardCount": 60,
-    "cards": {},
-    "deckSlots": {
-      "deck1": [0, 1, 2, ...],
-      "deck2": [0, 1, 2, ...],
-      "deck3": [0, 1, 2, ...]
+    "owned": {
+      "cardCount": 60,
+      "cards": {}
     }
   }
 }
@@ -256,7 +260,7 @@ const PRESET_PASSWORD = "your_new_password";
     "username": "player1",
     "gameType": "pve",
     "result": "win",
-    "deckUsed": "deck1",
+    "deckUsed": "三国~蜀",
     "score": {"player1": 18, "player2": 7, "turns": 12},
     "timestamp": "2026-09-10T13:10:00.000Z"
   }

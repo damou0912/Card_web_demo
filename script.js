@@ -25,8 +25,17 @@ const THEME_PRESETS = Object.freeze({
   "an-pink": "An-粉"
 });
 
-const GAME_CARD_SLOT_TEMPLATES = window.CARD_LIBRARY?.cardSlots;
-if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908" || !Array.isArray(GAME_CARD_SLOT_TEMPLATES)) {
+const CARD_LIBRARY_SLOT_BY_ID = new Map((window.CARD_LIBRARY?.cardSlots || []).map((slot) => [String(slot.id), slot]));
+const DEFAULT_CARD_SLOT_TEMPLATES = Object.freeze((window.CARD_INFO || [])
+  .map((slot) => CARD_LIBRARY_SLOT_BY_ID.get(String(slot.id)) || slot));
+const REPLACEMENT_CARD_SLOT_TEMPLATES = Object.freeze((window.REPLACEMENT_CARDS || [])
+  .map((slot) => CARD_LIBRARY_SLOT_BY_ID.get(String(slot.id)) || slot));
+const GAME_CARD_SLOT_TEMPLATES = Object.freeze([...new Map(
+  [...DEFAULT_CARD_SLOT_TEMPLATES, ...REPLACEMENT_CARD_SLOT_TEMPLATES]
+    .map((slot) => [String(slot.id), slot])
+).values()]);
+if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908"
+  || !Array.isArray(window.CARD_LIBRARY?.cardSlots) || DEFAULT_CARD_SLOT_TEMPLATES.length === 0) {
   throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
 }
 const CAMP_DECK_RARITY_COUNTS = Object.freeze({
@@ -85,6 +94,7 @@ const ui = {
   themeMenuClose: document.getElementById("theme-menu-close"),
   loginMenuBtn: document.getElementById("login-menu-btn"),
   loginMenuModal: document.getElementById("login-menu-modal"),
+  loginMenuTitle: document.getElementById("login-menu-title"),
   loginMenuClose: document.getElementById("login-menu-close"),
   quickLogoutBtn: document.getElementById("quick-logout-btn"),
   loginForm: document.getElementById("login-form"),
@@ -95,6 +105,9 @@ const ui = {
   loginFormContainer: document.getElementById("login-form-container"),
   loginSuccessContainer: document.getElementById("login-success-container"),
   loginUsernameDisplay: document.getElementById("login-username-display"),
+  profileChallengeHighest: document.getElementById("profile-challenge-highest"),
+  profileChallengeClears: document.getElementById("profile-challenge-clears"),
+  profileLoadStatus: document.getElementById("profile-load-status"),
   loginStatusText: document.getElementById("login-status-text"),
   logoutBtn: document.getElementById("logout-btn"),
   themeSubmenuBtn: document.getElementById("theme-submenu-btn"),
@@ -162,7 +175,6 @@ const ui = {
   resultScoreSummary: document.getElementById("result-score-summary"),
   resultRoundCount: document.getElementById("result-round-count"),
   winnerControlSummary: document.getElementById("winner-control-summary"),
-  winnerComparison: document.getElementById("winner-comparison"),
   deckSummaryPlayer1: document.getElementById("deck-summary-player1"),
   deckSummaryPlayer2: document.getElementById("deck-summary-player2"),
   resultRestartBtn: document.getElementById("result-restart-btn"),
@@ -193,12 +205,16 @@ const state = {
   pendingChallengeRewardLevel: null,
   game: null,
   online: { playerId: null, roomCode: null, host: false, role: null, rooms: [] },
+  customDecks: {},
+  customDeckOwner: null,
+  customDeckLoadPromise: null,
   modifyDeck: {
     selectedCamp: null,
     selectedRarity: null,
     currentCards: [],
     candidateCards: [],
-    modifications: {}
+    modifications: {},
+    originalDeck: []
   }
 };
 
@@ -221,6 +237,108 @@ function getCardBaseAttack(cardOrId) {
   if (Number.isFinite(displayValue)) return displayValue;
   const runtimeValue = typeof cardOrId === "object" ? Number(cardOrId?.attack) : NaN;
   return Number.isFinite(runtimeValue) ? Math.max(0, runtimeValue) : 0;
+}
+
+function getModifyDeckCardDetails(cardOrId) {
+  const display = getCardDisplay(cardOrId);
+  return {
+    name: String(display.name || "未知卡牌"),
+    camp: getCampDisplayName(display.camp),
+    rarity: String(display.rarity || "普通"),
+    baseAttack: getCardBaseAttack(cardOrId),
+    skill: String(display.skill || "无"),
+    effect: display.effect === undefined || display.effect === null
+      ? "无技能效果。"
+      : String(display.effect)
+  };
+}
+
+function escapeModifyDeckMarkup(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+let activeModifyDeckTooltipAnchor = null;
+
+function getModifyDeckSkillTooltip() {
+  let tooltip = document.getElementById("modify-deck-skill-tooltip");
+  if (tooltip) return tooltip;
+  tooltip = document.createElement("div");
+  tooltip.id = "modify-deck-skill-tooltip";
+  tooltip.className = "modify-deck-skill-tooltip";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.setAttribute("aria-hidden", "true");
+  document.body.appendChild(tooltip);
+  return tooltip;
+}
+
+function positionModifyDeckSkillTooltip(anchor, tooltip) {
+  if (!anchor || !tooltip || activeModifyDeckTooltipAnchor !== anchor) return;
+  const anchorRect = anchor.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const viewportPadding = 12;
+  const gap = 10;
+  let left = anchorRect.left + (anchorRect.width - tooltipRect.width) / 2;
+  left = Math.max(viewportPadding, Math.min(left, window.innerWidth - tooltipRect.width - viewportPadding));
+  let top = anchorRect.top - tooltipRect.height - gap;
+  let placement = "top";
+  if (top < viewportPadding) {
+    top = anchorRect.bottom + gap;
+    placement = "bottom";
+  }
+  top = Math.max(viewportPadding, Math.min(top, window.innerHeight - tooltipRect.height - viewportPadding));
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
+  tooltip.dataset.placement = placement;
+}
+
+function refreshModifyDeckSkillTooltipPosition() {
+  if (!activeModifyDeckTooltipAnchor) return;
+  const tooltip = document.getElementById("modify-deck-skill-tooltip");
+  if (!tooltip?.classList.contains("visible")) return;
+  requestAnimationFrame(() => positionModifyDeckSkillTooltip(activeModifyDeckTooltipAnchor, tooltip));
+}
+
+function showModifyDeckSkillTooltip(anchor, cardOrId) {
+  const details = getModifyDeckCardDetails(cardOrId);
+  const tooltip = getModifyDeckSkillTooltip();
+  tooltip.innerHTML = `
+    <div class="modify-deck-tooltip-head">
+      <div><strong>${escapeModifyDeckMarkup(details.name)}</strong><span>${escapeModifyDeckMarkup(details.skill)}</span></div>
+      <span class="modify-deck-tooltip-attack"><strong>${details.baseAttack}</strong><small>战力</small></span>
+    </div>
+    <div class="modify-deck-tooltip-meta">${escapeModifyDeckMarkup(details.camp)} · ${escapeModifyDeckMarkup(details.rarity)}</div>
+    <div class="modify-deck-tooltip-effect"><span>完整技能效果</span><p>${escapeModifyDeckMarkup(details.effect)}</p></div>
+  `;
+  activeModifyDeckTooltipAnchor = anchor;
+  anchor.setAttribute("aria-describedby", tooltip.id);
+  tooltip.classList.add("visible");
+  tooltip.setAttribute("aria-hidden", "false");
+  requestAnimationFrame(() => positionModifyDeckSkillTooltip(anchor, tooltip));
+}
+
+function hideModifyDeckSkillTooltip() {
+  const tooltip = document.getElementById("modify-deck-skill-tooltip");
+  if (activeModifyDeckTooltipAnchor) activeModifyDeckTooltipAnchor.removeAttribute("aria-describedby");
+  activeModifyDeckTooltipAnchor = null;
+  if (!tooltip) return;
+  tooltip.classList.remove("visible");
+  tooltip.setAttribute("aria-hidden", "true");
+}
+
+function bindModifyDeckSkillTooltip(element, cardOrId) {
+  const details = getModifyDeckCardDetails(cardOrId);
+  element.classList.add("modify-deck-card-preview");
+  element.tabIndex = 0;
+  element.setAttribute("aria-label", `${details.name}，${details.rarity}，基础战力 ${details.baseAttack}，技能 ${details.skill}`);
+  element.addEventListener("mouseenter", () => showModifyDeckSkillTooltip(element, cardOrId));
+  element.addEventListener("mouseleave", hideModifyDeckSkillTooltip);
+  element.addEventListener("focus", () => showModifyDeckSkillTooltip(element, cardOrId));
+  element.addEventListener("blur", hideModifyDeckSkillTooltip);
 }
 
 function getCardRuntimeDefinition(cardOrId) {
@@ -257,26 +375,73 @@ function cloneCard(template) {
   };
 }
 
-function buildCampDeck(campKey) {
-  if (campKey === CHAOS_DECK_KEY) {
-    // 混沌卡组：从所有卡牌中随机选择
-    const selectedSlots = Object.entries(CAMP_DECK_RARITY_COUNTS).flatMap(([rarity, count]) => {
+function getDefaultCampSlots(campKey) {
+  return Object.entries(CAMP_DECK_RARITY_COUNTS).flatMap(([rarity, count]) => {
+    const rarityPool = DEFAULT_CARD_SLOT_TEMPLATES.filter((slot) => slot.camp === campKey && slot.rarity === rarity);
+    if (rarityPool.length < count) {
+      throw new Error(`${campKey}卡组无法生成：${rarity}卡牌需要 ${count} 张，当前仅有 ${rarityPool.length} 张。`);
+    }
+    return rarityPool.slice(0, count);
+  });
+}
+
+function normalizeDeckCardIds(campKey, cardIds) {
+  if (!Array.isArray(cardIds) || cardIds.length !== 20) return null;
+  const ids = cardIds.map((id) => String(id));
+  if (new Set(ids).size !== ids.length) return null;
+  const slotsById = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+  const slots = ids.map((id) => slotsById.get(id));
+  if (slots.some((slot) => !slot || (campKey !== CHAOS_DECK_KEY && slot.camp !== campKey))) return null;
+  const rarityCounts = slots.reduce((counts, slot) => {
+    counts[slot.rarity] = (counts[slot.rarity] || 0) + 1;
+    return counts;
+  }, {});
+  if (!Object.entries(CAMP_DECK_RARITY_COUNTS).every(([rarity, count]) => rarityCounts[rarity] === count)) return null;
+  return ids;
+}
+
+function normalizeCustomDeckData(campKey, deckData) {
+  let candidateIds = Array.isArray(deckData?.cardIds) ? deckData.cardIds : null;
+  if (!candidateIds && deckData && typeof deckData === "object") {
+    const defaultSlots = getDefaultCampSlots(campKey);
+    candidateIds = defaultSlots.map((slot) => String(slot.id));
+    Object.entries(CAMP_DECK_RARITY_COUNTS).forEach(([rarity]) => {
+      const slotsInRarity = defaultSlots.filter((slot) => slot.rarity === rarity);
+      Object.entries(deckData[rarity] || {}).forEach(([indexText, replacement]) => {
+        const originalSlot = slotsInRarity[Number(indexText)];
+        const deckIndex = defaultSlots.indexOf(originalSlot);
+        if (deckIndex >= 0 && replacement?.id) candidateIds[deckIndex] = String(replacement.id);
+      });
+    });
+  }
+  const normalizedIds = normalizeDeckCardIds(campKey, candidateIds);
+  return normalizedIds ? { version: 2, cardIds: normalizedIds } : null;
+}
+
+function getConfiguredDeckCardIds(campKey) {
+  if (campKey === CHAOS_DECK_KEY) return buildCampDeck(campKey).map((card) => card.id);
+  const savedDeck = normalizeCustomDeckData(campKey, state.customDecks[campKey]);
+  return savedDeck?.cardIds || getDefaultCampSlots(campKey).map((slot) => String(slot.id));
+}
+
+function buildCampDeck(campKey, resolvedCardIds = null) {
+  let selectedSlots;
+  if (resolvedCardIds !== null && resolvedCardIds !== undefined) {
+    const normalizedIds = normalizeDeckCardIds(campKey, resolvedCardIds);
+    if (!normalizedIds) throw new Error(`${getCampDisplayName(campKey)}卡组数据无效。`);
+    const slotsById = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+    selectedSlots = normalizedIds.map((id) => slotsById.get(id));
+  } else if (campKey === CHAOS_DECK_KEY) {
+    selectedSlots = Object.entries(CAMP_DECK_RARITY_COUNTS).flatMap(([rarity, count]) => {
       const rarityPool = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.rarity === rarity);
       if (rarityPool.length < count) {
         throw new Error(`混沌卡组无法生成：${rarity}卡牌需要 ${count} 张，当前仅有 ${rarityPool.length} 张。`);
       }
       return shuffle(rarityPool).slice(0, count);
     });
-    return selectedSlots.map((slot) => cloneCard(makeCardTemplate(slot)));
+  } else {
+    selectedSlots = getDefaultCampSlots(campKey);
   }
-  // 势力卡组：从该势力中随机选择指定数量
-  const selectedSlots = Object.entries(CAMP_DECK_RARITY_COUNTS).flatMap(([rarity, count]) => {
-    const rarityPool = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.camp === campKey && slot.rarity === rarity);
-    if (rarityPool.length < count) {
-      throw new Error(`${campKey}卡组无法生成：${rarity}卡牌需要 ${count} 张，当前仅有 ${rarityPool.length} 张。`);
-    }
-    return shuffle(rarityPool).slice(0, count);
-  });
   return selectedSlots.map((slot) => cloneCard(makeCardTemplate(slot)));
 }
 
@@ -463,13 +628,73 @@ function closeActionLog() {
   setActionLogOpen(false);
 }
 
-function setModifyDeckOpen(open) {
+function setCustomDecksForUser(username, decks = {}) {
+  const normalizedDecks = {};
+  getAvailableDeckKeys().filter((camp) => camp !== CHAOS_DECK_KEY).forEach((camp) => {
+    const normalized = normalizeCustomDeckData(camp, decks[camp]);
+    if (normalized) normalizedDecks[camp] = normalized;
+  });
+  state.customDecks = normalizedDecks;
+  state.customDeckOwner = username || null;
+}
+
+async function loadCustomDecksForCurrentUser(force = false) {
+  const username = authClient?.loadUser?.() || null;
+  if (!username) {
+    if (state.customDeckOwner) setCustomDecksForUser(null);
+    return state.customDecks;
+  }
+  if (!force && state.customDeckOwner === username) return state.customDecks;
+  if (state.customDeckLoadPromise) return state.customDeckLoadPromise;
+  state.customDeckLoadPromise = fetch(`/api/custom-decks/${encodeURIComponent(username)}`)
+    .then(async (response) => {
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "读取卡组失败");
+      setCustomDecksForUser(username, data.decks);
+      return state.customDecks;
+    })
+    .catch((error) => {
+      console.error("读取自定义卡组失败:", error);
+      setCustomDecksForUser(username);
+      showToast("读取卡组失败", "本次将使用默认卡组，请稍后重试。");
+      return state.customDecks;
+    })
+    .finally(() => {
+      state.customDeckLoadPromise = null;
+    });
+  return state.customDeckLoadPromise;
+}
+
+function modificationsFromDeckData(camp, deckData) {
+  const normalized = normalizeCustomDeckData(camp, deckData);
+  if (!normalized) return {};
+  const defaultSlots = getDefaultCampSlots(camp);
+  const modifications = {};
+  Object.keys(CAMP_DECK_RARITY_COUNTS).forEach((rarity) => {
+    const slotsInRarity = defaultSlots.filter((slot) => slot.rarity === rarity);
+    slotsInRarity.forEach((slot, rarityIndex) => {
+      const deckIndex = defaultSlots.indexOf(slot);
+      const replacementId = normalized.cardIds[deckIndex];
+      if (replacementId === String(slot.id)) return;
+      const replacement = GAME_CARD_SLOT_TEMPLATES.find((candidate) => String(candidate.id) === replacementId);
+      if (!replacement) return;
+      if (!modifications[rarity]) modifications[rarity] = {};
+      modifications[rarity][rarityIndex] = makeCardTemplate(replacement);
+    });
+  });
+  return modifications;
+}
+
+async function setModifyDeckOpen(open) {
   if (!ui.modifyDeckModal) return;
   const shouldOpen = Boolean(open);
   if (shouldOpen) {
     closeThemeMenu();
     closeGameMenu();
+    await loadCustomDecksForCurrentUser();
     initializeModifyDeck();
+  } else {
+    hideModifyDeckSkillTooltip();
   }
   ui.modifyDeckModal.classList.toggle("visible", shouldOpen);
   ui.modifyDeckModal.setAttribute("aria-hidden", String(!shouldOpen));
@@ -509,7 +734,7 @@ function initializeModifyDeck() {
 function selectCampForModify(camp) {
   state.modifyDeck.selectedCamp = camp;
   state.modifyDeck.selectedRarity = null;
-  state.modifyDeck.modifications = {};
+  state.modifyDeck.modifications = modificationsFromDeckData(camp, state.customDecks[camp]);
 
   const originalDeck = buildCampDeck(camp);
   state.modifyDeck.originalDeck = originalDeck;
@@ -553,15 +778,16 @@ function selectRarityForModify(rarity) {
 }
 
 function renderCardReplacementUI(rarity) {
+  hideModifyDeckSkillTooltip();
   const camp = state.modifyDeck.selectedCamp;
   const originalDeck = state.modifyDeck.originalDeck;
   const modifications = state.modifyDeck.modifications[rarity] || {};
 
   const cardsInRarity = originalDeck.filter(card => getCardQuality(card) === rarity);
-  const allCardsInRarity = GAME_CARD_SLOT_TEMPLATES.filter(slot => slot.rarity === rarity && slot.camp === camp);
 
   const currentCardsList = ui.currentCardsList;
   currentCardsList.innerHTML = '';
+  ui.candidateCardsList.innerHTML = '';
 
   cardsInRarity.forEach((card, rarityIndex) => {
     const cardDisplay = getCardDisplay(card);
@@ -570,6 +796,7 @@ function renderCardReplacementUI(rarity) {
 
     const container = document.createElement('div');
     container.className = 'current-card-item';
+    container.dataset.rarityIndex = String(rarityIndex);
     container.innerHTML = `
       <div class="current-card">
         <strong>${cardDisplay.name}</strong>
@@ -599,26 +826,28 @@ function renderCardReplacementUI(rarity) {
     const selectBtn = container.querySelector('.select-replacement-btn');
     if (selectBtn) {
       selectBtn.addEventListener('click', () => {
-        showCandidateCards(rarity, rarityIndex, allCardsInRarity, card);
+        showCandidateCards(rarity, rarityIndex, card);
       });
     }
 
+    bindModifyDeckSkillTooltip(container.querySelector('.current-card'), card);
+    if (replacement) bindModifyDeckSkillTooltip(container.querySelector('.replacement-card'), replacement);
+
     currentCardsList.appendChild(container);
   });
+  showCandidateCards(rarity);
 }
 
-function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
-  const candidateCardsList = ui.candidateCardsList;
-  candidateCardsList.innerHTML = '';
-
+function getAvailableModifyDeckCandidates(rarity, originalCard = null) {
+  const camp = state.modifyDeck.selectedCamp;
   const currentModifications = state.modifyDeck.modifications[rarity] || {};
-  const currentReplacement = currentModifications[rarityIndex];
   const originalDeck = state.modifyDeck.originalDeck;
+  const originalCardId = originalCard?.id ? String(originalCard.id) : null;
 
   // 收集该品质中所有已被选中的卡牌 ID（来自修改）
   const replacedCardIds = new Set();
   Object.values(currentModifications).forEach(card => {
-    if (card?.id && card.id !== originalCard.id) {
+    if (card?.id && String(card.id) !== originalCardId) {
       replacedCardIds.add(String(card.id));
     }
   });
@@ -626,33 +855,39 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
   // 收集原卡组中已存在的卡牌 ID
   const cardsInOriginalDeck = new Set();
   originalDeck.forEach(card => {
-    if (card.id !== originalCard.id) {  // 排除要被替换的卡牌本身
+    if (String(card.id) !== originalCardId) {
       cardsInOriginalDeck.add(String(card.id));
     }
   });
 
-  // 合并可用卡牌：既包括原卡组相同势力的卡牌，也包括替换卡牌中相同品质的卡牌
-  const allCandidates = [...availableCards];
-  if (window.REPLACEMENT_CARDS) {
-    const replacementCardsForRarity = window.REPLACEMENT_CARDS.filter(card => card.rarity === rarity);
-    allCandidates.push(...replacementCardsForRarity);
-  }
+  return GAME_CARD_SLOT_TEMPLATES.filter((candidateSlot) => (
+    candidateSlot.rarity === rarity
+    && candidateSlot.camp === camp
+    && String(candidateSlot.id) !== originalCardId
+    && !replacedCardIds.has(String(candidateSlot.id))
+    && !cardsInOriginalDeck.has(String(candidateSlot.id))
+  ));
+}
 
-  allCandidates.forEach(candidateSlot => {
-    // 跳过：原卡牌、其他位置已选择的替换卡牌、已经在卡组内的卡牌
-    if (candidateSlot.id === originalCard.id ||
-        replacedCardIds.has(String(candidateSlot.id)) ||
-        cardsInOriginalDeck.has(String(candidateSlot.id))) {
-      return;
-    }
+function showCandidateCards(rarity, rarityIndex = null, originalCard = null) {
+  hideModifyDeckSkillTooltip();
+  const candidateCardsList = ui.candidateCardsList;
+  candidateCardsList.innerHTML = '';
+  const hasReplacementTarget = Number.isInteger(rarityIndex) && Boolean(originalCard);
 
+  ui.currentCardsList.querySelectorAll('.current-card-item').forEach((item) => {
+    item.classList.toggle('selecting', hasReplacementTarget && Number(item.dataset.rarityIndex) === rarityIndex);
+  });
+
+  const availableCards = getAvailableModifyDeckCandidates(rarity, originalCard);
+  availableCards.forEach(candidateSlot => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'candidate-card-btn';
-    if (currentReplacement?.id === String(candidateSlot.id)) {
-      button.classList.add('selected');
+    if (!hasReplacementTarget) {
+      button.dataset.awaitingTarget = 'true';
+      button.setAttribute('aria-disabled', 'true');
     }
-
     // 添加替换卡牌的标记
     const isReplacementCard = window.REPLACEMENT_CARDS &&
                               window.REPLACEMENT_CARDS.some(c => c.id === candidateSlot.id);
@@ -662,8 +897,13 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
       <strong>${candidateSlot.name}</strong>
       <small>${candidateSlot.skill}</small>${badge}
     `;
+    bindModifyDeckSkillTooltip(button, candidateSlot);
 
     button.addEventListener('click', () => {
+      if (!hasReplacementTarget) {
+        showToast('请先选择要替换的卡牌', '选定左侧卡牌后，即可使用这张备选卡。');
+        return;
+      }
       if (!state.modifyDeck.modifications[rarity]) {
         state.modifyDeck.modifications[rarity] = {};
       }
@@ -673,96 +913,124 @@ function showCandidateCards(rarity, rarityIndex, availableCards, originalCard) {
 
     candidateCardsList.appendChild(button);
   });
+  if (!candidateCardsList.children.length) {
+    candidateCardsList.innerHTML = '<p class="candidate-cards-empty">当前没有可用的同势力、同品质卡牌。</p>';
+  }
 }
 
-function buildModifiedDeck(camp, modifications) {
-  const originalDeck = buildCampDeck(camp);
-  const modifiedDeck = [...originalDeck];
+function buildCustomDeckCardIds(camp, modifications) {
+  const originalDeck = getDefaultCampSlots(camp);
+  const cardIds = originalDeck.map((card) => String(card.id));
 
   Object.entries(modifications).forEach(([rarity, rarityMods]) => {
     Object.entries(rarityMods).forEach(([indexStr, replacementTemplate]) => {
       const index = parseInt(indexStr, 10);
-      const card = modifiedDeck[index];
-      if (card && getCardQuality(card) === rarity) {
-        const newCard = cloneCard(replacementTemplate);
-        newCard.ownerId = card.ownerId;
-        newCard.currentAttack = newCard.attack;
-        modifiedDeck[index] = newCard;
-      }
+      const card = originalDeck.filter((slot) => slot.rarity === rarity)[index];
+      const deckIndex = originalDeck.indexOf(card);
+      if (deckIndex >= 0 && replacementTemplate?.id) cardIds[deckIndex] = String(replacementTemplate.id);
     });
   });
 
-  return modifiedDeck;
+  return normalizeDeckCardIds(camp, cardIds);
 }
 
-function saveModifiedDeck() {
+function buildModifiedDeck(camp, modifications) {
+  const cardIds = buildCustomDeckCardIds(camp, modifications);
+  if (!cardIds) throw new Error(`${getCampDisplayName(camp)}卡组不符合组建规则。`);
+  return buildCampDeck(camp, cardIds);
+}
+
+async function saveModifiedDeck() {
   const camp = state.modifyDeck.selectedCamp;
   if (!camp) {
     showToast('请先选择要修改的卡组', 'error');
     return;
   }
 
+  const modifications = state.modifyDeck.modifications;
+  const cardIds = buildCustomDeckCardIds(camp, modifications);
+  if (!cardIds) {
+    showToast('卡组不符合规则', '请确保卡组包含 20 张不重复的同势力卡牌，并保持各品质数量不变。');
+    return;
+  }
+  const deckData = { version: 2, cardIds };
   const username = authClient?.loadUser?.();
   if (!username) {
-    showToast('请先登录', 'error');
+    state.customDecks[camp] = deckData;
+    showToast(`${getCampDisplayName(camp)}卡组已临时应用`, '刷新页面后将恢复默认卡组。');
+    closeModifyDeck();
     return;
   }
 
-  const modifications = state.modifyDeck.modifications;
-
-  fetch('/api/save-custom-deck', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username,
-      camp,
-      modifications
-    })
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        showToast(`${getCampDisplayName(camp)}卡组已保存`, 'success');
-        closeModifyDeck();
-      } else {
-        showToast(data.error || '保存失败', 'error');
-      }
-    })
-    .catch(err => {
-      console.error('保存卡组失败:', err);
-      showToast('保存卡组失败', 'error');
+  try {
+    const response = await fetch('/api/save-custom-deck', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, camp, deckData })
     });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || '保存失败');
+    state.customDecks[camp] = deckData;
+    showToast(`${getCampDisplayName(camp)}卡组已保存`, '登录后会自动用于对应势力。');
+    closeModifyDeck();
+  } catch (error) {
+    console.error('保存卡组失败:', error);
+    showToast('保存卡组失败', error.message || '请稍后重试。');
+  }
 }
 
-function resetModifiedDeck() {
+async function resetModifiedDeck() {
   const camp = state.modifyDeck.selectedCamp;
   if (!camp) return;
 
   const username = authClient?.loadUser?.();
   if (!username) {
-    showToast('请先登录', 'error');
+    delete state.customDecks[camp];
+    state.modifyDeck.modifications = {};
+    showToast(`${getCampDisplayName(camp)}卡组已重置`, '当前页面已恢复默认卡组。');
+    selectCampForModify(camp);
     return;
   }
 
-  fetch('/api/reset-custom-deck', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, camp })
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.success) {
-        state.modifyDeck.modifications = {};
-        showToast(`${getCampDisplayName(camp)}卡组已重置为默认`, 'success');
-        selectCampForModify(camp);
-      } else {
-        showToast(data.error || '重置失败', 'error');
-      }
-    })
-    .catch(err => {
-      console.error('重置卡组失败:', err);
-      showToast('重置卡组失败', 'error');
+  try {
+    const response = await fetch('/api/reset-custom-deck', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, camp })
     });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || '重置失败');
+    delete state.customDecks[camp];
+    state.modifyDeck.modifications = {};
+    showToast(`${getCampDisplayName(camp)}卡组已重置为默认`, '后续对局将使用默认卡组。');
+    selectCampForModify(camp);
+  } catch (error) {
+    console.error('重置卡组失败:', error);
+    showToast('重置卡组失败', error.message || '请稍后重试。');
+  }
+}
+
+async function loadLoginProfile(username) {
+  if (!username) return;
+  if (ui.loginUsernameDisplay) ui.loginUsernameDisplay.textContent = username;
+  if (ui.profileChallengeHighest) ui.profileChallengeHighest.textContent = "--";
+  if (ui.profileChallengeClears) ui.profileChallengeClears.textContent = "--";
+  if (ui.profileLoadStatus) ui.profileLoadStatus.textContent = "正在加载个人资料...";
+
+  const profile = await authClient.getProfile(username);
+  if (authClient.loadUser() !== username) return;
+  if (!profile) {
+    if (ui.profileLoadStatus) ui.profileLoadStatus.textContent = "个人资料暂时无法加载";
+    return;
+  }
+
+  const highestLevel = Math.max(0, Math.min(12, Math.floor(Number(profile.challengeHighestLevel) || 0)));
+  const clearCount = Math.max(0, Math.floor(Number(profile.challengeClearCount) || 0));
+  if (ui.profileChallengeHighest) {
+    ui.profileChallengeHighest.textContent = highestLevel > 0 ? `第 ${highestLevel} 关` : "暂无记录";
+  }
+  if (ui.profileChallengeClears) ui.profileChallengeClears.textContent = `${clearCount} 次`;
+  if (ui.profileLoadStatus) ui.profileLoadStatus.textContent = "";
 }
 
 function setLoginMenuOpen(open) {
@@ -781,10 +1049,12 @@ function setLoginMenuOpen(open) {
     if (currentUser) {
       ui.loginFormContainer?.setAttribute("hidden", "");
       ui.loginSuccessContainer?.removeAttribute("hidden");
-      if (ui.loginUsernameDisplay) ui.loginUsernameDisplay.textContent = currentUser;
+      if (ui.loginMenuTitle) ui.loginMenuTitle.textContent = "个人资料";
+      void loadLoginProfile(currentUser);
     } else {
       ui.loginFormContainer?.removeAttribute("hidden");
       ui.loginSuccessContainer?.setAttribute("hidden", "");
+      if (ui.loginMenuTitle) ui.loginMenuTitle.textContent = "登录系统";
       ui.loginUsername?.focus();
     }
   }
@@ -803,6 +1073,16 @@ function updateLoginStatus() {
     ui.quickLogoutBtn.hidden = !currentUser;
   }
   updatePlayerIdDisplay();
+}
+
+function shouldAutoOpenLogin(currentUser = authClient.loadUser()) {
+  return !currentUser;
+}
+
+function initializeLoginUi() {
+  const currentUser = authClient.loadUser();
+  updateLoginStatus();
+  if (shouldAutoOpenLogin(currentUser)) setLoginMenuOpen(true);
 }
 
 function updatePlayerIdDisplay() {
@@ -827,6 +1107,7 @@ async function handleLogin(username, password) {
   try {
     const result = await authClient.login(username, password);
     if (result.success) {
+      await loadCustomDecksForCurrentUser(true);
       updateLoginStatus();
       showToast("登录成功", `欢迎回来，${username}！`);
       setLoginMenuOpen(true);
@@ -866,9 +1147,10 @@ async function loadPresetAccounts() {
 
 function handleLogout() {
   authClient.clearUser();
+  setCustomDecksForUser(null);
   updateLoginStatus();
   showToast("已退出登录", "下次登录需要重新输入凭证");
-  setLoginMenuOpen(false);
+  setLoginMenuOpen(true);
 }
 
 function renderActionLog() {
@@ -1010,6 +1292,9 @@ function renderResult(game) {
   const winnerDisplayId = winner
     ? (game.mode === "online" ? displayName(winner) : winner.isAI ? "AI" : `P${winner.id}`)
     : "—";
+  const resultModeLabel = game.mode === "online"
+    ? "联网对局"
+    : game.mode === "card-test" ? "卡牌测试" : "PVE 对局";
 
   ui.winnerTitle.textContent = winner ? `${displayName(winner)} 获胜` : "本局平局";
   const challengeComplete = game.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) >= 12;
@@ -1018,7 +1303,7 @@ function renderResult(game) {
     : game.winner?.text || "本局对战已结束。";
   ui.resultWinnerId.textContent = winnerDisplayId;
   ui.resultWinnerSlot.textContent = winner
-    ? (game.mode === "online" ? `联网对局 · 玩家 ${winner.id} 席位` : `${displayName(winner)} · ${winner.isAI ? "PVE" : "本地"}对局`)
+    ? (game.mode === "online" ? `${resultModeLabel} · 玩家 ${winner.id} 席位` : `${displayName(winner)} · ${resultModeLabel}`)
     : "双方没有单一获胜者";
   ui.resultScorePlayer1Label.textContent = displayName(playerOne);
   ui.resultScorePlayer2Label.textContent = displayName(playerTwo);
@@ -1032,17 +1317,6 @@ function renderResult(game) {
       : `双方 ${scoreOne}:${scoreTwo} 平局`;
   ui.resultRoundCount.textContent = `${roundCount} 回合`;
   ui.winnerControlSummary.textContent = `最终占领：${displayName(playerOne)} ${scoreOne} 格 · ${displayName(playerTwo)} ${scoreTwo} 格`;
-  const power = game.players.map((player) => game.boardCards
-    .filter((card) => card.ownerId === player.id)
-    .reduce((sum, card) => sum + (Number(card.currentAttack) || Number(card.attack) || 0), 0));
-  const losingId = winnerId === 0 ? 0 : (power[0] < power[1] ? 1 : power[1] < power[0] ? 2 : 0);
-  ui.winnerComparison.innerHTML = `<span class="winner-power-block"><small>${displayName(playerOne)} 战力</small><strong class="winner-power ${losingId === 1 ? "losing-power" : ""}">${power[0]}</strong></span><span class="winner-vs">VS</span><span class="winner-power-block"><small>${displayName(playerTwo)} 战力</small><strong class="winner-power ${losingId === 2 ? "losing-power" : ""}">${power[1]}</strong></span>`;
-  if (losingId) {
-    window.setTimeout(() => {
-      const losingPower = ui.winnerComparison.querySelector(`.winner-power-block:nth-of-type(${losingId === 1 ? 1 : 3}) .winner-power`);
-      losingPower?.classList.add("power-slashed");
-    }, 520);
-  }
   ui.deckSummaryPlayer1.textContent = summarizeDeck(game.players[0].deckCatalog, game.players[0].deckKey);
   ui.deckSummaryPlayer2.textContent = summarizeDeck(game.players[1].deckCatalog, game.players[1].deckKey);
   if (ui.resultNextLevelBtn) {
@@ -1068,6 +1342,7 @@ function summarizeDeck(deckCatalog, deckKey) {
 function showResult() {
   renderResult(state.game);
   const game = state.game;
+  void recordChallengeProfile(game);
   const winnerId = game?.winner?.playerId;
   const shouldShowReward = game?.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) % 3 === 0 && Number(game.challengeLevel) < 12;
   if (shouldShowReward) {
@@ -1079,6 +1354,25 @@ function showResult() {
     }
   }
   switchScreen("result");
+}
+
+async function recordChallengeProfile(game) {
+  const username = authClient.loadUser();
+  const level = Math.floor(Number(game?.challengeLevel) || 0);
+  if (!username || game?.mode !== "pve-challenge" || Number(game?.winner?.playerId) !== 1 || level < 1 || level > 12) return;
+  if (game.challengeProfileSaveStatus === "saving" || game.challengeProfileSaveStatus === "saved") return;
+
+  game.challengeProfileSaveStatus = "saving";
+  const result = await authClient.saveChallengeProgress(username, level);
+  if (result?.error) {
+    game.challengeProfileSaveStatus = "idle";
+    console.error("保存 PVE 挑战资料失败:", result.error);
+    return;
+  }
+  game.challengeProfileSaveStatus = "saved";
+  if (ui.loginMenuModal?.classList.contains("visible") && authClient.loadUser() === username) {
+    void loadLoginProfile(username);
+  }
 }
 
 function cancelSelection() {
@@ -1785,11 +2079,13 @@ function bindEvents() {
   ui.actionLogModal?.addEventListener("click", (event) => {
     if (event.target === ui.actionLogModal) closeActionLog();
   });
-  ui.modifyDeckBtn?.addEventListener("click", () => setModifyDeckOpen(true));
+  ui.modifyDeckBtn?.addEventListener("click", () => { void setModifyDeckOpen(true); });
   ui.modifyDeckClose?.addEventListener("click", closeModifyDeck);
   ui.modifyDeckModal?.addEventListener("click", (event) => {
     if (event.target === ui.modifyDeckModal) closeModifyDeck();
   });
+  ui.modifyDeckModal?.addEventListener("scroll", refreshModifyDeckSkillTooltipPosition, true);
+  window.addEventListener?.("resize", refreshModifyDeckSkillTooltipPosition);
   ui.modifyDeckSaveBtn?.addEventListener("click", saveModifiedDeck);
   ui.modifyDeckResetBtn?.addEventListener("click", resetModifiedDeck);
   ui.expandActionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
@@ -1853,15 +2149,17 @@ function bindEvents() {
     button.addEventListener("click", () => applyTheme(button.dataset.theme));
   });
 
-  ui.startGameBtn.addEventListener("click", () => {
+  ui.startGameBtn.addEventListener("click", async () => {
+    await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.selectedMode);
   });
   ui.submitActionBtn.addEventListener("click", () => {
     window.submitCurrentAction?.();
   });
   ui.cancelSelectionBtn.addEventListener("click", cancelSelection);
-  ui.restartBtn.addEventListener("click", () => {
+  ui.restartBtn.addEventListener("click", async () => {
     closeGameMenu();
+    await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });
   ui.backMenuBtn.addEventListener("click", () => {
@@ -1869,7 +2167,7 @@ function bindEvents() {
     window.resetToMenu?.();
   });
   ui.resultNextLevelBtn?.addEventListener("click", () => window.beginNextChallengeLevel?.());
-  ui.resultRestartBtn.addEventListener("click", () => {
+  ui.resultRestartBtn.addEventListener("click", async () => {
     if (state.online?.role === "spectator") return;
     if (state.game?.mode === "pve-challenge") {
       state.challengeLevel = 1;
@@ -1877,6 +2175,7 @@ function bindEvents() {
       state.pendingChallengeRewardChoices = null;
       state.pendingChallengeRewardLevel = null;
     }
+    await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });
   ui.resultMenuBtn.addEventListener("click", () => window.resetToMenu?.());
@@ -1890,11 +2189,14 @@ function bindEvents() {
 window.__CARD_DEMO_DEBUG__ = {
   state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
   getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack,
-  getAvailableDeckKeys, getRandomDeckKey, applyTheme
+  getAvailableDeckKeys, getRandomDeckKey, getConfiguredDeckCardIds, normalizeCustomDeckData,
+  getModifyDeckCardDetails, getAvailableModifyDeckCandidates, buildCustomDeckCardIds, buildModifiedDeck,
+  shouldAutoOpenLogin, applyTheme
 };
 window.resetToMenu = resetToMenu;
 window.leaveOnlineSession = leaveOnlineSession;
 window.closeGameMenu = closeGameMenu;
 initializeTheme();
 bindEvents();
-updateLoginStatus();
+initializeLoginUi();
+void loadCustomDecksForCurrentUser();

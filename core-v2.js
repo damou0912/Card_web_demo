@@ -2905,9 +2905,9 @@
     const ownPlayer = spectator ? corePlayer(game, 1) : corePlayer(game, coreViewerPlayerId(game)) || game.players[0];
     const opponentPlayer = spectator ? corePlayer(game, 2) : corePlayer(game, otherPlayerId(ownPlayer.id)) || game.players.find((player) => player.id !== ownPlayer.id);
     const opponentTurn = coreIsOpponentTurn(game);
-    const handOwner = game.mode === "online"
-      ? ownPlayer
-      : active;
+    // The hand area is always rendered from the local viewer's perspective.
+    // In PVE, following the active player here would expose the AI hand during its turn.
+    const handOwner = ownPlayer;
     const control = coreControlMap(game);
     const target = coreVictoryTarget(game);
     ui.modeLabel.textContent = `${coreModeLabel(game.mode)} · ${game.boardSize}x${game.boardSize}`;

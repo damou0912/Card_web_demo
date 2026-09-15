@@ -135,6 +135,10 @@
         && suppliedTraitGame.eliteAiEffectIds[0] === "1001"
         && famineOpeningGame.players[1].hand.length === 1
         && coreHandLimitForPlayer(famineOpeningGame, famineOpeningGame.players[1]) === 1);
+      state.game = challengeGame;
+      window.render();
+      check("挑战模式AI回合不显示AI手牌", document.getElementById("hand-title").textContent === `${challengeGame.players[0].name} 的手牌`
+        && document.getElementById("hand-cards").children.length === challengeGame.players[0].hand.length);
 
       const gauntletPlayerOptions = corePickGauntletPlayerOptions();
       check("过关斩将玩家初始卡组三国三选一且固定为4普通1稀有", gauntletPlayerOptions.length === 3

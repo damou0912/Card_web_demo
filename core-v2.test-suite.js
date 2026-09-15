@@ -22,6 +22,7 @@
       game.eliteAiEffectIds = [String(id)];
       game.eliteAiEffectId = String(id);
       game.eliteAiFirstPlacementClaims = {};
+      game.currentPhase = "行动阶段";
       game.boardCards = boardCards;
       game.activePlayerId = 2;
       game.players.forEach((player) => { player.hand = []; player.drawPile = []; });
@@ -30,8 +31,8 @@
     };
     try {
       const challengeTraitIds = coreEliteAiTraitIds();
-      const expectedNames = ["鼓舞", "冷箭", "厚葬", "军备", "援军", "当先", "慎行", "野望", "急奔", "无言", "战鼓擂", "羽林列", "烽火起", "关山急", "鸿门宴", "丹书诏", "古道尘", "城下盟", "振奋人心", "虚弱无力", "灵动迅捷", "凤鸣九霄", "勇冠三军", "破釜沉舟", "关山暮雪", "暗度陈仓"];
-      check("Excel 中的 26 个数字词条 ID 均已载入", challengeTraitIds.length === 26
+      const expectedNames = ["鼓舞", "冷箭", "厚葬", "军备", "援军", "当先", "慎行", "断粮", "野望", "急奔", "无言", "战鼓擂", "羽林列", "烽火起", "关山急", "鸿门宴", "丹书诏", "古道尘", "城下盟", "振奋人心", "虚弱无力", "灵动迅捷", "凤鸣九霄", "勇冠三军", "破釜沉舟", "关山暮雪", "暗度陈仓"];
+      check("Excel 中的 27 个数字词条 ID 均已载入", challengeTraitIds.length === 27
         && challengeTraitIds.every((id) => /^\d{4}$/.test(id))
         && expectedNames.every((name) => Object.values(window.ELITE_AI_EFFECT_INFO_V2).some((trait) => trait.name === name))
         && Object.keys(window.ELITE_AI_EFFECT_ID_ALIASES_V2).length === 0);
@@ -41,6 +42,7 @@
       { const dead = makeCard("02101", 2, 0, 0); const game = traitGame("1003", [dead]); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreDestroyV2Card(game, dead, []); check("1003 厚葬", game.players[1].hand.length === 1); }
       { const game = traitGame("1004"); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreApplyEliteAiTrait(game, game.players[1], []); check("1004 军备", game.players[1].hand.length === 1); }
       { const game = traitGame("1005"); coreDrawOneCard(game, game.players[1], []); check("1005 援军", game.players[1].hand.length === 1 && game.players[1].hand[0].customName === "援兵" && game.players[1].hand[0].currentAttack === 1); }
+      { const game = traitGame("1008"); const ai = game.players[1]; ai.hand = []; ai.drawPile = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)]; coreMaintainEliteAiHand(game, ai, []); const limited = ai.hand.length === 1 && coreHandLimitForPlayer(game, ai) === 1; ai.hand = []; ai.drawPile = []; coreMaintainEliteAiHand(game, ai, []); const waiting = ai.hand.length === 0 && ai.eliteTraitState?.waitingForDrawPileRefill === true; coreAddCardsToDrawPile(game, ai, [makeCard("02103", 2, null, null)], []); const refilled = ai.hand.length === 1 && ai.eliteTraitState?.waitingForDrawPileRefill === false; check("1008 断粮", limited && waiting && refilled); }
       { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
       { const watcher = makeCard("02315", 2, 1, 0), placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [watcher, placed]); coreApplyV2PlacementSkill(game, game.players[1], watcher, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const isolated = placed.currentAttack === placed.attack + 3 && placed.v2PermanentBonus === 3 && placed.v2TempBonus === 0; game.turn = 2; coreStartTurn(game); check("1007 慎行词条调整与卡牌增益监听隔离", isolated && placed.currentAttack === placed.attack && placed.v2PermanentBonus === 0); }
@@ -120,6 +122,7 @@
       const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
       challengeGame.activePlayerId = 2;
       const suppliedTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
+      const famineOpeningGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1008"]);
       check("PVE 挑战模式", challengeGame.challengeMode
         && challengeGame.players[1].isAI
         && challengeGame.players[1].name === "精英 AI"
@@ -127,7 +130,9 @@
         && challengeGame.players[1].hand.length === (challengeGame.firstPlayerId === 2 ? 2 : 3)
         && coreActionLimit(challengeGame) === 1
         && suppliedTraitGame.eliteAiEffectIds.length === 1
-        && suppliedTraitGame.eliteAiEffectIds[0] === "1001");
+        && suppliedTraitGame.eliteAiEffectIds[0] === "1001"
+        && famineOpeningGame.players[1].hand.length === 1
+        && coreHandLimitForPlayer(famineOpeningGame, famineOpeningGame.players[1]) === 1);
       const challengePlansValid = JSON.stringify(coreChallengeTraitPlan(1)) === JSON.stringify(["beginner"])
         && JSON.stringify(coreChallengeTraitPlan(2)) === JSON.stringify(["intermediate"])
         && JSON.stringify(coreChallengeTraitPlan(3)) === JSON.stringify(["advanced"])
@@ -138,6 +143,55 @@
         && sampledTraitIds.length === new Set(sampledTraitIds).size
         && sampledTraitIds.length === 4
         && sampledTraitIds.every((id) => window.ELITE_AI_EFFECT_INFO_V2[id]?.level === "advanced"));
+      const excludedTraitSample = corePickChallengeTraits(4, ["3001", "1001"]);
+      check("下一关 AI 词条排除上一关词条", !excludedTraitSample.includes("3001") && !excludedTraitSample.includes("1001"));
+
+      {
+        const previousGame = state.game;
+        const previousLevel = state.challengeLevel;
+        const previousPlayerTraits = state.challengePlayerTraitIds;
+        const levelOne = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
+        levelOne.winner = { playerId: 1, text: "玩家 1 获胜" };
+        state.game = levelOne;
+        state.challengeLevel = 1;
+        state.challengePlayerTraitIds = ["1008"];
+        const advanced = window.beginNextChallengeLevel();
+        const levelTwo = state.game;
+        check("进入下一关时 AI 不继承上一关词条", advanced
+          && levelTwo?.challengeLevel === 2
+          && levelTwo.eliteAiEffectIds.length === 1
+          && !levelTwo.eliteAiEffectIds.some((id) => levelOne.eliteAiEffectIds.includes(id))
+          && levelTwo.challengePlayerTraitIds.includes("1008"));
+        state.game = previousGame;
+        state.challengeLevel = previousLevel;
+        state.challengePlayerTraitIds = previousPlayerTraits;
+      }
+
+      {
+        const previousEffects = window.ELITE_AI_EFFECTS_V2;
+        window.ELITE_AI_EFFECTS_V2 = {
+          ...previousEffects,
+          // Simulate a stale cached 1008 implementation from before it was removed.
+          "1008": { onCardDrawn(context) { context.operations.trimHandToOne(); } }
+        };
+        const openingGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
+        openingGame.eliteAiEffectIds = ["1008"];
+        openingGame.eliteAiEffectId = "1008";
+        const openingAi = openingGame.players[1];
+        openingAi.hand.push(makeCard("02101", 2, null, null));
+        const handBeforeOpeningTraitEvent = openingAi.hand.length;
+        coreApplyEliteAiTraitEvent(openingGame, "cardDrawn", { player: openingAi }, []);
+        check("开局展示阶段不会触发旧版1008弃牌", openingAi.hand.length === handBeforeOpeningTraitEvent);
+        window.ELITE_AI_EFFECTS_V2 = previousEffects;
+      }
+
+      {
+        const playerTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"], ["1006"]);
+        playerTraitGame.activePlayerId = 1;
+        playerTraitGame.eliteAiFirstPlacementClaims = { "1:1006": playerTraitGame.turn };
+        coreStartTurn(playerTraitGame);
+        check("玩家奖励词条的每回合首次放置状态会重置", !playerTraitGame.eliteAiFirstPlacementClaims["1:1006"]);
+      }
 
       const occupiedA = makeCard("01101", 1, 0, 0);
       const occupiedB = makeCard("01102", 2, 0, 1);

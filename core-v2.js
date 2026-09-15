@@ -429,7 +429,9 @@
       hasFirstPlacementClaim: (key) => game.eliteAiFirstPlacementClaims?.[`${ai?.id || 0}:${key}`] === game.turn,
       pickRandom: (cards) => corePickRandom(cards || []),
       preventRest: (card) => { if (card && card.restedTurn === game.turn) card.restedTurn = null; },
-      trimHandToOne: () => coreTrimEliteAiHand(game, payload.player || ai),
+      // Retained only as a compatibility no-op for stale cached trait code;
+      // the active 1008 implementation uses handState instead.
+      trimHandToOne: () => 0,
       logMessage: (message) => log.push(message)
     };
     return { game, event, ai, traitSource: binding?.source || "opponent", player: payload.player || null, card: payload.card || null, boardCards: game.boardCards, log, operations, ...payload };
@@ -456,6 +458,9 @@
 
   function coreApplyEliteAiTraitEvent(game, event, payload = {}, log = []) {
     if (!coreIsPveChallenge(game)) return null;
+    // Initial hands are dealt while the opening reveal is visible. Trait
+    // events begin with the first real turn, never during initial dealing.
+    if (game.currentPhase === "开局展示") return null;
     let prevented = false;
     coreChallengeTraitBindings(game).forEach((binding) => {
       if (event === "turnStart" && payload.player?.id !== binding.owner.id) return;
@@ -482,13 +487,16 @@
     return plan.length ? plan : ["advanced"];
   }
 
-  function corePickChallengeTraits(level = 1) {
+  function corePickChallengeTraits(level = 1, excludedIds = []) {
     const info = window.ELITE_AI_EFFECT_INFO_V2 || {};
     const ids = coreCanonicalEliteAiTraitIds();
+    const excluded = new Set((excludedIds || []).map(coreNormalizeEliteAiTraitId));
     const selected = [];
     coreChallengeTraitPlan(level).forEach((tier) => {
-      const candidates = ids.filter((id) => info[id]?.level === tier && !selected.includes(id));
-      if (candidates.length) selected.push(candidates[randomInt(0, candidates.length - 1)]);
+      const candidates = ids.filter((id) => info[id]?.level === tier && !selected.includes(id) && !excluded.has(id));
+      const fallback = ids.filter((id) => info[id]?.level === tier && !selected.includes(id));
+      const pool = candidates.length ? candidates : fallback;
+      if (pool.length) selected.push(pool[randomInt(0, pool.length - 1)]);
     });
     return selected;
   }
@@ -1009,10 +1017,10 @@
 
   function coreStartTurn(game) {
     const active = corePlayer(game, game.activePlayerId);
-    if (active && active.id === coreEliteAiTraitOwner(game)?.id) {
-      coreExpireEliteScopedBonuses(game);
-      game.eliteAiFirstPlacementClaims = {};
-    }
+    if (active && active.id === coreEliteAiTraitOwner(game)?.id) coreExpireEliteScopedBonuses(game);
+    // First-placement trait claims are scoped to the global turn. Reset them
+    // for every turn so the same trait also works when it is a player reward.
+    game.eliteAiFirstPlacementClaims = {};
     game.currentPhase = "准备阶段";
     game.actionsUsed = 0;
     game.selection = resetSelection();
@@ -3594,7 +3602,11 @@
     };
     state.pendingChallengeTraitIds = null;
     const playerTraits = (state.challengePlayerTraitIds || []).map(coreNormalizeEliteAiTraitId).filter(Boolean);
-    state.game = coreCreateGame("pve-challenge", state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, null, playerTraits);
+    const previousAiTraits = Array.isArray(previous.eliteAiEffectIds)
+      ? previous.eliteAiEffectIds
+      : previous.eliteAiEffectId ? [previous.eliteAiEffectId] : [];
+    const nextAiTraits = corePickChallengeTraits(state.challengeLevel, previousAiTraits);
+    state.game = coreCreateGame("pve-challenge", state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, nextAiTraits, playerTraits);
     switchScreen("game");
     coreShowOpeningReveal(state.game);
     return true;

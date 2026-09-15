@@ -79,6 +79,7 @@ const UNKNOWN_CARD_DISPLAY = Object.freeze({
 const ui = {
   screens: {
     menu: document.getElementById("menu-screen"),
+    challengeSelect: document.getElementById("challenge-select-screen"),
     game: document.getElementById("game-screen"),
     result: document.getElementById("result-screen")
   },
@@ -190,7 +191,9 @@ const ui = {
   currentCardsList: document.getElementById("current-cards-list"),
   candidateCardsList: document.getElementById("candidate-cards-list"),
   modifyDeckResetBtn: document.getElementById("modify-deck-reset-btn"),
-  modifyDeckSaveBtn: document.getElementById("modify-deck-save-btn")
+  modifyDeckSaveBtn: document.getElementById("modify-deck-save-btn"),
+  challengeTypeButtons: [...document.querySelectorAll(".challenge-type-btn")],
+  challengeSelectBackBtn: document.getElementById("challenge-select-back-btn")
 };
 
 const state = {
@@ -1341,6 +1344,8 @@ function summarizeDeck(deckCatalog, deckKey) {
 
 function showResult() {
   renderResult(state.game);
+  // Keep the settlement view visible behind the reward picker on milestone levels.
+  switchScreen("result");
   const game = state.game;
   void recordChallengeProfile(game);
   const winnerId = game?.winner?.playerId;
@@ -1353,7 +1358,6 @@ function showResult() {
       return;
     }
   }
-  switchScreen("result");
 }
 
 async function recordChallengeProfile(game) {
@@ -2122,6 +2126,10 @@ function bindEvents() {
       state.selectedMode = button.dataset.mode;
       ui.modeButtons.forEach((item) => item.classList.toggle("selected", item === button));
       if (ui.modeDescription) ui.modeDescription.textContent = button.dataset.description || "";
+      if (button.dataset.mode === "pve-challenge") {
+        switchScreen("challengeSelect");
+        ui.challengeTypeButtons.find((item) => item.dataset.challengeType === "challenge")?.focus();
+      }
     });
   });
 
@@ -2150,8 +2158,30 @@ function bindEvents() {
   });
 
   ui.startGameBtn.addEventListener("click", async () => {
+    if (state.selectedMode === "pve-challenge") {
+      switchScreen("challengeSelect");
+      ui.challengeTypeButtons.find((button) => button.dataset.challengeType === "challenge")?.focus();
+      return;
+    }
     await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.selectedMode);
+  });
+  ui.challengeTypeButtons.forEach((button) => {
+    button.addEventListener("click", async () => {
+      const challengeType = button.dataset.challengeType;
+      if (challengeType !== "challenge") {
+        showToast("过关斩将尚未开放", "该挑战路线正在施工中，请先选择挑战模式。", 4200);
+        return;
+      }
+      state.selectedMode = "pve-challenge";
+      await loadCustomDecksForCurrentUser();
+      window.startRandomGame?.("pve-challenge");
+    });
+  });
+  ui.challengeSelectBackBtn?.addEventListener("click", () => {
+    switchScreen("menu");
+    const selectedButton = ui.modeButtons.find((button) => button.dataset.mode === state.selectedMode);
+    selectedButton?.focus();
   });
   ui.submitActionBtn.addEventListener("click", () => {
     window.submitCurrentAction?.();

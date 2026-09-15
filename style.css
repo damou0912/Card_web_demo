@@ -472,6 +472,49 @@ h1 {
   line-height: 1.6;
 }
 
+.challenge-select-card {
+  max-width: 900px;
+}
+
+.challenge-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin: 30px 0 22px;
+}
+
+.challenge-type-btn {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  padding: 20px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: var(--theme-surface-soft, #edf1ec);
+  color: var(--ink);
+  text-align: left;
+}
+
+.challenge-type-btn strong {
+  font-size: 22px;
+}
+
+.challenge-type-btn small {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.challenge-type-btn:hover:not(:disabled),
+.challenge-type-btn:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.challenge-type-btn[data-challenge-type="gauntlet"] small {
+  color: var(--muted);
+}
+
 .menu-options,
 .action-buttons,
 .legend,
@@ -3800,6 +3843,10 @@ h1 {
   }
 
   .menu-options {
+    grid-template-columns: 1fr;
+  }
+
+  .challenge-type-options {
     grid-template-columns: 1fr;
   }
 

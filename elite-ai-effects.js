@@ -52,6 +52,28 @@
         });
       }
     }),
+    "1008": Object.freeze({
+      handLimit(context) {
+        return context.player?.id === own(context).id ? 1 : null;
+      },
+      handState(context) {
+        const player = context.player;
+        if (player?.id !== own(context).id) return;
+        if (player.hand.length > 0) {
+          context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
+          return;
+        }
+        context.operations.setPlayerState(player, "waitingForDrawPileRefill", !player.drawPile.length);
+        context.operations.drawCard(player);
+        if (player.hand.length) context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
+      },
+      onDrawPileChanged(context) {
+        const player = context.player;
+        if (player?.id !== own(context).id || !player.eliteTraitState?.waitingForDrawPileRefill || !player.drawPile.length || player.hand.length) return;
+        context.operations.drawCard(player);
+        context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
+      }
+    }),
     "1009": Object.freeze({
       onTurnStart(context) { enemies(context).forEach((card) => context.operations.adjust(card, -1, true)); }
     }),

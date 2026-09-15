@@ -14,7 +14,7 @@
       // Keep the default palette when browser storage is unavailable.
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20260914-no-total-power">
+  <link rel="stylesheet" href="style.css?v=20260914-challenge-select">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -195,6 +195,26 @@
             <li>双方轮流行动，第 1 回合 1 次行动，其余回合 2 次</li>
             <li>占领超过当前可用区域一半即可立即获胜</li>
           </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="challenge-select-screen" class="screen">
+      <div class="hero-card challenge-select-card">
+        <p class="eyebrow">PVE CHALLENGE</p>
+        <h1>选择挑战类型</h1>
+        <div class="challenge-type-options" role="group" aria-label="选择挑战类型">
+          <button class="challenge-type-btn" type="button" data-challenge-type="challenge" aria-label="进入挑战模式">
+            <strong>挑战模式</strong>
+            <small>当前可用</small>
+          </button>
+          <button class="challenge-type-btn" type="button" data-challenge-type="gauntlet" aria-label="过关斩将，建设中">
+            <strong>过关斩将</strong>
+            <small>建设中</small>
+          </button>
+        </div>
+        <div class="action-buttons">
+          <button id="challenge-select-back-btn" class="secondary-btn" type="button">返回模式选择</button>
         </div>
       </div>
     </section>
@@ -460,13 +480,13 @@
     }
   </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260914-no-total-power"></script>
+  <script src="script.js?v=20260914-challenge-select"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wu-card-effects.js?v=20260908-display-effect-isolation"></script>
-  <script src="elite-ai-info.js?v=20260909-challenge-levels"></script>
-  <script src="elite-ai-effects.js?v=20260909-challenge-levels"></script>
-  <script src="core-v2.js?v=20260914-custom-decks"></script>
+  <script src="elite-ai-info.js?v=20260914-1008-enabled"></script>
+  <script src="elite-ai-effects.js?v=20260914-1008-enabled"></script>
+  <script src="core-v2.js?v=20260915-no-ai-trait-inherit"></script>
 </body>
 </html>

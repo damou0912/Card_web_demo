@@ -1022,10 +1022,22 @@
           const index = game.boardCards.findIndex((item) => item.uid === cardAbove.uid);
           if (index >= 0) {
             game.boardCards.splice(index, 1);
-            cardAbove.destroyedAt = { row, col: position.col };
+            const original = { row, col: position.col };
+            cardAbove.destroyedAt = original;
             const destroyedAttack = cardAbove.currentAttack;
-            coreRunOtherV2DestroyEffects(game, cardAbove, { row, col: position.col }, null, destroyLog);
-            coreEmitV2Event(game, CORE_V2_EVENT.CARD_DESTROYED, { destroyedCard: cardAbove, original: { row, col: position.col }, causeCard: null, log: destroyLog });
+            const ownEffectDefinition = coreCardEffectDefinition(cardAbove);
+            if (typeof ownEffectDefinition?.onDestroy === "function") {
+              ownEffectDefinition.onDestroy(coreCreateCardEffectContext(
+                game,
+                corePlayer(game, cardAbove.ownerId),
+                cardAbove,
+                destroyLog,
+                { original, causeCard: null, destroyedAttack }
+              ));
+            }
+            coreRunOtherV2DestroyEffects(game, cardAbove, original, null, destroyLog);
+            coreEmitV2Event(game, CORE_V2_EVENT.CARD_DESTROYED, { destroyedCard: cardAbove, original, causeCard: null, log: destroyLog });
+            coreEnforceElitePowerBounds(game);
             destroyLog.forEach((entry) => log.push(entry));
           }
         }
@@ -1033,6 +1045,16 @@
       },
       spawnNeutralGuard: (position, attack = 2) => coreSpawnNeutralGuard(game, position, attack),
       addActions: (count = 1) => { game.extraActions = (game.extraActions || 0) + count; },
+      grantNextPlacementExtra: (count = 1) => {
+        if (!player) return 0;
+        const amount = Math.max(0, Math.floor(Number(count) || 0));
+        if (!amount) return Number(player.v2NextPlacementExtraCount) || 0;
+        if (player.v2NextPlacementExtraTurn !== game.turn) player.v2NextPlacementExtraCount = 0;
+        player.v2NextPlacementExtra = card.uid;
+        player.v2NextPlacementExtraTurn = game.turn;
+        player.v2NextPlacementExtraCount = (Number(player.v2NextPlacementExtraCount) || 0) + amount;
+        return player.v2NextPlacementExtraCount;
+      },
       grantExtraMoves: (count = 1) => {
         const amount = Math.max(0, Math.floor(Number(count) || 0));
         if (!amount) return 0;
@@ -1638,8 +1660,8 @@
     card.lastMovedTurn = null;
     card.v2LongMoveUsed = false;
     game.boardCards.push(card);
-    coreApplyV2PlacementSkill(game, corePlayer(game, card.ownerId), card, log);
     coreInvalidateControlCellOnEntry(game, card);
+    coreApplyV2PlacementSkill(game, corePlayer(game, card.ownerId), card, log);
     coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, card.ownerId), card, log });
     return true;
   }
@@ -1649,6 +1671,23 @@
     if (typeof effectDefinition?.onPlace === "function") {
       effectDefinition.onPlace(coreCreateCardEffectContext(game, player, card, log));
     }
+  }
+
+  function corePendingPlacementExtraCount(game, player) {
+    if (!player?.v2NextPlacementExtra) return 0;
+    if (player.v2NextPlacementExtraTurn !== game.turn) {
+      player.v2NextPlacementExtra = null;
+      player.v2NextPlacementExtraTurn = null;
+      player.v2NextPlacementExtraCount = 0;
+      return 0;
+    }
+    return Math.max(1, Math.floor(Number(player.v2NextPlacementExtraCount) || 0));
+  }
+
+  function coreClearPendingPlacementExtra(player) {
+    player.v2NextPlacementExtra = null;
+    player.v2NextPlacementExtraTurn = null;
+    player.v2NextPlacementExtraCount = 0;
   }
 
   function coreTriggerOtherV2PlacementEffects(game, player, placedCard, log) {
@@ -1790,6 +1829,16 @@
     });
   }
 
+  function coreRestoreCombatAttacker(game, attacker, sourcePosition, targetPosition, capturedTarget) {
+    if (!game.boardCards.includes(attacker) || capturedTarget) return false;
+    // A protection or replacement effect may move the attacker elsewhere while
+    // destruction resolves. Only an attacker still occupying the combat cell returns.
+    if (attacker.row !== targetPosition.row || attacker.col !== targetPosition.col) return false;
+    attacker.row = sourcePosition.row;
+    attacker.col = sourcePosition.col;
+    return true;
+  }
+
   function coreResolveSkillAttack(game, attacker, defender, player, log) {
     if (!attacker || !defender || !game.boardCards.includes(attacker) || !game.boardCards.includes(defender) || !coreCanCardsFight(game, attacker, defender)) return;
 
@@ -1797,7 +1846,8 @@
     const attackerDef = coreCardEffectDefinition(attacker);
     if (typeof attackerDef?.onBeforeAttack === "function") {
       attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, attacker, log, {
-        targetCard: defender
+        targetCard: defender,
+        attackKind: "skill"
       }));
     }
 
@@ -1806,7 +1856,8 @@
     const defenderDef = coreCardEffectDefinition(defender);
     if (typeof defenderDef?.onUnderAttack === "function") {
       defenderDef.onUnderAttack(coreCreateCardEffectContext(game, defenderPlayer, defender, log, {
-        attacker
+        attacker,
+        attackKind: "skill"
       }));
     }
 
@@ -1837,10 +1888,13 @@
       defenderDestroyed = coreDestroyV2Card(game, defender, log, attacker);
     }
     coreRunV2CombatEffects(game, attacker, defender, attackerDestroyed, defenderDestroyed, log);
-    if (game.boardCards.includes(attacker) && !(attackerValue > defenderValue && defenderDestroyed)) {
-      attacker.row = sourcePosition.row;
-      attacker.col = sourcePosition.col;
-    }
+    coreRestoreCombatAttacker(
+      game,
+      attacker,
+      sourcePosition,
+      targetPosition,
+      attackerValue > defenderValue && defenderDestroyed
+    );
   }
 
   function coreRunOtherV2DestroyEffects(game, destroyedCard, original, causeCard, log) {
@@ -2148,24 +2202,21 @@
       game.boardCards.push(card);
       game.effectBoardCards = game.boardCards;
       const skillLog = [];
-      const extraPlacementSourceUid = player.v2NextPlacementExtraTurn === game.turn
-        ? player.v2NextPlacementExtra
-        : null;
-      if (player.v2NextPlacementExtra && !extraPlacementSourceUid) {
-        player.v2NextPlacementExtra = null;
-        player.v2NextPlacementExtraTurn = null;
-      }
+      const extraPlacementSourceUid = player.v2NextPlacementExtra;
+      const extraPlacementCount = corePendingPlacementExtraCount(game, player);
+      const consumesPlacementExtras = extraPlacementCount > 0 && extraPlacementSourceUid !== card.uid;
+      if (consumesPlacementExtras) coreClearPendingPlacementExtra(player);
       const originalPlacingPlayerId = card.ownerId;
-      coreApplyV2PlacementSkill(game, player, card, skillLog);
       coreInvalidateControlCellOnEntry(game, card);
-      if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
+      coreApplyV2PlacementSkill(game, player, card, skillLog);
+      if (consumesPlacementExtras) {
         // The marker belongs to this placement even when the original skill removes the card.
-        if (game.boardCards.includes(card)) coreApplyV2PlacementSkill(game, player, card, skillLog);
-        if (player.v2NextPlacementExtra === extraPlacementSourceUid) {
-          player.v2NextPlacementExtra = null;
-          player.v2NextPlacementExtraTurn = null;
+        let resolvedExtraCount = 0;
+        for (let index = 0; index < extraPlacementCount && game.boardCards.includes(card); index += 1) {
+          coreApplyV2PlacementSkill(game, player, card, skillLog);
+          resolvedExtraCount += 1;
         }
-        skillLog.push(`${coreCardName(card)} 的放置技能额外结算 1 次。`);
+        skillLog.push(`${coreCardName(card)} 的放置技能额外结算 ${resolvedExtraCount} 次。`);
       }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, { player: corePlayer(game, originalPlacingPlayerId), card, log: skillLog });
       if (skillLog.length) skillLog.forEach((entry) => coreAppendLog(game, entry));
@@ -2206,13 +2257,19 @@
         // Trigger onBeforeAttack effects on attacker
         const attackerDef = coreCardEffectDefinition(card);
         if (typeof attackerDef?.onBeforeAttack === "function") {
-          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, combatLog, { targetCard: defender }));
+          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, combatLog, {
+            targetCard: defender,
+            attackKind: "active"
+          }));
         }
 
         // Trigger onUnderAttack effects on defender
         const defenderDef = coreCardEffectDefinition(defender);
         if (typeof defenderDef?.onUnderAttack === "function") {
-          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, combatLog, { attacker: card }));
+          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, combatLog, {
+            attacker: card,
+            attackKind: "active"
+          }));
         }
 
         const attackerValue = Number(card.currentAttack ?? card.attack) || 0;
@@ -2236,10 +2293,7 @@
           coreAppendLog(game, `${coreCardName(card)} 与 ${coreCardName(defender)} 同归于尽。`);
         }
         coreRunV2CombatEffects(game, card, defender, attackerDestroyed, defenderDestroyed, combatLog);
-        if (game.boardCards.includes(card) && !(outcome === "a" && defenderDestroyed)) {
-          card.row = sourcePosition.row;
-          card.col = sourcePosition.col;
-        }
+        coreRestoreCombatAttacker(game, card, sourcePosition, targetPosition, outcome === "a" && defenderDestroyed);
         combatLog.forEach((entry) => coreAppendLog(game, entry));
         game.effectBoardCards = null;
         await finishCombatAnimation(game, combatScene, game.boardCards);
@@ -2318,6 +2372,7 @@
     coreEnforceElitePowerBounds(game);
     active.v2NextPlacementExtra = null;
     active.v2NextPlacementExtraTurn = null;
+    active.v2NextPlacementExtraCount = 0;
     game.extraActions = 0;
   }
 
@@ -2693,21 +2748,16 @@
       card.hasPlaced = false;
       game.boardCards.push(card);
       game.effectBoardCards = game.boardCards;
-      const extraPlacementSourceUid = player.v2NextPlacementExtraTurn === game.turn
-        ? player.v2NextPlacementExtra
-        : null;
-      if (player.v2NextPlacementExtra && !extraPlacementSourceUid) {
-        player.v2NextPlacementExtra = null;
-        player.v2NextPlacementExtraTurn = null;
-      }
+      const extraPlacementSourceUid = player.v2NextPlacementExtra;
+      const extraPlacementCount = corePendingPlacementExtraCount(game, player);
+      const consumesPlacementExtras = extraPlacementCount > 0 && extraPlacementSourceUid !== card.uid;
+      if (consumesPlacementExtras) coreClearPendingPlacementExtra(player);
       const originalPlacingPlayerId = card.ownerId;
-      coreApplyV2PlacementSkill(game, player, card, log);
       coreInvalidateControlCellOnEntry(game, card);
-      if (extraPlacementSourceUid && extraPlacementSourceUid !== card.uid) {
-        if (game.boardCards.includes(card)) coreApplyV2PlacementSkill(game, player, card, log);
-        if (player.v2NextPlacementExtra === extraPlacementSourceUid) {
-          player.v2NextPlacementExtra = null;
-          player.v2NextPlacementExtraTurn = null;
+      coreApplyV2PlacementSkill(game, player, card, log);
+      if (consumesPlacementExtras) {
+        for (let index = 0; index < extraPlacementCount && game.boardCards.includes(card); index += 1) {
+          coreApplyV2PlacementSkill(game, player, card, log);
         }
       }
       coreEmitV2Event(game, CORE_V2_EVENT.CARD_PLACED, {
@@ -2737,11 +2787,17 @@
         card.col = targetPosition.col;
         const attackerDef = coreCardEffectDefinition(card);
         if (typeof attackerDef?.onBeforeAttack === "function") {
-          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, log, { targetCard: defender }));
+          attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, card, log, {
+            targetCard: defender,
+            attackKind: "active"
+          }));
         }
         const defenderDef = coreCardEffectDefinition(defender);
         if (typeof defenderDef?.onUnderAttack === "function") {
-          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, log, { attacker: card }));
+          defenderDef.onUnderAttack(coreCreateCardEffectContext(game, corePlayer(game, defender.ownerId), defender, log, {
+            attacker: card,
+            attackKind: "active"
+          }));
         }
         const attackerValue = Number(card.currentAttack ?? card.attack) || 0;
         const defenderValue = Number(defender.currentAttack ?? defender.attack) || 0;
@@ -2761,10 +2817,7 @@
           defenderDestroyed = coreDestroyV2Card(game, defender, log, card);
         }
         coreRunV2CombatEffects(game, card, defender, attackerDestroyed, defenderDestroyed, log);
-        if (game.boardCards.includes(card) && !(outcome === "a" && defenderDestroyed)) {
-          card.row = sourcePosition.row;
-          card.col = sourcePosition.col;
-        }
+        coreRestoreCombatAttacker(game, card, sourcePosition, targetPosition, outcome === "a" && defenderDestroyed);
         game.effectBoardCards = null;
       }
     } else {

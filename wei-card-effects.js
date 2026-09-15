@@ -104,8 +104,7 @@
 
   wei["02212"] = {
     onTurnStart(ctx) {
-      ctx.player.v2NextPlacementExtra = ctx.card.uid;
-      ctx.player.v2NextPlacementExtraTurn = ctx.game.turn;
+      ctx.grantNextPlacementExtra(1);
       ctx.log("回合开始时，使本回合下一张友军的放置技能额外结算1次。");
     }
   };
@@ -151,7 +150,6 @@
   };
 
   wei["02315"] = {
-    flags: { preventReduction: true },
     onPlace(ctx) {
       ctx.card.v2PowerGainWatchTurn = ctx.game.turn;
       ctx.log("本回合我方卡牌增加战力时，其战力永久+1。");
@@ -292,6 +290,7 @@
 
   wei["02328"] = {
     onBeforeAttack(ctx) {
+      if (ctx.attackKind !== "active") return;
       ctx.adjust(ctx.card, 2, true);
       ctx.log("主动攻击时自身本回合战力+2。");
     },

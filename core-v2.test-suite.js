@@ -1,7 +1,7 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsGauntlet, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSimulateActionOutcome, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, coreBuildGauntletAiOption, coreGauntletCardCount, coreGauntletDifficultyInfo, coreGrantGauntletReward, corePickGauntletPlayerOptions, corePickGauntletAiOptions, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsGauntlet, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSimulateActionOutcome, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, coreBuildGauntletAiOption, coreGauntletCardCount, coreGauntletDifficultyInfo, coreGrantGauntletReward, coreReplaceGauntletRewardCard, coreAbandonGauntletReward, corePickGauntletPlayerOptions, corePickGauntletAiOptions, CORE_GAUNTLET_MAX_DECK_SIZE, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
     const previousGauntlet = state.gauntlet;
@@ -261,6 +261,129 @@
       check("过关斩将失败不发放卡牌", coreGrantGauntletReward(losingGame) === null
         && state.gauntlet.playerDeckCardIds.length === playerGauntletOption.cardIds.length
         && !losingGame.gauntletRewardGranted);
+
+      const fullDeckIds = window.CARD_LIBRARY.cardSlots
+        .filter((card) => card.camp === playerGauntletOption.campKey)
+        .slice(0, CORE_GAUNTLET_MAX_DECK_SIZE)
+        .map((card) => String(card.id));
+      const fullDeckAiOption = coreBuildGauntletAiOption(rewardCamp, 5, fullDeckIds);
+      const fullDeckRewardGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: fullDeckAiOption.campKey },
+        5,
+        1,
+        fullDeckAiOption.level,
+        null,
+        null,
+        { 1: fullDeckIds, 2: fullDeckAiOption.cardIds }
+      );
+      fullDeckRewardGame.gauntletRewardCardId = fullDeckAiOption.rewardCardId;
+      fullDeckRewardGame.winner = { playerId: 1, text: "玩家 1 获胜" };
+      state.gauntlet = {
+        playerOptions: [],
+        selectedPlayerOption: { campKey: playerGauntletOption.campKey, cardIds: [...fullDeckIds] },
+        playerDeckCardIds: [...fullDeckIds],
+        aiOptions: [fullDeckAiOption],
+        selectedAiOption: fullDeckAiOption,
+        pendingReward: null,
+        lastReward: null
+      };
+      const pendingFullDeckReward = coreGrantGauntletReward(fullDeckRewardGame);
+      const pendingFullDeckRewardAgain = coreGrantGauntletReward(fullDeckRewardGame);
+      check("过关斩将卡组满20张时奖励等待替换且不会直接超出上限", pendingFullDeckReward?.cardId === fullDeckAiOption.rewardCardId
+        && pendingFullDeckReward?.pendingReplacement
+        && pendingFullDeckRewardAgain === pendingFullDeckReward
+        && fullDeckRewardGame.gauntletRewardPendingReplacement
+        && !fullDeckRewardGame.gauntletRewardGranted
+        && state.gauntlet.pendingReward === pendingFullDeckReward
+        && state.gauntlet.playerDeckCardIds.length === CORE_GAUNTLET_MAX_DECK_SIZE);
+
+      const removedCardId = fullDeckIds[0];
+      const invalidReplacementRejected = coreReplaceGauntletRewardCard(fullDeckRewardGame, "missing-card") === null;
+      const replacedFullDeckReward = coreReplaceGauntletRewardCard(fullDeckRewardGame, removedCardId);
+      const deckAfterReplacement = [...state.gauntlet.playerDeckCardIds];
+      const replacedFullDeckRewardAgain = coreReplaceGauntletRewardCard(fullDeckRewardGame, fullDeckIds[1]);
+      check("过关斩将满卡组一换一后保持20张且重复替换无效", invalidReplacementRejected
+        && replacedFullDeckReward?.replacedCardId === removedCardId
+        && replacedFullDeckReward?.replacedCardName === cardSlotById(removedCardId)?.name
+        && replacedFullDeckRewardAgain === replacedFullDeckReward
+        && !fullDeckRewardGame.gauntletRewardPendingReplacement
+        && fullDeckRewardGame.gauntletRewardGranted
+        && state.gauntlet.pendingReward === null
+        && state.gauntlet.lastReward === replacedFullDeckReward
+        && state.gauntlet.playerDeckCardIds.length === CORE_GAUNTLET_MAX_DECK_SIZE
+        && !state.gauntlet.playerDeckCardIds.includes(removedCardId)
+        && state.gauntlet.playerDeckCardIds.includes(fullDeckAiOption.rewardCardId)
+        && JSON.stringify(state.gauntlet.playerDeckCardIds) === JSON.stringify(deckAfterReplacement)
+        && JSON.stringify(state.gauntlet.selectedPlayerOption.cardIds) === JSON.stringify(deckAfterReplacement));
+
+      const abandonRewardGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: fullDeckAiOption.campKey },
+        5,
+        1,
+        fullDeckAiOption.level,
+        null,
+        null,
+        { 1: fullDeckIds, 2: fullDeckAiOption.cardIds }
+      );
+      abandonRewardGame.gauntletRewardCardId = fullDeckAiOption.rewardCardId;
+      abandonRewardGame.winner = { playerId: 1, text: "玩家 1 获胜" };
+      state.gauntlet = {
+        playerOptions: [],
+        selectedPlayerOption: { campKey: playerGauntletOption.campKey, cardIds: [...fullDeckIds] },
+        playerDeckCardIds: [...fullDeckIds],
+        aiOptions: [fullDeckAiOption],
+        selectedAiOption: fullDeckAiOption,
+        pendingReward: null,
+        lastReward: null
+      };
+      const pendingAbandonReward = coreGrantGauntletReward(abandonRewardGame);
+      const deckBeforeAbandon = [...state.gauntlet.playerDeckCardIds];
+      const abandonedReward = coreAbandonGauntletReward(abandonRewardGame);
+      const grantAfterAbandon = coreGrantGauntletReward(abandonRewardGame);
+      const abandonedAgain = coreAbandonGauntletReward(abandonRewardGame);
+      check("过关斩将满卡组可放弃奖励且重复结算不会重新发放", pendingAbandonReward?.pendingReplacement
+        && abandonedReward?.abandoned
+        && abandonedAgain === abandonedReward
+        && grantAfterAbandon === abandonedReward
+        && abandonRewardGame.gauntletRewardAbandoned
+        && abandonRewardGame.gauntletRewardResolved
+        && !abandonRewardGame.gauntletRewardPendingReplacement
+        && !abandonRewardGame.gauntletRewardGranted
+        && state.gauntlet.pendingReward === null
+        && state.gauntlet.lastReward === null
+        && JSON.stringify(state.gauntlet.playerDeckCardIds) === JSON.stringify(deckBeforeAbandon)
+        && JSON.stringify(state.gauntlet.selectedPlayerOption.cardIds) === JSON.stringify(deckBeforeAbandon));
+
+      let oversizedGauntletDeckRejected = false;
+      try {
+        coreCreateGame(
+          "pve-gauntlet",
+          { 1: playerGauntletOption.campKey, 2: fullDeckAiOption.campKey },
+          5,
+          1,
+          fullDeckAiOption.level,
+          null,
+          null,
+          { 1: window.CARD_LIBRARY.cardSlots.slice(0, CORE_GAUNTLET_MAX_DECK_SIZE + 1).map((card) => String(card.id)), 2: fullDeckAiOption.cardIds }
+        );
+      } catch (error) {
+        oversizedGauntletDeckRejected = error instanceof RangeError;
+      }
+      const cappedNextGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: fullDeckAiOption.campKey },
+        5,
+        1,
+        fullDeckAiOption.level,
+        null,
+        null,
+        { 1: state.gauntlet.playerDeckCardIds, 2: fullDeckAiOption.cardIds }
+      );
+      check("过关斩将拒绝超过20张的玩家卡组并允许替换后的卡组继续对局", CORE_GAUNTLET_MAX_DECK_SIZE === 20
+        && oversizedGauntletDeckRejected
+        && cappedNextGame.players[0].deckCatalog.length === CORE_GAUNTLET_MAX_DECK_SIZE);
       const challengePlansValid = JSON.stringify(coreChallengeTraitPlan(1)) === JSON.stringify(["beginner"])
         && JSON.stringify(coreChallengeTraitPlan(2)) === JSON.stringify(["intermediate"])
         && JSON.stringify(coreChallengeTraitPlan(3)) === JSON.stringify(["advanced"])

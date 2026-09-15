@@ -226,6 +226,7 @@ const state = {
     playerDeckCardIds: [],
     aiOptions: [],
     selectedAiOption: null,
+    pendingReward: null,
     lastReward: null
   }
 };
@@ -1295,6 +1296,25 @@ function getCardTierLabel(card) {
   return `${getCardQuality(card)}卡`;
 }
 
+function gauntletReplacementChoicesMarkup(cardIds) {
+  const choices = (cardIds || []).map((cardId) => {
+    const details = getModifyDeckCardDetails(cardId);
+    return `
+      <button class="gauntlet-replace-card-btn" type="button" data-card-id="${escapeModifyDeckMarkup(cardId)}">
+        <span><strong>${escapeModifyDeckMarkup(details.name)}</strong><small>${escapeModifyDeckMarkup(details.camp)} · <span class="rarity-tone" data-rarity="${escapeModifyDeckMarkup(details.rarity)}">${escapeModifyDeckMarkup(details.rarity)}</span></small></span>
+        <span class="gauntlet-replace-attack">${details.baseAttack} 战力</span>
+      </button>
+    `;
+  }).join("");
+  return `
+    <div class="gauntlet-replacement-block">
+      <div class="gauntlet-replacement-heading"><strong>卡组已达 20 张上限</strong><span>选择 1 张现有卡牌替换，才能获得本局奖励。</span></div>
+      <div class="gauntlet-replacement-actions"><button class="secondary-btn gauntlet-abandon-reward-btn" type="button">放弃本次奖励</button></div>
+      <div class="gauntlet-replacement-list" aria-label="选择要替换的卡牌">${choices}</div>
+    </div>
+  `;
+}
+
 function getCardAttackText(card, game = null) {
   const currentValue = resolveAttackValue(game, card);
   const baseValue = getCardBaseAttack(card);
@@ -1351,6 +1371,16 @@ function renderResult(game) {
   ui.winnerControlSummary.textContent = `最终占领：${displayName(playerOne)} ${scoreOne} 格 · ${displayName(playerTwo)} ${scoreTwo} 格`;
   if (ui.gauntletRewardResult) {
     const reward = game.gauntletReward;
+    const pendingReplacement = Boolean(reward && game.gauntletRewardPendingReplacement);
+    const deckLimit = Number(reward?.deckLimit) || 20;
+    const deckCount = state.gauntlet.playerDeckCardIds.length;
+    const rewardStatus = pendingReplacement
+      ? `奖励待加入 · 当前 ${deckCount}/${deckLimit} 张`
+      : reward?.abandoned
+        ? `已放弃本次奖励 · 当前 ${deckCount}/${deckLimit} 张`
+        : reward?.replacedCardName
+        ? `已替换 ${escapeModifyDeckMarkup(reward.replacedCardName)} · 当前 ${deckCount}/${deckLimit} 张`
+        : `已加入当前卡组 · 现有 ${deckCount}/${deckLimit} 张`;
     ui.gauntletRewardResult.hidden = !reward;
     ui.gauntletRewardResult.innerHTML = reward ? `
       <span class="gauntlet-reward-label">胜利奖励 · ${escapeModifyDeckMarkup(reward.difficulty)}</span>
@@ -1359,8 +1389,24 @@ function renderResult(game) {
         <span class="gauntlet-reward-attack"><strong>${reward.attack}</strong><small>战力</small></span>
       </div>
       <p><strong>${escapeModifyDeckMarkup(reward.skill)}</strong> · ${escapeModifyDeckMarkup(reward.effect)}</p>
-      <span class="gauntlet-reward-total">已加入当前卡组 · 现有 ${state.gauntlet.playerDeckCardIds.length} 张卡</span>
+      <span class="gauntlet-reward-total">${rewardStatus}</span>
+      ${pendingReplacement ? gauntletReplacementChoicesMarkup(state.gauntlet.playerDeckCardIds) : ""}
     ` : "";
+    if (pendingReplacement) {
+      ui.gauntletRewardResult.querySelectorAll(".gauntlet-replace-card-btn").forEach((button) => {
+        bindModifyDeckSkillTooltip(button, button.dataset.cardId);
+        button.addEventListener("click", () => {
+          hideModifyDeckSkillTooltip();
+          const replacedReward = window.replaceGauntletRewardCard?.(game, button.dataset.cardId);
+          if (replacedReward) renderResult(game);
+        });
+      });
+      ui.gauntletRewardResult.querySelector(".gauntlet-abandon-reward-btn")?.addEventListener("click", () => {
+        hideModifyDeckSkillTooltip();
+        const abandonedReward = window.abandonGauntletReward?.(game);
+        if (abandonedReward) renderResult(game);
+      });
+    }
   }
   ui.deckSummaryPlayer1.textContent = summarizeDeck(game.players[0].deckCatalog, game.players[0].deckKey);
   ui.deckSummaryPlayer2.textContent = summarizeDeck(game.players[1].deckCatalog, game.players[1].deckKey);
@@ -1447,6 +1493,7 @@ function resetToMenu() {
   state.gauntlet.playerDeckCardIds = [];
   state.gauntlet.aiOptions = [];
   state.gauntlet.selectedAiOption = null;
+  state.gauntlet.pendingReward = null;
   state.gauntlet.lastReward = null;
   switchScreen("menu");
 }
@@ -2140,6 +2187,7 @@ function bindEvents() {
     if (event.target === ui.modifyDeckModal) closeModifyDeck();
   });
   ui.modifyDeckModal?.addEventListener("scroll", refreshModifyDeckSkillTooltipPosition, true);
+  window.addEventListener?.("scroll", refreshModifyDeckSkillTooltipPosition, true);
   window.addEventListener?.("resize", refreshModifyDeckSkillTooltipPosition);
   ui.modifyDeckSaveBtn?.addEventListener("click", saveModifiedDeck);
   ui.modifyDeckResetBtn?.addEventListener("click", resetModifiedDeck);
@@ -2221,13 +2269,10 @@ function bindEvents() {
     button.addEventListener("click", async () => {
       const challengeType = button.dataset.challengeType;
       if (challengeType === "gauntlet") {
-        state.selectedMode = "pve-gauntlet";
-        await loadCustomDecksForCurrentUser();
-        window.startRandomGame?.("pve-gauntlet");
+        showToast("过关斩将建设中", "该模式暂未开放，请先选择挑战模式。", 4200);
         return;
       }
       if (challengeType !== "challenge") {
-        showToast("过关斩将尚未开放", "该挑战路线正在施工中，请先选择挑战模式。", 4200);
         return;
       }
       state.selectedMode = "pve-challenge";
@@ -2269,6 +2314,7 @@ function bindEvents() {
       state.gauntlet.playerDeckCardIds = [];
       state.gauntlet.aiOptions = [];
       state.gauntlet.selectedAiOption = null;
+      state.gauntlet.pendingReward = null;
       state.gauntlet.lastReward = null;
     }
     await loadCustomDecksForCurrentUser();

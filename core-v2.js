@@ -11,6 +11,7 @@
   const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260909";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
   const CORE_GAUNTLET_MODE = "pve-gauntlet";
+  const CORE_GAUNTLET_MAX_DECK_SIZE = 20;
   const CORE_GAUNTLET_DIFFICULTIES = Object.freeze([
     { level: 1, name: "试探", offset: -1, powerLabel: "约 80% 强度", rarityWeights: { "普通": 0.75, "稀有": 0.25 }, rewardWeights: { "普通": 1 } },
     { level: 2, name: "普通", offset: 0, powerLabel: "标准强度", rarityWeights: { "普通": 0.65, "稀有": 0.25, "特殊": 0.1 }, rewardWeights: { "普通": 0.65, "稀有": 0.35 } },
@@ -19,7 +20,7 @@
     { level: 5, name: "首领", offset: 3, powerLabel: "约 140% 强度", rarityWeights: { "普通": 0.3, "稀有": 0.3, "特殊": 0.15, "史诗": 0.15, "传说": 0.1 }, rewardWeights: { "史诗": 0.35, "特殊": 0.25, "传说": 0.4 } }
   ]);
   const CORE_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online", "card-test"]);
-  const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online"]);
+  const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", "online"]);
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
   let coreRuntimeReady = true;
@@ -415,17 +416,14 @@
 
   function coreGrantGauntletReward(game) {
     if (!coreIsGauntlet(game) || Number(game?.winner?.playerId) !== 1) return null;
-    if (game.gauntletRewardGranted) return game.gauntletReward || null;
+    if (game.gauntletRewardResolved || game.gauntletRewardGranted || game.gauntletRewardPendingReplacement) return game.gauntletReward || null;
     const ai = corePlayer(game, 2);
     const rewardCardId = String(game.gauntletRewardCardId || "");
     const rewardCard = ai?.deckCatalog?.find((card) => String(card.id) === rewardCardId);
     if (!rewardCard) return null;
     const playerDeckIds = state.gauntlet.playerDeckCardIds ||= [...(state.gauntlet.selectedPlayerOption?.cardIds || [])].map(String);
-    if (playerDeckIds.includes(rewardCardId)) return null;
-    playerDeckIds.push(rewardCardId);
-    if (state.gauntlet.selectedPlayerOption) state.gauntlet.selectedPlayerOption.cardIds = [...playerDeckIds];
+    if (playerDeckIds.length > CORE_GAUNTLET_MAX_DECK_SIZE || playerDeckIds.includes(rewardCardId)) return null;
     const display = coreCardDisplay(rewardCardId);
-    game.gauntletRewardGranted = true;
     game.gauntletReward = {
       cardId: rewardCardId,
       name: display.name,
@@ -434,9 +432,64 @@
       skill: display.skill,
       effect: display.effect,
       attack: coreCardBaseAttack(rewardCardId),
-      difficulty: coreGauntletDifficultyInfo(game.gauntletDifficulty).name
+      difficulty: coreGauntletDifficultyInfo(game.gauntletDifficulty).name,
+      deckLimit: CORE_GAUNTLET_MAX_DECK_SIZE,
+      pendingReplacement: playerDeckIds.length >= CORE_GAUNTLET_MAX_DECK_SIZE
     };
+    if (game.gauntletReward.pendingReplacement) {
+      game.gauntletRewardPendingReplacement = true;
+      state.gauntlet.pendingReward = game.gauntletReward;
+      return game.gauntletReward;
+    }
+    playerDeckIds.push(rewardCardId);
+    if (state.gauntlet.selectedPlayerOption) state.gauntlet.selectedPlayerOption.cardIds = [...playerDeckIds];
+    game.gauntletRewardGranted = true;
+    game.gauntletRewardResolved = true;
+    state.gauntlet.pendingReward = null;
     state.gauntlet.lastReward = game.gauntletReward;
+    return game.gauntletReward;
+  }
+
+  function coreReplaceGauntletRewardCard(game, replacedCardId) {
+    if (!coreIsGauntlet(game) || Number(game?.winner?.playerId) !== 1) return null;
+    if (game.gauntletRewardGranted) return game.gauntletReward || null;
+    if (!game.gauntletRewardPendingReplacement || !game.gauntletReward) return null;
+    const playerDeckIds = state.gauntlet.playerDeckCardIds;
+    if (!Array.isArray(playerDeckIds) || playerDeckIds.length !== CORE_GAUNTLET_MAX_DECK_SIZE) return null;
+    const rewardCardId = String(game.gauntletReward.cardId || "");
+    const removedCardId = String(replacedCardId || "");
+    const replaceIndex = playerDeckIds.indexOf(removedCardId);
+    if (replaceIndex < 0 || !rewardCardId || playerDeckIds.includes(rewardCardId)) return null;
+    const removedDisplay = coreCardDisplay(removedCardId);
+    playerDeckIds.splice(replaceIndex, 1, rewardCardId);
+    if (state.gauntlet.selectedPlayerOption) state.gauntlet.selectedPlayerOption.cardIds = [...playerDeckIds];
+    game.gauntletRewardPendingReplacement = false;
+    game.gauntletRewardGranted = true;
+    game.gauntletRewardResolved = true;
+    game.gauntletReward = {
+      ...game.gauntletReward,
+      pendingReplacement: false,
+      replacedCardId: removedCardId,
+      replacedCardName: removedDisplay.name
+    };
+    state.gauntlet.pendingReward = null;
+    state.gauntlet.lastReward = game.gauntletReward;
+    return game.gauntletReward;
+  }
+
+  function coreAbandonGauntletReward(game) {
+    if (!coreIsGauntlet(game) || Number(game?.winner?.playerId) !== 1) return null;
+    if (game.gauntletRewardAbandoned) return game.gauntletReward || null;
+    if (game.gauntletRewardResolved || !game.gauntletRewardPendingReplacement || !game.gauntletReward) return null;
+    game.gauntletRewardPendingReplacement = false;
+    game.gauntletRewardAbandoned = true;
+    game.gauntletRewardResolved = true;
+    game.gauntletReward = {
+      ...game.gauntletReward,
+      pendingReplacement: false,
+      abandoned: true
+    };
+    state.gauntlet.pendingReward = null;
     return game.gauntletReward;
   }
 
@@ -1079,6 +1132,9 @@
       : gauntletMode ? selectedDeckCardIds?.[1]
         : coreIsPveMode(mode) ? getConfiguredDeckCardIds(selectedDecks[1]) : null;
     const playerTwoCardIds = mode === "online" || gauntletMode ? selectedDeckCardIds?.[2] : null;
+    if (gauntletMode && Array.isArray(playerOneCardIds) && playerOneCardIds.length > CORE_GAUNTLET_MAX_DECK_SIZE) {
+      throw new RangeError(`过关斩将玩家卡组最多 ${CORE_GAUNTLET_MAX_DECK_SIZE} 张。`);
+    }
     const playerOneCatalog = gauntletMode
       ? buildCardCatalogFromIds(selectedDecks[1], playerOneCardIds, true)
       : buildCampDeck(selectedDecks[1], playerOneCardIds);
@@ -3682,6 +3738,7 @@
     state.gauntlet.playerDeckCardIds = [];
     state.gauntlet.aiOptions = [];
     state.gauntlet.selectedAiOption = null;
+    state.gauntlet.pendingReward = null;
     state.gauntlet.lastReward = null;
     const optionMarkup = options.map((option, index) => `
       <button class="gauntlet-choice-btn gauntlet-player-choice" type="button" data-choice-index="${index}">
@@ -3956,12 +4013,12 @@
     cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
     coreAddCardsToDrawPile, coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits, corePickChallengeRewardTraits,
-    coreIsGauntlet, coreGauntletDifficultyInfo, coreGauntletCardCount, corePickGauntletPlayerOptions, corePickGauntletAiOptions, coreBuildGauntletAiOption, coreGrantGauntletReward,
+    coreIsGauntlet, coreGauntletDifficultyInfo, coreGauntletCardCount, corePickGauntletPlayerOptions, corePickGauntletAiOptions, coreBuildGauntletAiOption, coreGrantGauntletReward, coreReplaceGauntletRewardCard, coreAbandonGauntletReward,
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
     coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
     coreVictoryTarget, coreCheckAiSurrender, coreCalculatePositionAdvantage, coreEvaluateCardEffectRisk, coreSimulateActionOutcome, coreIsActionBeneficial,
-    CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
+    CORE_GAUNTLET_MAX_DECK_SIZE, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state
   });
   window.render = coreRender;
   window.renderBoard = coreRenderBoard;
@@ -3978,8 +4035,12 @@
       showToast("卡牌数据不可用", "请刷新页面以加载当前版本的卡牌数据与技能文件。");
       return false;
     }
+    if (mode === CORE_GAUNTLET_MODE) {
+      showToast("过关斩将建设中", "该模式暂未开放，请先选择 PVE 挑战或其他可用模式。");
+      return false;
+    }
     if (!CORE_PRODUCT_GAME_MODES.has(mode)) {
-      showToast("模式不可用", "请选择 PVE、PVE 挑战、过关斩将或联网对战。");
+      showToast("模式不可用", "请选择 PVE、PVE 挑战或联网对战。");
       return false;
     }
     state.selectedMode = mode;
@@ -3990,6 +4051,7 @@
       state.gauntlet.playerDeckCardIds = [];
       state.gauntlet.aiOptions = [];
       state.gauntlet.selectedAiOption = null;
+      state.gauntlet.pendingReward = null;
       state.gauntlet.lastReward = null;
     }
     state.game = null;
@@ -3999,6 +4061,8 @@
   window.beginGame = coreBeginGame;
   window.beginNextChallengeLevel = coreBeginNextChallengeLevel;
   window.grantGauntletReward = coreGrantGauntletReward;
+  window.replaceGauntletRewardCard = coreReplaceGauntletRewardCard;
+  window.abandonGauntletReward = coreAbandonGauntletReward;
   window.showChallengeRewardSelection = (rewardChoices) => {
     state.pendingChallengeRewardChoices = rewardChoices || [];
     const modal = ui.challengeRewardModal;

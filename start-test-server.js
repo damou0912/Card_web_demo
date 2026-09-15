@@ -3,8 +3,14 @@ const fs = require('fs');
 const path = require('path');
 
 http.createServer((req, res) => {
-  let url = req.url === '/' ? '/index.html' : req.url;
-  let file = path.join(__dirname, url);
+  let url = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (url === '/') url = '/index.html';
+  let file = path.resolve(__dirname, `.${url}`);
+  if (!file.startsWith(__dirname)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
   
   fs.readFile(file, (err, data) => {
     if (err) {

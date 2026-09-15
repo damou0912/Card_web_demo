@@ -609,6 +609,94 @@ body {
   font-size: 10px;
 }
 
+.gauntlet-replacement-block {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.gauntlet-replacement-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.gauntlet-replacement-heading strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.gauntlet-replacement-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gauntlet-replacement-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.gauntlet-abandon-reward-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
+}
+
+.gauntlet-replacement-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  max-height: 390px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+}
+
+.gauntlet-replace-card-btn {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gauntlet-replace-card-btn:hover,
+.gauntlet-replace-card-btn:focus-visible {
+  outline: none;
+  background: rgba(88, 121, 133, 0.09);
+}
+
+.gauntlet-replace-card-btn > span:first-child {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gauntlet-replace-card-btn strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gauntlet-replace-card-btn small,
+.gauntlet-replace-attack {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.gauntlet-replace-attack {
+  flex: 0 0 auto;
+  font-weight: 800;
+}
+
 @media (max-width: 720px) {
   .gauntlet-choice-grid {
     grid-template-columns: 1fr;
@@ -616,6 +704,18 @@ body {
 
   .gauntlet-choice-btn {
     min-height: 0;
+  }
+
+  .gauntlet-replacement-list {
+    grid-template-columns: 1fr;
+  }
+
+  .gauntlet-replacement-actions {
+    justify-content: stretch;
+  }
+
+  .gauntlet-abandon-reward-btn {
+    width: 100%;
   }
 }
 
@@ -703,8 +803,9 @@ h1 {
 
 .challenge-type-btn {
   display: grid;
-  gap: 8px;
-  min-height: 112px;
+  align-content: start;
+  gap: 14px;
+  min-height: 190px;
   padding: 20px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
@@ -713,14 +814,26 @@ h1 {
   text-align: left;
 }
 
-.challenge-type-btn strong {
+.challenge-type-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.challenge-type-heading strong {
   font-size: 22px;
 }
 
-.challenge-type-btn small {
+.challenge-type-heading small {
   color: var(--blue);
   font-size: 12px;
   font-weight: 800;
+}
+
+.challenge-type-description {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.75;
 }
 
 .challenge-type-btn:hover:not(:disabled),
@@ -729,7 +842,7 @@ h1 {
   background: var(--accent-soft);
 }
 
-.challenge-type-btn[data-challenge-type="gauntlet"] small {
+.challenge-type-btn[data-challenge-type="gauntlet"] .challenge-type-heading small {
   color: var(--blue);
 }
 

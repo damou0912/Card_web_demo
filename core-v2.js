@@ -7,8 +7,8 @@
   const CORE_TURN_TIME_LIMIT_SECONDS = 300;
   const CORE_TURN_TIME_LIMIT_MS = CORE_TURN_TIME_LIMIT_SECONDS * 1000;
   const CORE_TIMER_TICK_MS = 250;
-  const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
-  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260909";
+  const CORE_CARD_DATA_VERSION = "card-info-v2-wu-replacements-20260915";
+  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-wu-replacements-20260915";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
   const CORE_GAUNTLET_MODE = "pve-gauntlet";
   const CORE_GAUNTLET_MAX_DECK_SIZE = 20;
@@ -792,6 +792,15 @@
     return true;
   }
 
+  function coreHasFirstFriendlyMoveFree(game, player, card) {
+    return Boolean(game && player && card
+      && player.id === game.activePlayerId
+      && card.ownerId === player.id
+      && game.boardCards?.includes(card)
+      && player.v2FirstFriendlyMoveFreeTurn === game.turn
+      && player.v2FirstFriendlyMoveFreeUsedTurn !== game.turn);
+  }
+
   function coreFirstFriendlyPlacementFreeSource(game, player, card) {
     if (!game || !player || !card || !player.hand?.includes(card)) return null;
     return game.boardCards.find((source) => (
@@ -813,13 +822,19 @@
     const activePlayer = corePlayer(game, game.activePlayerId);
     const traitFreeAction = coreEliteAiRuleAny(game, "freeAction", { player: activePlayer, card });
     const freePlacement = coreFirstFriendlyPlacementFreeSource(game, activePlayer, card);
-    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card) || Boolean(freePlacement) || traitFreeAction;
+    const firstFriendlyMoveFree = coreHasFirstFriendlyMoveFree(game, activePlayer, card);
+    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card)
+      || firstFriendlyMoveFree || Boolean(freePlacement) || traitFreeAction;
   }
 
   function coreConsumeResolvedAction(game, player, card, action, freePlacementSource = null) {
     const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
-    const cardEffectFreeAction = action.type === "place" ? Boolean(freePlacementSource) : coreHasFreeAction(game, card);
+    const firstFriendlyMoveFree = action.type === "move" && coreHasFirstFriendlyMoveFree(game, player, card);
+    const cardEffectFreeAction = action.type === "place"
+      ? Boolean(freePlacementSource)
+      : coreHasFreeAction(game, card) || firstFriendlyMoveFree;
     const consumesAction = traitConsumesAction && !cardEffectFreeAction;
+    if (firstFriendlyMoveFree) player.v2FirstFriendlyMoveFreeUsedTurn = game.turn;
     if (consumesAction) {
       game.actionsUsed = (Number(game.actionsUsed) || 0) + 1;
     } else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
@@ -940,6 +955,7 @@
         return true;
       },
       setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
+      setPermanentAttack: (target, value) => coreSetPermanentAttack(game, target, value),
       draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
       addToDrawPile: (targetPlayer, cards) => coreAddCardsToDrawPile(game, targetPlayer, cards, log),
       drawFromEnemyDeck: (count = 1) => coreDrawFromEnemyDeck(game, card.ownerId, count, log),
@@ -967,6 +983,25 @@
         const leftPosition = { row: left.row, col: left.col };
         left.row = right.row; left.col = right.col;
         right.row = leftPosition.row; right.col = leftPosition.col;
+      },
+      moveTo: (target, position, detail = "技能移动") => {
+        if (!target || !position || !game.boardCards.includes(target)
+          || !coreIsInsideBoard(position.row, position.col, game)
+          || isBrokenCell(game, position.row, position.col)
+          || game.boardCards.some((item) => item.uid !== target.uid && item.row === position.row && item.col === position.col)) {
+          return false;
+        }
+        const source = { row: target.row, col: target.col };
+        target.row = position.row;
+        target.col = position.col;
+        coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, {
+          card: target,
+          source,
+          target: { row: target.row, col: target.col },
+          visual: "skill-move",
+          detail
+        });
+        return true;
       },
       emitMoved: (moved, source, target) => coreEmitV2Event(game, CORE_V2_EVENT.CARD_MOVED, {
         card: moved,
@@ -1045,6 +1080,14 @@
       },
       spawnNeutralGuard: (position, attack = 2) => coreSpawnNeutralGuard(game, position, attack),
       addActions: (count = 1) => { game.extraActions = (game.extraActions || 0) + count; },
+      grantFirstFriendlyMoveFree: () => {
+        if (!player) return false;
+        if (player.v2FirstFriendlyMoveFreeTurn !== game.turn) {
+          player.v2FirstFriendlyMoveFreeTurn = game.turn;
+          player.v2FirstFriendlyMoveFreeUsedTurn = null;
+        }
+        return player.v2FirstFriendlyMoveFreeUsedTurn !== game.turn;
+      },
       grantNextPlacementExtra: (count = 1) => {
         if (!player) return 0;
         const amount = Math.max(0, Math.floor(Number(count) || 0));
@@ -1091,6 +1134,7 @@
         ));
         return true;
       },
+      hasDestroyEffect: (target) => typeof coreCardEffectDefinition(target)?.onDestroy === "function",
       logMessage: (message) => log.push(message),
       log: (message) => log.push(message),
       ...extra
@@ -1408,6 +1452,25 @@
       queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
     }
     if (next > previous) coreNotifyV2AttackIncrease(game, card, next - previous, temporary);
+    return true;
+  }
+
+  function coreSetPermanentAttack(game, card, nextAttack) {
+    if (!card) return false;
+    const previous = Number(card.currentAttack ?? card.attack) || 0;
+    const requestedDelta = Math.max(0, Number(nextAttack) || 0) - previous;
+    const resolvedDelta = coreResolveV2AdjustAmount(game, card, requestedDelta);
+    const next = Math.max(0, previous + resolvedDelta);
+    if (next < previous && !coreCanReduceAttack(game, card)) return false;
+    card.v2PermanentBonus = next - (Number(card.attack) || 0);
+    card.v2TempBonus = 0;
+    card.currentAttack = next;
+    if (game) coreEnforceElitePowerBounds(game);
+    const actualDelta = card.currentAttack - previous;
+    if (actualDelta && !game?.isAiSimulation && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
+    }
+    if (actualDelta > 0) coreNotifyV2AttackIncrease(game, card, actualDelta, false);
     return true;
   }
 

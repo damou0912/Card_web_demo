@@ -34,7 +34,7 @@ const GAME_CARD_SLOT_TEMPLATES = Object.freeze([...new Map(
   [...DEFAULT_CARD_SLOT_TEMPLATES, ...REPLACEMENT_CARD_SLOT_TEMPLATES]
     .map((slot) => [String(slot.id), slot])
 ).values()]);
-if (window.CARD_LIBRARY?.version !== "card-info-v2-display-effect-isolation-20260908"
+if (window.CARD_LIBRARY?.version !== "card-info-v2-wu-replacements-20260915"
   || !Array.isArray(window.CARD_LIBRARY?.cardSlots) || DEFAULT_CARD_SLOT_TEMPLATES.length === 0) {
   throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
 }

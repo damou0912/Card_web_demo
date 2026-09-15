@@ -453,7 +453,7 @@
     </div>
   </main>
 
-  <script src="card-info.js?v=card-info-5934b9ae2047"></script>
+  <script src="card-info.js?v=card-info-404cf7f84575"></script>
   <script>
     if (!window.CARD_INFO) {
       console.error("❌ card-info.js 加载失败或执行错误");
@@ -462,7 +462,15 @@
       console.log("✓ card-info.js 已加载，" + CARD_INFO.length + " 张卡牌");
     }
   </script>
-  <script src="v2-card-data.js?v=card-info-5934b9ae2047"></script>
+  <script src="replacement-cards.js?v=card-info-404cf7f84575"></script>
+  <script>
+    if (!window.REPLACEMENT_CARDS) {
+      console.error("❌ replacement-cards.js 加载失败或执行错误");
+    } else {
+      console.log("✓ replacement-cards.js 已加载，" + window.REPLACEMENT_CARDS.length + " 张可替换卡牌");
+    }
+  </script>
+  <script src="v2-card-data.js?v=card-info-404cf7f84575"></script>
   <script>
     if (!window.CARD_LIBRARY) {
       console.error("❌ v2-card-data.js 加载失败或执行错误");
@@ -472,22 +480,14 @@
       console.log("✓ v2-card-data.js 已加载，" + window.CARD_LIBRARY.cardSlots.length + " 张卡牌");
     }
   </script>
-  <script src="replacement-cards.js?v=card-info-5934b9ae2047"></script>
-  <script>
-    if (!window.REPLACEMENT_CARDS) {
-      console.error("❌ replacement-cards.js 加载失败或执行错误");
-    } else {
-      console.log("✓ replacement-cards.js 已加载，" + window.REPLACEMENT_CARDS.length + " 张可替换卡牌");
-    }
-  </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260915-gauntlet-closed"></script>
+  <script src="script.js?v=20260915-wu-replacements"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260915-wei-replacements"></script>
-  <script src="wu-card-effects.js?v=20260915-wu-effect-sync"></script>
+  <script src="wu-card-effects.js?v=20260915-wu-replacements"></script>
   <script src="elite-ai-info.js?v=20260914-1008-enabled"></script>
   <script src="elite-ai-effects.js?v=20260914-1008-enabled"></script>
-  <script src="core-v2.js?v=20260915-gauntlet-closed"></script>
+  <script src="core-v2.js?v=20260915-wu-replacements"></script>
 </body>
 </html>

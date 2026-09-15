@@ -288,8 +288,8 @@ function waitForServer(child, port) {
 
     const gameState = JSON.stringify({
       ruleset: "core-v2",
-      cardDataVersion: "card-info-v2-display-effect-isolation-20260908",
-      runtimeSchemaVersion: "runtime-display-effect-isolation-20260909",
+      cardDataVersion: "card-info-v2-wu-replacements-20260915",
+      runtimeSchemaVersion: "runtime-wu-replacements-20260915",
       activePlayerId: 1,
       turn: 1,
       winner: null,

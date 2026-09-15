@@ -61,7 +61,7 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "replacement-cards.js"), "u
 const expectedCardCount = 60 + (Array.isArray(context.REPLACEMENT_CARDS) ? context.REPLACEMENT_CARDS.length : 0);
 context.CARD_LIBRARY = { version: "legacy", cardSlots: [{ id: "old-card" }], campNamePool: { old: true } };
 vm.runInContext(fs.readFileSync(path.join(__dirname, "v2-card-data.js"), "utf8"), context, { filename: "v2-card-data.js" });
-const legacyLibraryReplaced = context.CARD_LIBRARY.version === "card-info-v2-display-effect-isolation-20260908"
+const legacyLibraryReplaced = context.CARD_LIBRARY.version === "card-info-v2-wu-replacements-20260915"
   && context.CARD_LIBRARY.cardSlots.length === expectedCardCount
   && !("campNamePool" in context.CARD_LIBRARY);
 const originalLibrary = context.CARD_LIBRARY;
@@ -193,7 +193,7 @@ const legacyRuntimeDisplayRemoved = [legacyRuntimeGame.boardCards[0], legacyRunt
 const onlineRuntimeProbe = {
   ruleset: "core-v2",
   cardDataVersion: originalLibrary.version,
-  runtimeSchemaVersion: "runtime-display-effect-isolation-20260909",
+  runtimeSchemaVersion: "runtime-wu-replacements-20260915",
   boardCards: [{ id: "02101", name: "旧卡名", skill: "旧技能", effect: "旧描述", camp: "旧势力", rarity: "旧品质" }],
   players: []
 };
@@ -241,7 +241,7 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-display-effect-isolation-20260908" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed || !customDeckPassed || !loginPromptPolicyValid) {
+if (validation.cardDataVersion !== "card-info-v2-wu-replacements-20260915" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed || !customDeckPassed || !loginPromptPolicyValid) {
   console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, customDeckValidation, loginPromptPolicyValid, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {

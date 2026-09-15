@@ -1,6 +1,6 @@
 /* Runtime adapter for the unified card information table. */
 (() => {
-  const expectedSchemaVersion = "card-info-v2-display-effect-isolation-20260908";
+  const expectedSchemaVersion = "card-info-v2-wu-replacements-20260915";
   const allowedCamps = new Map([["01", "三国~蜀"], ["02", "三国~魏"], ["03", "三国~吴"]]);
   const source = window.CARD_INFO;
   if (window.CARD_INFO_SCHEMA_VERSION !== expectedSchemaVersion || !Array.isArray(source)) {

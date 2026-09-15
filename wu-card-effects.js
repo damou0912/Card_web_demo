@@ -216,6 +216,148 @@
     }
   };
 
+  wu["03121"] = {
+    onDestroy(ctx) {
+      if (!ctx.causeCard || !ctx.isOnBoard(ctx.causeCard)) return;
+      ctx.setPermanentAttack(ctx.causeCard, 1);
+      ctx.log("摧毁此卡的卡牌战力永久变为1。");
+    }
+  };
+
+  wu["03122"] = {
+    onDestroy(ctx) {
+      const target = ctx.pickRandom(ctx.allies());
+      if (!target || !ctx.moveTo(target, ctx.original, "断后移位")) return;
+      ctx.adjust(target, 1);
+      ctx.log("随机一张四方相邻友军移动至原位置，并永久战力+1。");
+    }
+  };
+
+  wu["03123"] = {
+    onDestroy(ctx) {
+      if (ctx.discard(ctx.player, 1)) ctx.log("随机弃置1张手牌。");
+    }
+  };
+
+  function resolveAnMin(ctx) {
+    if (ctx.draw(ctx.player)) {
+      ctx.log("抽取1张卡牌。");
+      return;
+    }
+    const target = ctx.pickRandom(ctx.otherAllies());
+    if (!target) return;
+    ctx.adjust(target, 1);
+    ctx.log("抽牌失败，使一张随机其他友军永久战力+1。");
+  }
+
+  wu["03124"] = {
+    onPlace: resolveAnMin,
+    onDestroy: resolveAnMin
+  };
+
+  wu["03225"] = {
+    onPlace(ctx) {
+      let successes = 0;
+      if (ctx.draw(ctx.player)) successes += 1;
+      if (ctx.draw(ctx.otherPlayer)) successes += 1;
+      if (!successes) return;
+      ctx.adjust(ctx.card, successes);
+      ctx.log(`双方共成功抽取${successes}张牌，自身永久战力+${successes}。`);
+    }
+  };
+
+  wu["03226"] = {
+    onPlace(ctx) {
+      if (ctx.discard(ctx.otherPlayer, 1)) ctx.log("使敌方随机弃置1张手牌。");
+    },
+    onDestroy(ctx) {
+      let drawn = 0;
+      for (let index = 0; index < 2; index += 1) {
+        if (!ctx.draw(ctx.otherPlayer)) break;
+        drawn += 1;
+      }
+      if (drawn) ctx.log(`使敌方抽取${drawn}张牌。`);
+    }
+  };
+
+  wu["03227"] = {
+    onOtherMoved(ctx) {
+      const moved = ctx.movedCard;
+      if (!moved || moved.ownerId !== ctx.card.ownerId || moved.uid === ctx.card.uid) return;
+      const distance = Math.abs(moved.row - ctx.card.row) + Math.abs(moved.col - ctx.card.col);
+      if (distance !== 1) return;
+      ctx.adjust(moved, 1);
+      ctx.log("移动至此卡四方相邻的友军永久战力+1。");
+    }
+  };
+
+  wu["03328"] = {
+    onPlace(ctx) {
+      let drawn = 0;
+      for (let index = 0; index < 2; index += 1) {
+        if (!ctx.draw(ctx.player)) break;
+        drawn += 1;
+      }
+      if (drawn) ctx.log(`抽取${drawn}张牌。`);
+    },
+    onTurnStart(ctx) {
+      ctx.grantFirstFriendlyMoveFree();
+      ctx.log("本回合第一次友方主动移动不消耗行动数。");
+    },
+    onDestroy(ctx) {
+      let drawn = 0;
+      while (ctx.otherPlayer.hand.length < ctx.handLimit && ctx.otherPlayer.drawPile.length) {
+        if (!ctx.draw(ctx.otherPlayer)) break;
+        drawn += 1;
+      }
+      if (drawn) ctx.log(`敌方抽取${drawn}张牌至手牌上限。`);
+    }
+  };
+
+  function randomDestroyEffectTarget(ctx) {
+    return ctx.pickRandom(ctx.otherAllies().filter((target) => ctx.hasDestroyEffect(target)));
+  }
+
+  wu["03429"] = {
+    onOtherDestroyed(ctx) {
+      ctx.adjust(ctx.card, 1);
+      ctx.draw(ctx.player);
+      ctx.log("其他友军被摧毁，自身永久战力+1并抽取1张牌。");
+    },
+    onDestroy(ctx) {
+      const target = randomDestroyEffectTarget(ctx);
+      if (!target) return;
+      ctx.triggerDestroyEffect(target);
+      ctx.log("随机触发一张其他友军的遗志。");
+    },
+    onTurnStart(ctx) {
+      const alliedCount = ctx.otherAllies().length;
+      const enemyCount = ctx.board.filter((target) => target.ownerId === ctx.otherPlayer?.id).length;
+      if (alliedCount >= enemyCount) return;
+      ctx.addActions(1);
+      ctx.log("其他友军少于敌方，本回合行动数+1。");
+    }
+  };
+
+  wu["03530"] = {
+    flags: { cannotMove: true },
+    onTurnStart(ctx) {
+      const target = randomDestroyEffectTarget(ctx);
+      if (!target) return;
+      ctx.triggerDestroyEffect(target);
+      ctx.log("随机触发一张其他友军的遗志。");
+    },
+    onDestroy(ctx) {
+      const discarded = ctx.discard(ctx.player, ctx.player.hand.length);
+      let drawn = 0;
+      for (let index = 0; index < discarded; index += 1) {
+        if (!ctx.draw(ctx.player)) break;
+        drawn += 1;
+      }
+      ctx.log(`弃置${discarded}张手牌，并抽取${drawn}张牌。`);
+    }
+  };
+
   window.CARD_EFFECTS_V2 = window.CARD_EFFECTS_V2 || {};
   window.CARD_EFFECTS_V2.wu = wu;
 })();

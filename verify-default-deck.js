@@ -155,8 +155,8 @@ if (missingFields === 0) {
 console.log('\n' + '='.repeat(50));
 if (allCorrect && missingFields === 0 && CARD_INFO.length === 60) {
   console.log('✅ 所有验证通过！默认卡组配置正确');
-  console.log('   - 60 张卡牌已生成');
-  console.log('   - 10 张不在默认卡组的卡牌已过滤');
+  console.log(`   - ${CARD_INFO.length} 张卡牌已生成`);
+  console.log(`   - ${notInDefaultDeck.size} 张不在默认卡组的卡牌已过滤`);
   console.log('   - 卡牌数据完整');
   process.exit(0);
 } else {

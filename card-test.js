@@ -1,6 +1,6 @@
 const TEST_BOARD_SIZE = 4;
 const CARD_TEST_SCENE_VERSION = 2;
-const CARD_TEST_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
+const CARD_TEST_DATA_VERSION = "card-info-v2-wu-replacements-20260915";
 // This is a client-side GM convenience gate, not a security boundary.
 const CARD_TEST_GM_PASSWORD = "dm0912";
 const testState = { cards: [], brokenCells: [], selectedTemplate: null, selectedCardUid: null, ownerId: 1, camp: "全部" };

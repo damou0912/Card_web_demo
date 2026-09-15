@@ -602,5 +602,5 @@ const CARD_INFO = [
     "effect": "入阵：全场卡牌本回合战力-2。\r\n入阵：本回合我方行动数+1。"
   }
 ];
-window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-display-effect-isolation-20260908";
+window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-wu-replacements-20260915";
 window.CARD_INFO = CARD_INFO;

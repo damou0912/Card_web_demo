@@ -10,8 +10,16 @@
   const CORE_CARD_DATA_VERSION = "card-info-v2-display-effect-isolation-20260908";
   const CORE_RUNTIME_SCHEMA_VERSION = "runtime-display-effect-isolation-20260909";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
-  const CORE_GAME_MODES = new Set(["pve", "pve-challenge", "online", "card-test"]);
-  const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", "online"]);
+  const CORE_GAUNTLET_MODE = "pve-gauntlet";
+  const CORE_GAUNTLET_DIFFICULTIES = Object.freeze([
+    { level: 1, name: "试探", offset: -1, powerLabel: "约 80% 强度", rarityWeights: { "普通": 0.75, "稀有": 0.25 }, rewardWeights: { "普通": 1 } },
+    { level: 2, name: "普通", offset: 0, powerLabel: "标准强度", rarityWeights: { "普通": 0.65, "稀有": 0.25, "特殊": 0.1 }, rewardWeights: { "普通": 0.65, "稀有": 0.35 } },
+    { level: 3, name: "强敌", offset: 1, powerLabel: "约 110% 强度", rarityWeights: { "普通": 0.5, "稀有": 0.3, "特殊": 0.1, "史诗": 0.1 }, rewardWeights: { "稀有": 0.7, "史诗": 0.3 } },
+    { level: 4, name: "精英", offset: 2, powerLabel: "约 125% 强度", rarityWeights: { "普通": 0.4, "稀有": 0.3, "特殊": 0.15, "史诗": 0.1, "传说": 0.05 }, rewardWeights: { "稀有": 0.15, "史诗": 0.5, "特殊": 0.25, "传说": 0.1 } },
+    { level: 5, name: "首领", offset: 3, powerLabel: "约 140% 强度", rarityWeights: { "普通": 0.3, "稀有": 0.3, "特殊": 0.15, "史诗": 0.15, "传说": 0.1 }, rewardWeights: { "史诗": 0.35, "特殊": 0.25, "传说": 0.4 } }
+  ]);
+  const CORE_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online", "card-test"]);
+  const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online"]);
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
   let coreRuntimeReady = true;
@@ -254,6 +262,7 @@
   }
 
   function coreCloseOverlay() {
+    window.hideCardSkillTooltip?.();
     ui.deckReveal.classList.remove("visible");
     ui.deckReveal.innerHTML = "";
   }
@@ -313,12 +322,122 @@
 
   function coreIsPveMode(modeOrGame) {
     const mode = typeof modeOrGame === "string" ? modeOrGame : modeOrGame?.mode;
-    return mode === "pve" || mode === "pve-challenge";
+    return mode === "pve" || mode === "pve-challenge" || mode === CORE_GAUNTLET_MODE;
   }
 
   function coreIsPveChallenge(modeOrGame) {
     const mode = typeof modeOrGame === "string" ? modeOrGame : modeOrGame?.mode;
     return mode === "pve-challenge";
+  }
+
+  function coreIsGauntlet(modeOrGame) {
+    const mode = typeof modeOrGame === "string" ? modeOrGame : modeOrGame?.mode;
+    return mode === CORE_GAUNTLET_MODE;
+  }
+
+  function coreGauntletDifficultyInfo(level) {
+    const safeLevel = Math.max(1, Math.min(5, Math.floor(Number(level) || 1)));
+    return CORE_GAUNTLET_DIFFICULTIES[safeLevel - 1] || CORE_GAUNTLET_DIFFICULTIES[0];
+  }
+
+  function coreGauntletCardCount(playerCardCount, level) {
+    const playerCount = Math.max(1, Math.floor(Number(playerCardCount) || 1));
+    const difficulty = coreGauntletDifficultyInfo(level);
+    return Math.max(3, Math.min(20, playerCount + difficulty.offset));
+  }
+
+  function coreGauntletRandomCamp() {
+    const camps = getAvailableDeckKeys();
+    return camps[randomInt(0, Math.max(0, camps.length - 1))] || "混沌";
+  }
+
+  function coreGauntletBuildPlayerOption(campKey) {
+    const slots = GAME_CARD_SLOT_TEMPLATES.filter((slot) => slot.camp === campKey);
+    const common = shuffle(slots.filter((slot) => slot.rarity === "普通")).slice(0, 4);
+    const rare = shuffle(slots.filter((slot) => slot.rarity === "稀有")).slice(0, 1);
+    if (common.length !== 4 || rare.length !== 1) throw new Error(`${getCampDisplayName(campKey)}无法生成过关斩将初始卡组。`);
+    return { campKey, cardIds: [...common, ...rare].map((slot) => String(slot.id)) };
+  }
+
+  function corePickGauntletPlayerOptions() {
+    const camps = [...new Set(getAvailableDeckKeys().filter((camp) => camp !== CHAOS_DECK_KEY))];
+    return shuffle(camps).slice(0, 3).map(coreGauntletBuildPlayerOption);
+  }
+
+  function corePickWeightedGauntletRarity(weights, availableRarities) {
+    const entries = availableRarities.map((rarity) => [rarity, Number(weights[rarity]) || 0]).filter((entry) => entry[1] > 0);
+    const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+    if (!entries.length || total <= 0) return availableRarities[0];
+    let roll = Math.random() * total;
+    for (const [rarity, weight] of entries) {
+      roll -= weight;
+      if (roll <= 0) return rarity;
+    }
+    return entries[entries.length - 1][0];
+  }
+
+  function coreBuildGauntletAiOption(campKey, level, playerDeckOrCount) {
+    const difficulty = coreGauntletDifficultyInfo(level);
+    const ownedIds = new Set(Array.isArray(playerDeckOrCount) ? playerDeckOrCount.map(String) : []);
+    const playerCardCount = Array.isArray(playerDeckOrCount) ? playerDeckOrCount.length : playerDeckOrCount;
+    const count = coreGauntletCardCount(playerCardCount, level);
+    const sourceSlots = GAME_CARD_SLOT_TEMPLATES.filter((slot) => campKey === CHAOS_DECK_KEY || slot.camp === campKey);
+    const rewardPool = sourceSlots.filter((slot) => !ownedIds.has(String(slot.id)));
+    const rewardRarities = [...new Set(rewardPool.map((slot) => slot.rarity))];
+    const rewardRarity = corePickWeightedGauntletRarity(difficulty.rewardWeights, rewardRarities);
+    const rewardCandidates = rewardPool.filter((slot) => slot.rarity === rewardRarity);
+    const rewardCard = (rewardCandidates.length ? rewardCandidates : rewardPool)[randomInt(0, Math.max(0, (rewardCandidates.length ? rewardCandidates : rewardPool).length - 1))];
+    const selected = rewardCard ? [String(rewardCard.id)] : [];
+    const used = new Set(selected);
+    for (let index = selected.length; index < count; index += 1) {
+      const remaining = sourceSlots.filter((slot) => !used.has(String(slot.id)));
+      if (!remaining.length) break;
+      const availableRarities = [...new Set(remaining.map((slot) => slot.rarity))];
+      const rarity = corePickWeightedGauntletRarity(difficulty.rarityWeights, availableRarities);
+      const candidates = remaining.filter((slot) => slot.rarity === rarity);
+      const slot = (candidates.length ? candidates : remaining)[randomInt(0, (candidates.length ? candidates : remaining).length - 1)];
+      used.add(String(slot.id));
+      selected.push(String(slot.id));
+    }
+    return { campKey, level, count: selected.length, cardIds: selected, rewardCardId: rewardCard ? String(rewardCard.id) : null };
+  }
+
+  function corePickGauntletAiOptions(playerDeckOrCount) {
+    const firstLevel = randomInt(1, 4);
+    const secondLevel = randomInt(1, 4);
+    const thirdLevel = randomInt(Math.max(firstLevel, secondLevel) + 1, 5);
+    return [firstLevel, secondLevel, thirdLevel].map((level) => {
+      const difficulty = coreGauntletDifficultyInfo(level);
+      const campKey = coreGauntletRandomCamp();
+      return { ...coreBuildGauntletAiOption(campKey, level, playerDeckOrCount), name: difficulty.name, powerLabel: difficulty.powerLabel };
+    });
+  }
+
+  function coreGrantGauntletReward(game) {
+    if (!coreIsGauntlet(game) || Number(game?.winner?.playerId) !== 1) return null;
+    if (game.gauntletRewardGranted) return game.gauntletReward || null;
+    const ai = corePlayer(game, 2);
+    const rewardCardId = String(game.gauntletRewardCardId || "");
+    const rewardCard = ai?.deckCatalog?.find((card) => String(card.id) === rewardCardId);
+    if (!rewardCard) return null;
+    const playerDeckIds = state.gauntlet.playerDeckCardIds ||= [...(state.gauntlet.selectedPlayerOption?.cardIds || [])].map(String);
+    if (playerDeckIds.includes(rewardCardId)) return null;
+    playerDeckIds.push(rewardCardId);
+    if (state.gauntlet.selectedPlayerOption) state.gauntlet.selectedPlayerOption.cardIds = [...playerDeckIds];
+    const display = coreCardDisplay(rewardCardId);
+    game.gauntletRewardGranted = true;
+    game.gauntletReward = {
+      cardId: rewardCardId,
+      name: display.name,
+      rarity: display.rarity,
+      campKey: display.camp,
+      skill: display.skill,
+      effect: display.effect,
+      attack: coreCardBaseAttack(rewardCardId),
+      difficulty: coreGauntletDifficultyInfo(game.gauntletDifficulty).name
+    };
+    state.gauntlet.lastReward = game.gauntletReward;
+    return game.gauntletReward;
   }
 
   function coreEliteAiTraitIds() {
@@ -595,6 +714,7 @@
   }
 
   function coreModeLabel(mode) {
+    if (mode === CORE_GAUNTLET_MODE) return "过关斩将";
     if (mode === "pve-challenge") return "PVE 挑战";
     if (mode === "pve") return "PVE";
     if (mode === "online") return "联网";
@@ -924,14 +1044,20 @@
     if (!CORE_GAME_MODES.has(mode)) throw new RangeError(`不支持的对局模式：${String(mode)}`);
     const selectedSize = Number(boardSize);
     const size = Number.isInteger(selectedSize) && selectedSize >= 3 && selectedSize <= 5 ? selectedSize : CORE_BOARD_SIZE;
+    const gauntletMode = coreIsGauntlet(mode);
     const playerOneCardIds = mode === "online"
       ? selectedDeckCardIds?.[1]
-      : coreIsPveMode(mode) ? getConfiguredDeckCardIds(selectedDecks[1]) : null;
-    const playerTwoCardIds = mode === "online" ? selectedDeckCardIds?.[2] : null;
-    const playerOneCatalog = buildCampDeck(selectedDecks[1], playerOneCardIds);
-    const playerTwoCatalog = buildCampDeck(selectedDecks[2], playerTwoCardIds);
+      : gauntletMode ? selectedDeckCardIds?.[1]
+        : coreIsPveMode(mode) ? getConfiguredDeckCardIds(selectedDecks[1]) : null;
+    const playerTwoCardIds = mode === "online" || gauntletMode ? selectedDeckCardIds?.[2] : null;
+    const playerOneCatalog = gauntletMode
+      ? buildCardCatalogFromIds(selectedDecks[1], playerOneCardIds, true)
+      : buildCampDeck(selectedDecks[1], playerOneCardIds);
+    const playerTwoCatalog = gauntletMode
+      ? buildCardCatalogFromIds(selectedDecks[2], playerTwoCardIds)
+      : buildCampDeck(selectedDecks[2], playerTwoCardIds);
     const challengeMode = coreIsPveChallenge(mode);
-    const playerTwoName = coreIsPveMode(mode) ? (challengeMode ? "精英 AI" : "AI") : "玩家 2";
+    const playerTwoName = coreIsPveMode(mode) ? (challengeMode ? "精英 AI" : gauntletMode ? "过关斩将 AI" : "AI") : "玩家 2";
     const firstPlayerId = [1, 2].includes(Number(firstPlayerIdOverride)) ? Number(firstPlayerIdOverride) : (Math.random() < 0.5 ? 1 : 2);
     const game = {
       ruleset: "core-v2",
@@ -939,6 +1065,8 @@
       runtimeSchemaVersion: CORE_RUNTIME_SCHEMA_VERSION,
       mode,
       challengeMode,
+      gauntletMode,
+      gauntletDifficulty: gauntletMode ? Math.max(1, Math.min(5, Math.floor(Number(challengeLevel) || 1))) : 0,
       challengeLevel: challengeMode ? Math.max(1, Math.floor(Number(challengeLevel) || 1)) : 0,
       eliteAiEffectId: null,
       eliteAiEffectIds: [],
@@ -1033,7 +1161,8 @@
         card.currentAttack = Math.max(0, (Number(card.attack) || 0) + (Number(card.v2PermanentBonus) || 0));
         card.v2StartAttack = card.currentAttack;
       }
-      if (card.ownerId === active.id && card.restedTurn !== null && card.restedTurn !== game.turn) {
+      if (card.ownerId === active.id && card.restedTurn !== null && card.restedTurn !== undefined
+        && Number(card.restedTurn) !== Number(game.turn)) {
         card.restedTurn = null;
       }
     });
@@ -1300,6 +1429,11 @@
 
   function corePickRandom(items) {
     return items.length ? items[randomInt(0, items.length - 1)] : null;
+  }
+
+  function coreIsCardResting(game, card) {
+    return Boolean(card && game && card.restedTurn !== null && card.restedTurn !== undefined
+      && Number(card.restedTurn) === Number(game.turn));
   }
 
   function coreEnemyNeighbors(game, card, diagonal = false) {
@@ -1779,7 +1913,7 @@
   }
 
   function coreValidMoves(game, card) {
-    if (!card || card.isGuard || card.v2Locked || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || card.restedTurn === game.turn || game.moveLocks?.[card.uid] === game.turn || !coreCanMoveCardThisTurn(game, card)) {
+    if (!card || card.isGuard || card.v2Locked || coreCardEffectHasFlag(card, "cannotMove") || card.ownerId !== game.activePlayerId || coreIsCardResting(game, card) || game.moveLocks?.[card.uid] === game.turn || !coreCanMoveCardThisTurn(game, card)) {
       return [];
     }
     if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) return [];
@@ -1879,6 +2013,11 @@
     const player = corePlayer(game, action.playerId);
     const card = getCardByUid(game, action.cardUid);
     if (!player || !card || !coreCanUseAction(game, card) || (action.type === "place" && !coreCanPlaceCard(game, card))) {
+      return false;
+    }
+    if (action.type === "move" && coreIsCardResting(game, card)) {
+      game.isAnimating = false;
+      coreAppendLog(game, `${player.name} 的 ${coreCardName(card)} 仍在休整中，移动请求无效。`);
       return false;
     }
     if (action.type === "move" && (!action.source || card.row !== action.source.row || card.col !== action.source.col
@@ -3482,9 +3621,116 @@
     window.CardOnline.listRooms();
   }
 
+  function coreGauntletCardPreviewMarkup(cardIds) {
+    return (cardIds || []).map((id) => {
+      const display = coreCardDisplay(id);
+      return `<span class="gauntlet-card-preview" data-card-id="${coreEscapeHtml(id)}"><strong>${coreEscapeHtml(display.name)}</strong><small>${coreGauntletRarityToneMarkup(display.rarity)} · 战力 ${coreCardBaseAttack(id)}</small></span>`;
+    }).join("");
+  }
+
+  function coreGauntletRarityToneMarkup(rarity, label = rarity) {
+    const safeRarity = String(rarity || "普通");
+    return `<span class="rarity-tone" data-rarity="${coreEscapeHtml(safeRarity)}">${coreEscapeHtml(label || safeRarity)}</span>`;
+  }
+
+  function coreGauntletRaritySummary(cardIds) {
+    const counts = (cardIds || []).reduce((result, id) => {
+      const rarity = coreCardDisplay(id).rarity || "普通";
+      result[rarity] = (result[rarity] || 0) + 1;
+      return result;
+    }, {});
+    return ["普通", "稀有", "史诗", "传说", "特殊"]
+      .filter((rarity) => counts[rarity])
+      .map((rarity) => coreGauntletRarityToneMarkup(rarity, `${rarity}x${counts[rarity]}`))
+      .join('<span class="gauntlet-rarity-divider"> / </span>');
+  }
+
+  function coreShowGauntletPlayerDraft() {
+    const options = corePickGauntletPlayerOptions();
+    state.gauntlet.playerOptions = options;
+    state.gauntlet.selectedPlayerOption = null;
+    state.gauntlet.playerDeckCardIds = [];
+    state.gauntlet.aiOptions = [];
+    state.gauntlet.selectedAiOption = null;
+    state.gauntlet.lastReward = null;
+    const optionMarkup = options.map((option, index) => `
+      <button class="gauntlet-choice-btn gauntlet-player-choice" type="button" data-choice-index="${index}">
+        <span class="gauntlet-choice-head"><strong>${coreEscapeHtml(getCampDisplayName(option.campKey))}</strong><small>5 张卡</small></span>
+        <span class="gauntlet-card-preview-list">${coreGauntletCardPreviewMarkup(option.cardIds)}</span>
+        <span class="gauntlet-choice-foot">普通 x4 / ${coreGauntletRarityToneMarkup("稀有", "稀有 x1")}</span>
+      </button>
+    `).join("");
+    ui.deckReveal.innerHTML = `
+      <section class="deck-reveal-card gauntlet-reveal-card" role="dialog" aria-modal="true" aria-label="选择过关斩将初始卡组">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
+        <p class="phase-banner-eyebrow">GAUNTLET DRAFT</p>
+        <h2 class="deck-reveal-title">选择你的初始卡组</h2>
+        <p class="deck-reveal-copy">系统从三个不同国度各生成一套 5 张卡组，每套包含 4 张普通卡与 1 张稀有卡。</p>
+        <div class="gauntlet-choice-grid">${optionMarkup}</div>
+      </section>
+    `;
+    ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
+    ui.deckReveal.querySelectorAll(".gauntlet-card-preview[data-card-id]").forEach((preview) => {
+      window.bindCardSkillTooltip?.(preview, preview.dataset.cardId, { focusable: false });
+    });
+    ui.deckReveal.querySelectorAll(".gauntlet-player-choice").forEach((button) => {
+      button.addEventListener("click", () => {
+        const option = state.gauntlet.playerOptions[Number(button.dataset.choiceIndex)];
+        if (!option) return;
+        window.hideCardSkillTooltip?.();
+        state.gauntlet.selectedPlayerOption = option;
+        state.gauntlet.playerDeckCardIds = [...option.cardIds];
+        coreShowGauntletAiSelector();
+      });
+    });
+  }
+
+  function coreShowGauntletAiSelector() {
+    const playerOption = state.gauntlet.selectedPlayerOption;
+    if (!playerOption) return coreShowGauntletPlayerDraft();
+    const playerDeckCardIds = state.gauntlet.playerDeckCardIds?.length
+      ? state.gauntlet.playerDeckCardIds
+      : playerOption.cardIds;
+    const options = corePickGauntletAiOptions(playerDeckCardIds);
+    state.gauntlet.aiOptions = options;
+    state.gauntlet.selectedAiOption = null;
+    const optionMarkup = options.map((option, index) => `
+      <button class="gauntlet-choice-btn gauntlet-ai-choice" type="button" data-choice-index="${index}">
+        <span class="gauntlet-choice-head"><strong>${coreEscapeHtml(getCampDisplayName(option.campKey))}</strong><small>${coreEscapeHtml(option.name)}</small></span>
+        <span class="gauntlet-ai-meta"><strong>${option.count} 张卡</strong><span>${coreEscapeHtml(option.powerLabel)}</span></span>
+        <span class="gauntlet-choice-foot">预计构成：${coreGauntletRaritySummary(option.cardIds)}</span>
+      </button>
+    `).join("");
+    ui.deckReveal.innerHTML = `
+      <section class="deck-reveal-card gauntlet-reveal-card" role="dialog" aria-modal="true" aria-label="选择 AI 卡组强度">
+        <button id="overlay-close" class="overlay-close" type="button" aria-label="关闭弹窗">关闭</button>
+        <p class="phase-banner-eyebrow">GAUNTLET MATCHUP</p>
+        <h2 class="deck-reveal-title">选择 AI 卡组强度</h2>
+        <p class="deck-reveal-copy">你的当前卡组：${coreEscapeHtml(getCampDisplayName(playerOption.campKey))} · ${playerDeckCardIds.length} 张卡。AI 国度与卡牌会按难度随机生成。</p>
+        <div class="gauntlet-choice-grid gauntlet-ai-choice-grid">${optionMarkup}</div>
+      </section>
+    `;
+    ui.deckReveal.classList.add("visible");
+    coreAttachOverlayClose();
+    ui.deckReveal.querySelectorAll(".gauntlet-ai-choice").forEach((button) => {
+      button.addEventListener("click", () => {
+        const option = state.gauntlet.aiOptions[Number(button.dataset.choiceIndex)];
+        if (!option) return;
+        state.gauntlet.selectedAiOption = option;
+        state.selectedDecks = { 1: playerOption.campKey, 2: option.campKey };
+        coreBeginGame();
+      });
+    });
+  }
+
   function coreShowDeckSelector(mode) {
     if (mode === "online") {
       coreShowOnlineLobby();
+      return;
+    }
+    if (coreIsGauntlet(mode)) {
+      coreShowGauntletPlayerDraft();
       return;
     }
     const camps = getAvailableDeckKeys();
@@ -3584,7 +3830,13 @@
 
   function coreBeginGame() {
     const pendingTraits = state.selectedMode === "pve-challenge" ? state.pendingChallengeTraitIds : null;
-    state.game = coreCreateGame(state.selectedMode, state.selectedDecks, state.selectedBoardSize, null, state.challengeLevel, pendingTraits);
+    const gauntletOption = state.gauntlet?.selectedAiOption;
+    const selectedDeckCardIds = coreIsGauntlet(state.selectedMode)
+      ? { 1: state.gauntlet?.playerDeckCardIds, 2: gauntletOption?.cardIds }
+      : null;
+    const difficulty = coreIsGauntlet(state.selectedMode) ? gauntletOption?.level || 1 : state.challengeLevel;
+    state.game = coreCreateGame(state.selectedMode, state.selectedDecks, state.selectedBoardSize, null, difficulty, pendingTraits, null, selectedDeckCardIds);
+    if (coreIsGauntlet(state.game)) state.game.gauntletRewardCardId = gauntletOption?.rewardCardId || null;
     state.pendingChallengeTraitIds = null;
 
     switchScreen("game");
@@ -3634,7 +3886,7 @@
           <div class="deck-reveal-versus">VS</div>
           <article class="deck-reveal-side"><p class="label">${second.name} · 后手</p><h3>${getCampDisplayName(second.deckKey)}</h3><p>${summarizeDeck(second.deckCatalog, second.deckKey)}</p></article>
         </div>
-        ${game.mode === "online" ? "" : `<button id="core-opening-start" class="primary-btn">开始第 ${game.challengeLevel || 1} 关</button>`}
+        ${game.mode === "online" ? "" : `<button id="core-opening-start" class="primary-btn">${coreIsGauntlet(game) ? "开始对局" : `开始第 ${game.challengeLevel || 1} 关`}</button>`}
       </section>
     `;
     ui.deckReveal.classList.add("visible");
@@ -3674,6 +3926,7 @@
     cloneCard, coreActionLimit, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreDrawOneCard, coreEnforceElitePowerBounds, coreHasFreeAction,
     coreAddCardsToDrawPile, coreControlMap, coreCreateGame, coreDeserializeOnlineGame, coreDestroyV2Card, coreHandLimitForPlayer, coreMaintainEliteAiHand,
     coreChallengeTraitPlan, coreEliteAiTraitInfo, coreEliteAiTraitInfos, coreEliteAiTraitIds, corePickChallengeTraits, corePickChallengeRewardTraits,
+    coreIsGauntlet, coreGauntletDifficultyInfo, coreGauntletCardCount, corePickGauntletPlayerOptions, corePickGauntletAiOptions, coreBuildGauntletAiOption, coreGrantGauntletReward,
     coreFormatTurnTime, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, corePlanAiAction, corePlayer, coreResolveSkillAttack,
     coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSerializeOnlineGame, coreStartTurn,
     coreStartTurnTimer, coreStripRuntimeDisplayData, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreViewerPlayerId,
@@ -3696,17 +3949,26 @@
       return false;
     }
     if (!CORE_PRODUCT_GAME_MODES.has(mode)) {
-      showToast("模式不可用", "请选择 PVE、PVE 挑战或联网对战。");
+      showToast("模式不可用", "请选择 PVE、PVE 挑战、过关斩将或联网对战。");
       return false;
     }
     state.selectedMode = mode;
     if (mode === "pve-challenge" && !state.challengeLevel) state.challengeLevel = 1;
+    if (coreIsGauntlet(mode)) {
+      state.gauntlet.playerOptions = [];
+      state.gauntlet.selectedPlayerOption = null;
+      state.gauntlet.playerDeckCardIds = [];
+      state.gauntlet.aiOptions = [];
+      state.gauntlet.selectedAiOption = null;
+      state.gauntlet.lastReward = null;
+    }
     state.game = null;
     coreShowDeckSelector(mode);
     return true;
   };
   window.beginGame = coreBeginGame;
   window.beginNextChallengeLevel = coreBeginNextChallengeLevel;
+  window.grantGauntletReward = coreGrantGauntletReward;
   window.showChallengeRewardSelection = (rewardChoices) => {
     state.pendingChallengeRewardChoices = rewardChoices || [];
     const modal = ui.challengeRewardModal;

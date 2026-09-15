@@ -14,7 +14,7 @@
       // Keep the default palette when browser storage is unavailable.
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20260914-challenge-select">
+  <link rel="stylesheet" href="style.css?v=20260915-gauntlet-rarity-colors">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -208,9 +208,9 @@
             <strong>挑战模式</strong>
             <small>当前可用</small>
           </button>
-          <button class="challenge-type-btn" type="button" data-challenge-type="gauntlet" aria-label="过关斩将，建设中">
+          <button class="challenge-type-btn" type="button" data-challenge-type="gauntlet" aria-label="进入过关斩将">
             <strong>过关斩将</strong>
-            <small>建设中</small>
+            <small>当前可用</small>
           </button>
         </div>
         <div class="action-buttons">
@@ -423,6 +423,7 @@
           </div>
         </div>
         <div id="winner-control-summary" class="winner-control-summary" aria-live="polite"></div>
+        <section id="gauntlet-reward-result" class="gauntlet-reward-result" aria-live="polite" hidden></section>
         <div class="result-columns">
           <div>
             <h3>玩家 1 卡组</h3>
@@ -480,13 +481,13 @@
     }
   </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260914-challenge-select"></script>
+  <script src="script.js?v=20260915-gauntlet-rarity-colors"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wei-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="wu-card-effects.js?v=20260908-display-effect-isolation"></script>
   <script src="elite-ai-info.js?v=20260914-1008-enabled"></script>
   <script src="elite-ai-effects.js?v=20260914-1008-enabled"></script>
-  <script src="core-v2.js?v=20260915-no-ai-trait-inherit"></script>
+  <script src="core-v2.js?v=20260915-gauntlet-rarity-colors"></script>
 </body>
 </html>

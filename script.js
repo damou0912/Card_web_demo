@@ -176,6 +176,7 @@ const ui = {
   resultScoreSummary: document.getElementById("result-score-summary"),
   resultRoundCount: document.getElementById("result-round-count"),
   winnerControlSummary: document.getElementById("winner-control-summary"),
+  gauntletRewardResult: document.getElementById("gauntlet-reward-result"),
   deckSummaryPlayer1: document.getElementById("deck-summary-player1"),
   deckSummaryPlayer2: document.getElementById("deck-summary-player2"),
   resultRestartBtn: document.getElementById("result-restart-btn"),
@@ -218,6 +219,14 @@ const state = {
     candidateCards: [],
     modifications: {},
     originalDeck: []
+  },
+  gauntlet: {
+    playerOptions: [],
+    selectedPlayerOption: null,
+    playerDeckCardIds: [],
+    aiOptions: [],
+    selectedAiOption: null,
+    lastReward: null
   }
 };
 
@@ -314,7 +323,7 @@ function showModifyDeckSkillTooltip(anchor, cardOrId) {
       <div><strong>${escapeModifyDeckMarkup(details.name)}</strong><span>${escapeModifyDeckMarkup(details.skill)}</span></div>
       <span class="modify-deck-tooltip-attack"><strong>${details.baseAttack}</strong><small>战力</small></span>
     </div>
-    <div class="modify-deck-tooltip-meta">${escapeModifyDeckMarkup(details.camp)} · ${escapeModifyDeckMarkup(details.rarity)}</div>
+    <div class="modify-deck-tooltip-meta">${escapeModifyDeckMarkup(details.camp)} · <span class="rarity-tone" data-rarity="${escapeModifyDeckMarkup(details.rarity)}">${escapeModifyDeckMarkup(details.rarity)}</span></div>
     <div class="modify-deck-tooltip-effect"><span>完整技能效果</span><p>${escapeModifyDeckMarkup(details.effect)}</p></div>
   `;
   activeModifyDeckTooltipAnchor = anchor;
@@ -333,15 +342,19 @@ function hideModifyDeckSkillTooltip() {
   tooltip.setAttribute("aria-hidden", "true");
 }
 
-function bindModifyDeckSkillTooltip(element, cardOrId) {
+function bindModifyDeckSkillTooltip(element, cardOrId, { focusable = true } = {}) {
   const details = getModifyDeckCardDetails(cardOrId);
   element.classList.add("modify-deck-card-preview");
-  element.tabIndex = 0;
-  element.setAttribute("aria-label", `${details.name}，${details.rarity}，基础战力 ${details.baseAttack}，技能 ${details.skill}`);
+  if (focusable) {
+    element.tabIndex = 0;
+    element.setAttribute("aria-label", `${details.name}，${details.rarity}，基础战力 ${details.baseAttack}，技能 ${details.skill}`);
+  }
   element.addEventListener("mouseenter", () => showModifyDeckSkillTooltip(element, cardOrId));
   element.addEventListener("mouseleave", hideModifyDeckSkillTooltip);
-  element.addEventListener("focus", () => showModifyDeckSkillTooltip(element, cardOrId));
-  element.addEventListener("blur", hideModifyDeckSkillTooltip);
+  if (focusable) {
+    element.addEventListener("focus", () => showModifyDeckSkillTooltip(element, cardOrId));
+    element.addEventListener("blur", hideModifyDeckSkillTooltip);
+  }
 }
 
 function getCardRuntimeDefinition(cardOrId) {
@@ -446,6 +459,20 @@ function buildCampDeck(campKey, resolvedCardIds = null) {
     selectedSlots = getDefaultCampSlots(campKey);
   }
   return selectedSlots.map((slot) => cloneCard(makeCardTemplate(slot)));
+}
+
+// Gauntlet decks are intentionally smaller than the standard 20-card decks.
+// Keep this builder separate so normal deck validation remains unchanged.
+function buildCardCatalogFromIds(campKey, cardIds, allowMixedCamps = false) {
+  if (!Array.isArray(cardIds) || !cardIds.length) throw new Error(`${getCampDisplayName(campKey)}卡组为空。`);
+  const slotsById = new Map(GAME_CARD_SLOT_TEMPLATES.map((slot) => [String(slot.id), slot]));
+  const ids = cardIds.map((id) => String(id));
+  if (new Set(ids).size !== ids.length) throw new Error(`${getCampDisplayName(campKey)}卡组包含重复卡牌。`);
+  const slots = ids.map((id) => slotsById.get(id));
+  if (slots.some((slot) => !slot || (!allowMixedCamps && campKey !== CHAOS_DECK_KEY && slot.camp !== campKey))) {
+    throw new Error(`${getCampDisplayName(campKey)}卡组包含无效卡牌。`);
+  }
+  return slots.map((slot) => cloneCard(makeCardTemplate(slot)));
 }
 
 function createPlayer(id, name, deckKey, deckCatalog, isAI = false) {
@@ -1297,7 +1324,9 @@ function renderResult(game) {
     : "—";
   const resultModeLabel = game.mode === "online"
     ? "联网对局"
-    : game.mode === "card-test" ? "卡牌测试" : "PVE 对局";
+    : game.mode === "card-test" ? "卡牌测试"
+      : game.mode === "pve-gauntlet" ? "过关斩将"
+        : "PVE 对局";
 
   ui.winnerTitle.textContent = winner ? `${displayName(winner)} 获胜` : "本局平局";
   const challengeComplete = game.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) >= 12;
@@ -1320,6 +1349,19 @@ function renderResult(game) {
       : `双方 ${scoreOne}:${scoreTwo} 平局`;
   ui.resultRoundCount.textContent = `${roundCount} 回合`;
   ui.winnerControlSummary.textContent = `最终占领：${displayName(playerOne)} ${scoreOne} 格 · ${displayName(playerTwo)} ${scoreTwo} 格`;
+  if (ui.gauntletRewardResult) {
+    const reward = game.gauntletReward;
+    ui.gauntletRewardResult.hidden = !reward;
+    ui.gauntletRewardResult.innerHTML = reward ? `
+      <span class="gauntlet-reward-label">胜利奖励 · ${escapeModifyDeckMarkup(reward.difficulty)}</span>
+      <div class="gauntlet-reward-card-row">
+        <span><strong>${escapeModifyDeckMarkup(reward.name)}</strong><small>${escapeModifyDeckMarkup(getCampDisplayName(reward.campKey))} · <span class="rarity-tone" data-rarity="${escapeModifyDeckMarkup(reward.rarity)}">${escapeModifyDeckMarkup(reward.rarity)}</span></small></span>
+        <span class="gauntlet-reward-attack"><strong>${reward.attack}</strong><small>战力</small></span>
+      </div>
+      <p><strong>${escapeModifyDeckMarkup(reward.skill)}</strong> · ${escapeModifyDeckMarkup(reward.effect)}</p>
+      <span class="gauntlet-reward-total">已加入当前卡组 · 现有 ${state.gauntlet.playerDeckCardIds.length} 张卡</span>
+    ` : "";
+  }
   ui.deckSummaryPlayer1.textContent = summarizeDeck(game.players[0].deckCatalog, game.players[0].deckKey);
   ui.deckSummaryPlayer2.textContent = summarizeDeck(game.players[1].deckCatalog, game.players[1].deckKey);
   if (ui.resultNextLevelBtn) {
@@ -1343,10 +1385,13 @@ function summarizeDeck(deckCatalog, deckKey) {
 }
 
 function showResult() {
-  renderResult(state.game);
+  const game = state.game;
+  if (game?.mode === "pve-gauntlet" && Number(game?.winner?.playerId) === 1) {
+    window.grantGauntletReward?.(game);
+  }
+  renderResult(game);
   // Keep the settlement view visible behind the reward picker on milestone levels.
   switchScreen("result");
-  const game = state.game;
   void recordChallengeProfile(game);
   const winnerId = game?.winner?.playerId;
   const shouldShowReward = game?.mode === "pve-challenge" && winnerId === 1 && Number(game.challengeLevel) % 3 === 0 && Number(game.challengeLevel) < 12;
@@ -1397,6 +1442,12 @@ function resetToMenu() {
   state.challengePlayerTraitIds = [];
   state.pendingChallengeRewardChoices = null;
   state.pendingChallengeRewardLevel = null;
+  state.gauntlet.playerOptions = [];
+  state.gauntlet.selectedPlayerOption = null;
+  state.gauntlet.playerDeckCardIds = [];
+  state.gauntlet.aiOptions = [];
+  state.gauntlet.selectedAiOption = null;
+  state.gauntlet.lastReward = null;
   switchScreen("menu");
 }
 
@@ -2169,6 +2220,12 @@ function bindEvents() {
   ui.challengeTypeButtons.forEach((button) => {
     button.addEventListener("click", async () => {
       const challengeType = button.dataset.challengeType;
+      if (challengeType === "gauntlet") {
+        state.selectedMode = "pve-gauntlet";
+        await loadCustomDecksForCurrentUser();
+        window.startRandomGame?.("pve-gauntlet");
+        return;
+      }
       if (challengeType !== "challenge") {
         showToast("过关斩将尚未开放", "该挑战路线正在施工中，请先选择挑战模式。", 4200);
         return;
@@ -2179,6 +2236,7 @@ function bindEvents() {
     });
   });
   ui.challengeSelectBackBtn?.addEventListener("click", () => {
+    if (state.selectedMode === "pve-gauntlet") state.selectedMode = "pve-challenge";
     switchScreen("menu");
     const selectedButton = ui.modeButtons.find((button) => button.dataset.mode === state.selectedMode);
     selectedButton?.focus();
@@ -2205,6 +2263,14 @@ function bindEvents() {
       state.pendingChallengeRewardChoices = null;
       state.pendingChallengeRewardLevel = null;
     }
+    if (state.game?.mode === "pve-gauntlet") {
+      state.gauntlet.playerOptions = [];
+      state.gauntlet.selectedPlayerOption = null;
+      state.gauntlet.playerDeckCardIds = [];
+      state.gauntlet.aiOptions = [];
+      state.gauntlet.selectedAiOption = null;
+      state.gauntlet.lastReward = null;
+    }
     await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });
@@ -2217,12 +2283,14 @@ function bindEvents() {
 }
 
 window.__CARD_DEMO_DEBUG__ = {
-  state, ui, resetSelection, cloneCard, buildCampDeck, drawOneCard, getCardByUid,
+  state, ui, resetSelection, cloneCard, buildCampDeck, buildCardCatalogFromIds, drawOneCard, getCardByUid,
   getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack,
   getAvailableDeckKeys, getRandomDeckKey, getConfiguredDeckCardIds, normalizeCustomDeckData,
   getModifyDeckCardDetails, getAvailableModifyDeckCandidates, buildCustomDeckCardIds, buildModifiedDeck,
   shouldAutoOpenLogin, applyTheme
 };
+window.bindCardSkillTooltip = bindModifyDeckSkillTooltip;
+window.hideCardSkillTooltip = hideModifyDeckSkillTooltip;
 window.resetToMenu = resetToMenu;
 window.leaveOnlineSession = leaveOnlineSession;
 window.closeGameMenu = closeGameMenu;

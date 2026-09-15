@@ -401,6 +401,224 @@ body {
   padding: 10px;
 }
 
+.gauntlet-reveal-card {
+  width: min(980px, 94vw);
+}
+
+.gauntlet-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 28px 0 4px;
+}
+
+.gauntlet-choice-btn {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  min-height: 190px;
+  padding: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff8e9;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.gauntlet-choice-btn:hover,
+.gauntlet-choice-btn:focus-visible {
+  border-color: #f4ca70;
+  background: rgba(244, 202, 112, 0.15);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+.gauntlet-choice-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gauntlet-choice-head strong {
+  overflow: hidden;
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gauntlet-choice-head small,
+.gauntlet-choice-foot,
+.gauntlet-ai-meta span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.gauntlet-card-preview-list {
+  display: grid;
+  gap: 7px;
+}
+
+.gauntlet-card-preview {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gauntlet-card-preview.modify-deck-card-preview {
+  margin: -3px -5px 0;
+  padding: 3px 5px 5px;
+  cursor: help;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.gauntlet-card-preview.modify-deck-card-preview:hover {
+  background: rgba(244, 202, 112, 0.12);
+  box-shadow: 0 0 0 1px rgba(244, 202, 112, 0.3);
+}
+
+.gauntlet-card-preview strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gauntlet-card-preview small {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 10px;
+}
+
+.rarity-tone {
+  font-weight: 900;
+}
+
+.rarity-tone[data-rarity="稀有"] {
+  color: #65b5f2;
+}
+
+.rarity-tone[data-rarity="史诗"] {
+  color: #c18bea;
+}
+
+.rarity-tone[data-rarity="传说"] {
+  color: #f29a52;
+}
+
+.rarity-tone[data-rarity="特殊"] {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
+  color: #f7f7f3;
+  background: #090c0b;
+  line-height: 1.45;
+}
+
+.gauntlet-rarity-divider {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.gauntlet-ai-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.gauntlet-ai-meta strong {
+  color: #f4ca70;
+  font-size: 18px;
+}
+
+.gauntlet-reward-result {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0;
+  padding: 18px 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.gauntlet-reward-result[hidden] {
+  display: none;
+}
+
+.gauntlet-reward-label,
+.gauntlet-reward-total {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.gauntlet-reward-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gauntlet-reward-card-row > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.gauntlet-reward-card-row > span:first-child strong {
+  overflow-wrap: anywhere;
+  font-size: 22px;
+}
+
+.gauntlet-reward-card-row small,
+.gauntlet-reward-result p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.gauntlet-reward-result p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.gauntlet-reward-attack {
+  display: grid;
+  flex: 0 0 58px;
+  min-height: 58px;
+  place-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.gauntlet-reward-attack strong {
+  font-size: 22px;
+}
+
+.gauntlet-reward-attack small {
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .gauntlet-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gauntlet-choice-btn {
+    min-height: 0;
+  }
+}
+
 .deck-reveal-versus {
   display: grid;
   place-items: center;
@@ -512,7 +730,7 @@ h1 {
 }
 
 .challenge-type-btn[data-challenge-type="gauntlet"] small {
-  color: var(--muted);
+  color: var(--blue);
 }
 
 .menu-options,

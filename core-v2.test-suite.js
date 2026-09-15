@@ -1,9 +1,10 @@
 (function() {
   const api = window.__CARD_DEMO_CORE_V2_TEST_API__;
   if (!api) throw new Error("V2 test API is unavailable. Load core-v2.js first.");
-  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSimulateActionOutcome, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
+  const { cloneCard, coreActionLimit, coreAddCardsToDrawPile, coreAdjustAttack, coreAiPlacementScore, coreApplyEliteAiTrait, coreApplyEliteAiTraitEvent, coreApplyV2PlacementSkill, coreBuildPendingAction, coreCanPlaceCard, coreCanUseAction, coreCanViewerInteract, coreControlMap, coreCreateGame, coreDestroyV2Card, coreDrawOneCard, coreEliteAiTraitIds, coreEliteAiTraitInfo, coreChallengeTraitPlan, corePickChallengeTraits, coreEnforceElitePowerBounds, coreFormatTurnTime, coreHandLimitForPlayer, coreHasFreeAction, coreIsGauntlet, coreIsOpponentTurn, coreIsSpectator, coreLoadCardTestSetup, coreMaintainEliteAiHand, corePlanAiAction, corePlayer, coreResolveSkillAttack, coreRunV2EndSkills, coreRunV2MoveEffects, coreRunV2StartSkill, coreSimulateActionOutcome, coreStartTurn, coreStartTurnTimer, coreTriggerOtherV2PlacementEffects, coreTurnSecondsRemaining, coreValidMoves, coreVictoryTarget, coreViewerPlayerId, coreBuildGauntletAiOption, coreGauntletCardCount, coreGauntletDifficultyInfo, coreGrantGauntletReward, corePickGauntletPlayerOptions, corePickGauntletAiOptions, CORE_TURN_TIME_LIMIT_SECONDS, HAND_LIMIT, state } = api;
   function coreRunV2RegressionTests() {
     const previousGame = state.game;
+    const previousGauntlet = state.gauntlet;
     const results = [];
     const check = (name, condition) => results.push({ name, passed: Boolean(condition) });
     const makeCard = (id, ownerId, row, col) => {
@@ -45,6 +46,7 @@
       { const game = traitGame("1008"); const ai = game.players[1]; ai.hand = []; ai.drawPile = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)]; coreMaintainEliteAiHand(game, ai, []); const limited = ai.hand.length === 1 && coreHandLimitForPlayer(game, ai) === 1; ai.hand = []; ai.drawPile = []; coreMaintainEliteAiHand(game, ai, []); const waiting = ai.hand.length === 0 && ai.eliteTraitState?.waitingForDrawPileRefill === true; coreAddCardsToDrawPile(game, ai, [makeCard("02103", 2, null, null)], []); const refilled = ai.hand.length === 1 && ai.eliteTraitState?.waitingForDrawPileRefill === false; check("1008 断粮", limited && waiting && refilled); }
       { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
+      { const rested = makeCard("02101", 2, 1, 1); const game = traitGame("1011", [rested]); game.currentPhase = "行动阶段"; game.activePlayerId = 2; rested.restedTurn = game.turn; game.players[1].hand = []; game.players[1].drawPile = []; const blocked = coreValidMoves(game, rested).length === 0 && corePlanAiAction(game, game.players[1]) === null; rested.restedTurn = String(game.turn); const stringStateBlocked = coreValidMoves(game, rested).length === 0; check("AI 普通行动遵守卡牌休整", blocked && stringStateBlocked); }
       { const watcher = makeCard("02315", 2, 1, 0), placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [watcher, placed]); coreApplyV2PlacementSkill(game, game.players[1], watcher, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const isolated = placed.currentAttack === placed.attack + 3 && placed.v2PermanentBonus === 3 && placed.v2TempBonus === 0; game.turn = 2; coreStartTurn(game); check("1007 慎行词条调整与卡牌增益监听隔离", isolated && placed.currentAttack === placed.attack && placed.v2PermanentBonus === 0); }
       { const enemy = makeCard("01101", 1, 0, 0); const game = traitGame("1009", [enemy]); coreApplyEliteAiTrait(game, game.players[1], []); check("1009 野望", enemy.currentAttack === Math.max(0, enemy.attack - 1) && enemy.v2TempBonus === -1); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1010", [placed]); placed.restedTurn = 1; coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1010 急奔", placed.restedTurn === null); }
@@ -119,7 +121,7 @@
         && coreFormatTurnTime(300) === "05:00"
         && coreFormatTurnTime(9) === "00:09");
 
-      const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1);
+      const challengeGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
       challengeGame.activePlayerId = 2;
       const suppliedTraitGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1001"]);
       const famineOpeningGame = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1008"]);
@@ -133,6 +135,128 @@
         && suppliedTraitGame.eliteAiEffectIds[0] === "1001"
         && famineOpeningGame.players[1].hand.length === 1
         && coreHandLimitForPlayer(famineOpeningGame, famineOpeningGame.players[1]) === 1);
+
+      const gauntletPlayerOptions = corePickGauntletPlayerOptions();
+      check("过关斩将玩家初始卡组三国三选一且固定为4普通1稀有", gauntletPlayerOptions.length === 3
+        && new Set(gauntletPlayerOptions.map((option) => option.campKey)).size === 3
+        && gauntletPlayerOptions.every((option) => {
+          const cards = option.cardIds.map((id) => window.CARD_LIBRARY.cardSlots.find((card) => String(card.id) === String(id)));
+          return option.cardIds.length === 5
+            && new Set(option.cardIds).size === 5
+            && cards.every((card) => card?.camp === option.campKey)
+            && cards.filter((card) => card?.rarity === "普通").length === 4
+            && cards.filter((card) => card?.rarity === "稀有").length === 1;
+        }));
+
+      const gauntletAiSamples = Array.from({ length: 60 }, () => corePickGauntletAiOptions(5));
+      check("过关斩将AI三选一的末项难度严格更高且卡量随难度变化", gauntletAiSamples.every((options) => options.length === 3
+        && options[2].level > options[0].level
+        && options[2].level > options[1].level
+        && options.every((option) => ["三国~蜀", "三国~魏", "三国~吴", "混沌"].includes(option.campKey)
+          && option.count === coreGauntletCardCount(5, option.level)
+          && option.cardIds.length === option.count
+          && new Set(option.cardIds).size === option.cardIds.length))
+        && coreGauntletCardCount(5, 1) === 4
+        && coreGauntletCardCount(5, 2) === 5
+        && coreGauntletCardCount(5, 3) === 6
+        && coreGauntletCardCount(5, 4) === 7
+        && coreGauntletCardCount(5, 5) === 8);
+
+      const playerGauntletOption = gauntletPlayerOptions[0];
+      const aiGauntletOption = gauntletAiSamples[0][0];
+      const gauntletGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: aiGauntletOption.campKey },
+        5,
+        1,
+        aiGauntletOption.level,
+        null,
+        null,
+        { 1: playerGauntletOption.cardIds, 2: aiGauntletOption.cardIds }
+      );
+      check("过关斩将以独立PVE小卡组创建对局", coreIsGauntlet(gauntletGame)
+        && gauntletGame.gauntletMode
+        && !gauntletGame.challengeMode
+        && gauntletGame.players[0].deckCatalog.length === 5
+        && gauntletGame.players[1].deckCatalog.length === aiGauntletOption.count
+        && gauntletGame.players[1].isAI);
+
+      const cardSlotById = (id) => window.CARD_LIBRARY.cardSlots.find((card) => String(card.id) === String(id));
+      const rewardSamples = [1, 2, 3, 4, 5].flatMap((level) =>
+        ["三国~蜀", "三国~魏", "三国~吴", "混沌"].map((campKey) => coreBuildGauntletAiOption(campKey, level, playerGauntletOption.cardIds))
+      );
+      check("过关斩将奖励来自AI实际卡组且稀有度符合难度", rewardSamples.every((option) => {
+        const rewardCard = cardSlotById(option.rewardCardId);
+        const allowedRarities = Object.keys(coreGauntletDifficultyInfo(option.level).rewardWeights);
+        return option.cardIds.includes(option.rewardCardId)
+          && !playerGauntletOption.cardIds.includes(option.rewardCardId)
+          && allowedRarities.includes(rewardCard?.rarity)
+          && (option.campKey === "混沌" || rewardCard?.camp === option.campKey);
+      }));
+
+      const rewardCamp = playerGauntletOption.campKey === "三国~魏" ? "三国~吴" : "三国~魏";
+      const rewardAiOption = coreBuildGauntletAiOption(rewardCamp, 4, playerGauntletOption.cardIds);
+      const rewardGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: rewardAiOption.campKey },
+        5,
+        1,
+        rewardAiOption.level,
+        null,
+        null,
+        { 1: playerGauntletOption.cardIds, 2: rewardAiOption.cardIds }
+      );
+      rewardGame.gauntletRewardCardId = rewardAiOption.rewardCardId;
+      rewardGame.winner = { playerId: 1, text: "玩家 1 获胜" };
+      state.gauntlet = {
+        playerOptions: [playerGauntletOption],
+        selectedPlayerOption: { ...playerGauntletOption, cardIds: [...playerGauntletOption.cardIds] },
+        playerDeckCardIds: [...playerGauntletOption.cardIds],
+        aiOptions: [rewardAiOption],
+        selectedAiOption: rewardAiOption,
+        lastReward: null
+      };
+      const rewardDeckSizeBefore = state.gauntlet.playerDeckCardIds.length;
+      const grantedReward = coreGrantGauntletReward(rewardGame);
+      const grantedAgain = coreGrantGauntletReward(rewardGame);
+      check("过关斩将胜利奖励一张卡且重复结算不会重复发放", grantedReward?.cardId === rewardAiOption.rewardCardId
+        && grantedAgain === grantedReward
+        && rewardGame.gauntletRewardGranted
+        && rewardGame.players[1].deckCatalog.some((card) => card.id === grantedReward.cardId)
+        && state.gauntlet.playerDeckCardIds.length === rewardDeckSizeBefore + 1
+        && state.gauntlet.playerDeckCardIds.filter((id) => id === grantedReward.cardId).length === 1);
+
+      const nextRewardAiOption = coreBuildGauntletAiOption("混沌", 3, state.gauntlet.playerDeckCardIds);
+      const nextGauntletGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: nextRewardAiOption.campKey },
+        5,
+        1,
+        nextRewardAiOption.level,
+        null,
+        null,
+        { 1: state.gauntlet.playerDeckCardIds, 2: nextRewardAiOption.cardIds }
+      );
+      check("过关斩将奖励可跨国度加入玩家卡组并用于后续对局", cardSlotById(grantedReward?.cardId)?.camp === rewardCamp
+        && nextGauntletGame.players[0].deckCatalog.length === rewardDeckSizeBefore + 1
+        && nextGauntletGame.players[0].deckCatalog.some((card) => card.id === grantedReward.cardId));
+
+      const losingGame = coreCreateGame(
+        "pve-gauntlet",
+        { 1: playerGauntletOption.campKey, 2: rewardAiOption.campKey },
+        5,
+        1,
+        rewardAiOption.level,
+        null,
+        null,
+        { 1: playerGauntletOption.cardIds, 2: rewardAiOption.cardIds }
+      );
+      losingGame.gauntletRewardCardId = rewardAiOption.rewardCardId;
+      losingGame.winner = { playerId: 2, text: "AI 获胜" };
+      state.gauntlet.playerDeckCardIds = [...playerGauntletOption.cardIds];
+      check("过关斩将失败不发放卡牌", coreGrantGauntletReward(losingGame) === null
+        && state.gauntlet.playerDeckCardIds.length === playerGauntletOption.cardIds.length
+        && !losingGame.gauntletRewardGranted);
       const challengePlansValid = JSON.stringify(coreChallengeTraitPlan(1)) === JSON.stringify(["beginner"])
         && JSON.stringify(coreChallengeTraitPlan(2)) === JSON.stringify(["intermediate"])
         && JSON.stringify(coreChallengeTraitPlan(3)) === JSON.stringify(["advanced"])
@@ -480,6 +604,7 @@
       results.push({ name: "回归测试执行", passed: false, error: String(error) });
     } finally {
       state.game = previousGame;
+      state.gauntlet = previousGauntlet;
     }
     return { passed: results.filter((result) => result.passed).length, failed: results.filter((result) => !result.passed).length, results };
   }

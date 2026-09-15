@@ -19,7 +19,7 @@ function cellText(value) {
 }
 
 function effectText(value) {
-  return value === undefined || value === null ? "" : String(value);
+  return value === undefined || value === null ? "" : String(value).replace(/\r?\n/g, "\r\n");
 }
 
 function fail(message) {
@@ -106,7 +106,7 @@ const replacementOutput = [
 
 fs.writeFileSync(replacementCardsPath, replacementOutput, "utf8");
 
-const cacheVersion = `card-info-${crypto.createHash("sha1").update(output).digest("hex").slice(0, 12)}`;
+const cacheVersion = `card-info-${crypto.createHash("sha1").update(output).update("\0").update(replacementOutput).digest("hex").slice(0, 12)}`;
 for (const htmlName of ["index.html", "card-test.html"]) {
   const htmlPath = path.join(root, htmlName);
   let html = fs.readFileSync(htmlPath, "utf8");

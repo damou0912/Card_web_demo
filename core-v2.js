@@ -739,11 +739,40 @@
     return true;
   }
 
+  function coreFirstFriendlyPlacementFreeSource(game, player, card) {
+    if (!game || !player || !card || !player.hand?.includes(card)) return null;
+    return game.boardCards.find((source) => (
+      source.ownerId === player.id
+      && source.uid !== card.uid
+      && coreCardEffectHasFlag(source, "firstFriendlyPlacementFree")
+      && source.v2FreePlacementUsedTurn !== game.turn
+    )) || null;
+  }
+
+  function coreClaimFirstFriendlyPlacementFree(game, player, card) {
+    const source = coreFirstFriendlyPlacementFreeSource(game, player, card);
+    if (source) source.v2FreePlacementUsedTurn = game.turn;
+    return source;
+  }
+
   function coreCanUseAction(game, card = null) {
     if (coreTurnSecondsRemaining(game) === 0) return false;
     const activePlayer = corePlayer(game, game.activePlayerId);
     const traitFreeAction = coreEliteAiRuleAny(game, "freeAction", { player: activePlayer, card });
-    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card) || traitFreeAction;
+    const freePlacement = coreFirstFriendlyPlacementFreeSource(game, activePlayer, card);
+    return (Number(game.actionsUsed) || 0) < coreActionLimit(game) || coreHasFreeAction(game, card) || Boolean(freePlacement) || traitFreeAction;
+  }
+
+  function coreConsumeResolvedAction(game, player, card, action, freePlacementSource = null) {
+    const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
+    const cardEffectFreeAction = action.type === "place" ? Boolean(freePlacementSource) : coreHasFreeAction(game, card);
+    const consumesAction = traitConsumesAction && !cardEffectFreeAction;
+    if (consumesAction) {
+      game.actionsUsed = (Number(game.actionsUsed) || 0) + 1;
+    } else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
+      card.freeActionUsedThisTurn = (Number(card.freeActionUsedThisTurn) || 0) + 1;
+    }
+    return consumesAction;
   }
 
   function coreBoardSize(game) {
@@ -1919,6 +1948,11 @@
     if (!coreEliteAiRuleAllows(game, "allowMovement", { card })) return [];
     const cells = [];
     const directions = [{ row: -1, col: 0 }, { row: 1, col: 0 }, { row: 0, col: -1 }, { row: 0, col: 1 }];
+    const canMoveDiagonally = coreCardEffectHasFlag(card, "diagonalMove");
+    if (canMoveDiagonally) directions.push(
+      { row: -1, col: -1 }, { row: -1, col: 1 },
+      { row: 1, col: -1 }, { row: 1, col: 1 }
+    );
     const canUseLongMove = coreCardEffectHasFlag(card, "longMove") && !card.v2LongMoveUsed;
     // Charge movement remains available for the turn; start effects only change combat power.
     const canCharge = coreCardEffectHasFlag(card, "chargeMove");
@@ -1935,6 +1969,8 @@
         return false;
       }
       const target = getBoardCardAt(game, cell.row, cell.col);
+      const isDiagonal = Math.abs(cell.row - card.row) === 1 && Math.abs(cell.col - card.col) === 1;
+      if (isDiagonal) return canMoveDiagonally && !target;
       if (target && target.ownerId !== card.ownerId && !coreCanCardsFight(game, card, target)) return false;
       const distance = Math.abs(cell.row - card.row) + Math.abs(cell.col - card.col);
       if ((canCharge || canUseLongMove) && distance >= 2) {
@@ -1952,8 +1988,8 @@
     if (!player) return null;
     const selection = game.selection;
     if (selection.handCardUid && selection.targetCell) {
-      if (!coreCanUseAction(game)) return null;
       const card = player.hand.find((item) => item.uid === selection.handCardUid);
+      if (!card || !coreCanUseAction(game, card)) return null;
       const legal = corePlacementAvailability(game).cells.some((cell) => (
         cell.row === selection.targetCell.row && cell.col === selection.targetCell.col
       ));
@@ -2037,12 +2073,14 @@
     await playActionAnimations(game, [action]);
 
     let combatScene = null;
+    let freePlacementSource = null;
     if (action.type === "place") {
       const handIndex = player.hand.findIndex((item) => item.uid === card.uid);
       if (handIndex < 0) {
         game.isAnimating = false;
         return false;
       }
+      freePlacementSource = coreClaimFirstFriendlyPlacementFree(game, player, card);
       player.hand.splice(handIndex, 1);
       card.ownerId = player.id;
       card.row = action.target.row;
@@ -2155,14 +2193,7 @@
     coreEnforceElitePowerBounds(game);
     syncPlayerBoardIds(game);
     if (typeof flushPendingAnimations === "function") await flushPendingAnimations(game);
-    const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
-    const consumesAction = traitConsumesAction && (action.type === "place" || !coreHasFreeAction(game, card));
-    if (consumesAction) {
-      game.actionsUsed += 1;
-    } else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
-      // Track that a free action was used for this card this turn
-      card.freeActionUsedThisTurn = (Number(card.freeActionUsedThisTurn) || 0) + 1;
-    }
+    coreConsumeResolvedAction(game, player, card, action, freePlacementSource);
     const won = coreCheckVictory(game);
     game.isAnimating = false;
     if (won) {
@@ -2591,9 +2622,11 @@
     }
 
     const log = [];
+    let freePlacementSource = null;
     if (action.type === "place") {
       const handIndex = player.hand.findIndex((item) => item.uid === card.uid);
       if (handIndex < 0) return null;
+      freePlacementSource = coreClaimFirstFriendlyPlacementFree(game, player, card);
       player.hand.splice(handIndex, 1);
       card.ownerId = player.id;
       card.row = action.target.row;
@@ -2684,12 +2717,7 @@
 
     coreEnforceElitePowerBounds(game);
     syncPlayerBoardIds(game);
-    const traitConsumesAction = coreEliteAiRuleAllows(game, "consumeAction", { player, card, action });
-    const consumesAction = traitConsumesAction && (action.type === "place" || !coreHasFreeAction(game, card));
-    if (consumesAction) game.actionsUsed += 1;
-    else if (action.type !== "place" && coreCardEffectHasFlag(card, "freeAction")) {
-      card.freeActionUsedThisTurn = (Number(card.freeActionUsedThisTurn) || 0) + 1;
-    }
+    coreConsumeResolvedAction(game, player, card, action, freePlacementSource);
     coreCheckVictory(game);
     return { player, card, log };
   }
@@ -3033,12 +3061,13 @@
     const game = state.game;
     if (!game || game.isAnimating || !coreCanViewerInteract(game)) return;
     const active = corePlayer(game, game.activePlayerId);
-    if (game.actionsUsed >= coreActionLimit(game)) {
+    const card = active?.hand.find((item) => item.uid === cardUid);
+    if (!card) return;
+    if (!coreCanUseAction(game, card)) {
       showToast("行动次数已用完", "本回合不能继续放置卡牌，请结束回合。");
       coreRender();
       return;
     }
-    if (!active.hand.some((card) => card.uid === cardUid)) return;
     const availability = corePlacementAvailability(game);
     if (availability.cells.length === 0) {
       showToast("无法放置", availability.reason);
@@ -3054,7 +3083,8 @@
     const active = corePlayer(game, game.activePlayerId);
     const target = getBoardCardAt(game, row, col);
     const selectedCard = game.boardCards.find((item) => item.uid === game.selection.boardCardUid);
-    const actionCard = target?.ownerId === active.id ? target : selectedCard;
+    const selectedHandCard = active.hand.find((item) => item.uid === game.selection.handCardUid);
+    const actionCard = selectedHandCard || (target?.ownerId === active.id ? target : selectedCard);
     if (!coreCanUseAction(game, actionCard)) {
       showToast("行动次数已用完", "本回合不能继续行动，请结束回合。");
       coreRender();

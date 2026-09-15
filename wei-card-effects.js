@@ -224,6 +224,108 @@
     }
   };
 
+  wei["02121"] = {
+    onPlace(ctx) {
+      if (ctx.enemies().length) return;
+      ctx.adjust(ctx.card, 1);
+      ctx.log("四方相邻无非友军，自身永久战力+1。");
+    }
+  };
+
+  wei["02122"] = {
+    onPlace(ctx) {
+      const targets = ctx.enemies();
+      if (!targets.length) return;
+      ctx.adjust(ctx.card, 2, true);
+      const target = ctx.pickRandom(targets);
+      if (target) ctx.skillAttack(ctx.card, target);
+      ctx.log("自身本回合战力+2，并随机攻击一张四方相邻非友军。");
+    }
+  };
+
+  wei["02123"] = {
+    onPlace(ctx) {
+      const allies = ctx.otherAllies();
+      if (!allies.length) return;
+      const lowestAttack = Math.min(...allies.map((target) => Number(target.currentAttack) || 0));
+      const target = ctx.pickRandom(allies.filter((ally) => (Number(ally.currentAttack) || 0) === lowestAttack));
+      if (target) {
+        ctx.adjust(target, 1);
+        ctx.log("使一张最低战力的其他友军永久战力+1。");
+      }
+    }
+  };
+
+  wei["02124"] = {
+    onPlace(ctx) {
+      if (ctx.player.hand.length) {
+        const target = ctx.pickRandom(ctx.player.hand);
+        ctx.adjust(target, 1);
+        ctx.log("使一张随机手牌永久战力+1。");
+        return;
+      }
+      if (ctx.draw(ctx.player)) ctx.log("无手牌，抽取1张卡牌。");
+    }
+  };
+
+  wei["02225"] = {
+    onTurnStart(ctx) {
+      if (!ctx.isEdge(ctx.card)) return;
+      const targets = ctx.board.filter((target) => target.ownerId === ctx.card.ownerId && ctx.isEdge(target));
+      targets.forEach((target) => ctx.adjust(target, 1, true));
+      if (targets.length) ctx.log("使所有位于战场边缘的友军本回合战力+1。");
+    }
+  };
+
+  wei["02226"] = {
+    onUnderAttack(ctx) {
+      ctx.adjust(ctx.card, 2, true);
+      const targets = ctx.allies();
+      targets.forEach((target) => ctx.adjust(target, 1, true));
+      ctx.log("被攻击时自身本回合战力+2，四方相邻友军本回合战力+1。");
+    }
+  };
+
+  wei["02227"] = {
+    flags: { diagonalMove: true }
+  };
+
+  wei["02328"] = {
+    onBeforeAttack(ctx) {
+      ctx.adjust(ctx.card, 2, true);
+      ctx.log("主动攻击时自身本回合战力+2。");
+    },
+    onCombatResolved(ctx) {
+      if (!ctx.opponentDestroyed || ctx.opponent?.ownerId !== ctx.otherPlayer?.id) return;
+      ctx.addActions(1);
+      ctx.log("摧毁敌方卡牌，本回合行动数+1。");
+    }
+  };
+
+  wei["02429"] = {
+    onPlace(ctx) {
+      const target = ctx.pickRandom(ctx.otherAllies());
+      if (!target) return;
+      ctx.adjust(target, 1);
+      ctx.log("使一张随机其他友军永久战力+1。");
+    },
+    onOwnCardAttackIncreased(ctx) {
+      if (ctx.temporary || !ctx.increasedCard || ctx.increasedCard.uid === ctx.card.uid) return;
+      ctx.adjust(ctx.card, 1);
+      ctx.log("其他友军永久增加战力，自身永久战力+1。");
+    },
+    onTurnStart(ctx) {
+      const allies = ctx.otherAllies();
+      if (allies.some((target) => target.currentAttack > ctx.card.currentAttack)) return;
+      ctx.addActions(1);
+      ctx.log("自身战力不低于其他友军，本回合行动数+1。");
+    }
+  };
+
+  wei["02530"] = {
+    flags: { cannotMove: true, firstFriendlyPlacementFree: true }
+  };
+
   window.CARD_EFFECTS_V2 = window.CARD_EFFECTS_V2 || {};
   window.CARD_EFFECTS_V2.wei = wei;
 })();

@@ -163,14 +163,8 @@
   };
 
   wu["03416"] = {
-    flags: { watchAllDestroyed: true },
     onTurnStart(ctx) { ctx.grantExtraMoves(1); },
-    onOtherDestroyed(ctx) {
-      if (ctx.destroyedCard.currentAttack <= ctx.card.currentAttack) ctx.adjust(ctx.card, 1);
-    },
-    onBeforeAttack(ctx) {
-      ctx.adjust(ctx.card, 3, true);
-    }
+    onBeforeAttack(ctx) { ctx.adjust(ctx.card, 1); }
   };
 
   wu["03517"] = {

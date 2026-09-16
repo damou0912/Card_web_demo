@@ -2658,8 +2658,8 @@ button:disabled {
   place-items: center;
   border-radius: 18px;
   opacity: 0;
-  transform: scale(0.64);
-  transition: transform 260ms ease, opacity 260ms ease;
+  transform: translate(var(--animation-stack-x, 0px), var(--animation-stack-y, 0px)) scale(0.64);
+  transition: transform 180ms ease, opacity 180ms ease;
   --effect-color: #4a8ac2;
   --effect-glow: rgba(74, 138, 194, 0.46);
 }
@@ -3067,7 +3067,7 @@ button:disabled {
 
 .board-pulse.visible {
   opacity: 1;
-  transform: scale(1.04);
+  transform: translate(var(--animation-stack-x, 0px), var(--animation-stack-y, 0px)) scale(1.04);
 }
 
 .board-pulse.visible .ripple-one {
@@ -3080,7 +3080,7 @@ button:disabled {
 
 .board-pulse.fade {
   opacity: 0;
-  transform: scale(1.16);
+  transform: translate(var(--animation-stack-x, 0px), calc(var(--animation-stack-y, 0px) - 8px)) scale(1.12);
 }
 
 .board-pulse.attack {
@@ -3192,7 +3192,7 @@ button:disabled {
   place-items: center;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -50%) scale(0.54);
+  transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-50% + var(--animation-stack-y, 0px))) scale(0.54);
 }
 
 .power-change-weaken {
@@ -3203,12 +3203,12 @@ button:disabled {
 
 .power-change.visible {
   opacity: 1;
-  animation: power-change-enter 360ms cubic-bezier(0.17, 0.9, 0.25, 1.18) both;
+  animation: power-change-enter 220ms cubic-bezier(0.17, 0.9, 0.25, 1.18) both;
 }
 
 .power-change.fade {
   opacity: 0;
-  animation: power-change-exit 300ms ease-out both;
+  animation: power-change-exit 110ms ease-out both;
 }
 
 .power-change-burst {
@@ -3219,7 +3219,7 @@ button:disabled {
   background: radial-gradient(circle, var(--power-glow) 0%, rgba(255, 255, 255, 0.12) 30%, transparent 68%);
   box-shadow: 0 0 20px var(--power-glow), 0 0 46px var(--power-glow);
   opacity: 0.72;
-  animation: power-change-burst 980ms ease-out both;
+  animation: power-change-burst 450ms ease-out both;
 }
 
 .power-change-burst::before,
@@ -3229,7 +3229,7 @@ button:disabled {
   border: 2px dashed var(--power-soft);
   border-radius: 50%;
   content: "";
-  animation: power-change-spin 780ms linear infinite;
+  animation: power-change-spin 360ms linear infinite;
 }
 
 .power-change-burst::after {
@@ -3302,7 +3302,7 @@ button:disabled {
 
 .cell.power-change-impact {
   z-index: 8;
-  animation: power-cell-impact 980ms ease-out both;
+  animation: power-cell-impact 450ms ease-out both;
 }
 
 .cell.power-change-impact::before {
@@ -3327,23 +3327,118 @@ button:disabled {
 
 .unit.power-change-target-boost {
   z-index: 6;
-  animation: power-target-boost 980ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+  animation: power-target-boost 450ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
 }
 
 .unit.power-change-target-weaken {
   z-index: 6;
-  animation: power-target-weaken 980ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+  animation: power-target-weaken 450ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+}
+
+.adjacent-power-link {
+  --power-link-color: #7dffb5;
+  --power-link-glow: rgba(82, 255, 163, 0.92);
+  position: absolute;
+  z-index: 28;
+  height: 6px;
+  opacity: 0.96;
+  pointer-events: none;
+  transform: rotate(var(--power-link-angle)) scaleX(0.04);
+  transform-origin: left center;
+}
+
+.adjacent-power-link.visible {
+  animation: adjacent-power-link-grow 180ms cubic-bezier(0.2, 0.9, 0.28, 1) both;
+}
+
+.adjacent-power-link.visible.fade {
+  animation: adjacent-power-link-fade 100ms ease-out both;
+}
+
+.adjacent-power-link-core {
+  position: absolute;
+  inset: 1px 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffffff, var(--power-link-color) 28%, #eafff2 72%, var(--power-link-color));
+  box-shadow: 0 0 7px #ffffff, 0 0 15px var(--power-link-glow), 0 0 28px var(--power-link-glow);
+}
+
+.adjacent-power-link-spark {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--power-link-color);
+  box-shadow: 0 0 10px #ffffff, 0 0 22px var(--power-link-glow);
+  animation: adjacent-power-link-spark 260ms 20ms ease-out both;
+}
+
+.cell.adjacent-buff-source-cell {
+  z-index: 9;
+}
+
+.cell.adjacent-buff-source-cell::after {
+  position: absolute;
+  inset: -5px;
+  z-index: 7;
+  border: 3px solid rgba(136, 255, 187, 0.96);
+  border-radius: inherit;
+  box-shadow: 0 0 10px #ffffff, 0 0 30px rgba(82, 255, 163, 0.88);
+  content: "";
+  pointer-events: none;
+  animation: adjacent-buff-source-ring 450ms ease-out both;
+}
+
+.unit.adjacent-buff-source {
+  z-index: 8;
+  animation: adjacent-buff-source-card 450ms cubic-bezier(0.2, 0.8, 0.24, 1) both;
+}
+
+.cell.adjacent-buff-target-cell {
+  outline: 3px solid rgba(136, 255, 187, 0.88);
+  outline-offset: -6px;
 }
 
 @keyframes power-change-enter {
-  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
-  60% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
-  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  0% { opacity: 0; transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-50% + var(--animation-stack-y, 0px))) scale(0.54); }
+  60% { opacity: 1; transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-50% + var(--animation-stack-y, 0px))) scale(1.08); }
+  100% { opacity: 1; transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-50% + var(--animation-stack-y, 0px))) scale(1); }
+}
+
+@keyframes adjacent-power-link-grow {
+  0% { opacity: 0.96; transform: rotate(var(--power-link-angle)) scaleX(0.04); }
+  100% { opacity: 1; transform: rotate(var(--power-link-angle)) scaleX(1); }
+}
+
+@keyframes adjacent-power-link-fade {
+  0% { opacity: 1; transform: rotate(var(--power-link-angle)) scaleX(1); }
+  100% { opacity: 0; transform: rotate(var(--power-link-angle)) scaleX(1); }
+}
+
+@keyframes adjacent-power-link-spark {
+  0% { opacity: 0; transform: translateX(0) scale(0.5); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(calc(var(--power-link-distance) - 14px)) scale(1.15); }
+}
+
+@keyframes adjacent-buff-source-ring {
+  0% { opacity: 0; transform: scale(0.82); }
+  24% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0.18; transform: scale(1.08); }
+}
+
+@keyframes adjacent-buff-source-card {
+  0% { transform: scale(1); filter: brightness(1) saturate(1); }
+  24% { transform: scale(1.1); filter: brightness(1.72) saturate(1.45); }
+  100% { transform: scale(1); filter: brightness(1.08) saturate(1.1); }
 }
 
 @keyframes power-change-exit {
-  0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -66%) scale(0.82); }
+  0% { opacity: 1; transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-50% + var(--animation-stack-y, 0px))) scale(1); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--animation-stack-x, 0px)), calc(-66% + var(--animation-stack-y, 0px))) scale(0.82); }
 }
 
 @keyframes power-change-burst {
@@ -5826,6 +5921,15 @@ body {
   gap: 8px;
 }
 
+.log-turn-heading {
+  margin: 8px 0 0;
+  padding: 6px 10px 3px;
+  color: var(--overlay-gold);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
 .log-entry {
   padding: 12px;
   border-left: 3px solid rgba(255, 255, 255, 0.2);
@@ -5849,6 +5953,19 @@ body {
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
   font-weight: 600;
+}
+
+.log-type {
+  display: inline-flex;
+  min-width: 34px;
+  justify-content: center;
+  padding: 2px 5px;
+  border: 1px solid rgba(229, 236, 229, 0.22);
+  border-radius: 4px;
+  color: var(--overlay-gold);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .log-time {
@@ -6499,8 +6616,7 @@ body {
   box-shadow: inset 3px 0 0 #f4ca70;
 }
 
-.current-card,
-.replacement-card {
+.current-card {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -6508,8 +6624,7 @@ body {
   gap: 4px;
 }
 
-.current-card.modify-deck-card-preview,
-.replacement-card.modify-deck-card-preview {
+.current-card.modify-deck-card-preview {
   margin: -5px;
   padding: 5px;
 }
@@ -6520,34 +6635,22 @@ body {
 }
 
 .current-card.modify-deck-card-preview:hover,
-.current-card.modify-deck-card-preview:focus-visible,
-.replacement-card.modify-deck-card-preview:hover,
-.replacement-card.modify-deck-card-preview:focus-visible {
+.current-card.modify-deck-card-preview:focus-visible {
   background: rgba(255, 255, 255, 0.08);
   box-shadow: 0 0 0 1px rgba(244, 202, 112, 0.34);
 }
 
-.current-card strong,
-.replacement-card strong {
+.current-card strong {
   font-size: 13px;
   color: #e8e8e8;
 }
 
-.current-card small,
-.replacement-card small {
+.current-card small {
   font-size: 11px;
   color: #b8c5ba;
 }
 
-.replacement-arrow {
-  font-size: 18px;
-  color: #78b48c;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.select-replacement-btn,
-.reset-replacement-btn {
+.select-replacement-btn {
   flex-shrink: 0;
   padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -6563,17 +6666,6 @@ body {
 .select-replacement-btn:hover {
   background: rgba(120, 180, 140, 0.25);
   border-color: #78b48c;
-}
-
-.reset-replacement-btn {
-  background: rgba(200, 80, 80, 0.15);
-  color: #d88888;
-  border-color: rgba(200, 80, 80, 0.3);
-}
-
-.reset-replacement-btn:hover {
-  background: rgba(200, 80, 80, 0.25);
-  border-color: #d88888;
 }
 
 .candidate-card-btn {

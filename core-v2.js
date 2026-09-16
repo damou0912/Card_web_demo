@@ -7,8 +7,8 @@
   const CORE_TURN_TIME_LIMIT_SECONDS = 300;
   const CORE_TURN_TIME_LIMIT_MS = CORE_TURN_TIME_LIMIT_SECONDS * 1000;
   const CORE_TIMER_TICK_MS = 250;
-  const CORE_CARD_DATA_VERSION = "card-info-v2-wu-replacements-20260915";
-  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-wu-replacements-20260915";
+  const CORE_CARD_DATA_VERSION = "card-info-v2-description-effects-20260916";
+  const CORE_RUNTIME_SCHEMA_VERSION = "runtime-description-effects-20260916";
   const CORE_CARD_TEST_SCENE_VERSION = 2;
   const CORE_GAUNTLET_MODE = "pve-gauntlet";
   const CORE_GAUNTLET_MAX_DECK_SIZE = 20;
@@ -922,6 +922,13 @@
       state.game = game;
       try { return callback(); } finally { state.game = previous; }
     };
+    const recordPower = (target, before, temporary) => {
+      if (!target || !game.boardCards?.includes(target)) return;
+      const after = Number(target.currentAttack) || 0;
+      if (after === before) return;
+      const delta = after - before;
+      coreRecordCardFlow(game, "power", `${coreCardName(card)} 对 ${coreCardName(target)} ${temporary ? "本回合" : "永久"}战力${delta > 0 ? "+" : ""}${delta}（${before} → ${after}），因技能【${coreCardDisplay(card).skill}】。`);
+    };
     return {
       game, player, card, logEntries: log, handLimit: HAND_LIMIT,
       otherPlayer: corePlayer(game, otherPlayerId(player?.id ?? card?.ownerId)),
@@ -937,8 +944,9 @@
       eightAdjacent: (subject = card) => coreAdjacentCards(game, subject, true),
       pickRandom: corePickRandom,
       adjust: (target, delta, temporary = false) => withGame(() => {
-        const before = target?.currentAttack;
-        coreAdjustAttack(target, delta, temporary);
+        const before = Number(target?.currentAttack) || 0;
+        coreAdjustAttack(target, delta, temporary, false, card);
+        recordPower(target, before, temporary);
         return target && target.currentAttack !== before;
       }),
       preventRest: (target = card) => {
@@ -954,8 +962,27 @@
           .forEach((target) => { target.restedTurn = null; });
         return true;
       },
-      setAttack: (target, value, temporary = true) => coreSetAttack(game, target, value, temporary),
-      setPermanentAttack: (target, value) => coreSetPermanentAttack(game, target, value),
+      setAttack: (target, value, temporary = true) => {
+        const before = Number(target?.currentAttack) || 0;
+        const applied = coreSetAttack(game, target, value, temporary, card);
+        recordPower(target, before, temporary);
+        return applied;
+      },
+      setPermanentAttack: (target, value) => {
+        const before = Number(target?.currentAttack) || 0;
+        const applied = coreSetPermanentAttack(game, target, value, card);
+        recordPower(target, before, false);
+        return applied;
+      },
+      restoreTurnStartAttack: (target) => {
+        const before = Number(target?.currentAttack) || 0;
+        const applied = coreRestoreTurnStartAttack(game, target, card);
+        const after = Number(target?.currentAttack) || 0;
+        if (applied && after !== before) {
+          coreRecordCardFlow(game, "power", `${coreCardName(card)} 使 ${coreCardName(target)} 战力恢复至回合开始值（${before} → ${after}），因技能【${coreCardDisplay(card).skill}】。`);
+        }
+        return applied;
+      },
       draw: (targetPlayer = player) => coreDrawOneCard(game, targetPlayer, log).status === "drawn",
       addToDrawPile: (targetPlayer, cards) => coreAddCardsToDrawPile(game, targetPlayer, cards, log),
       drawFromEnemyDeck: (count = 1) => coreDrawFromEnemyDeck(game, card.ownerId, count, log),
@@ -1058,6 +1085,7 @@
           if (index >= 0) {
             game.boardCards.splice(index, 1);
             const original = { row, col: position.col };
+            coreRecordCardFlow(game, "destroy", `${coreCardName(card)} 生成破坏格 ${formatCell(position.row, position.col)}，${coreCardName(cardAbove)} 因位于其正上方被强制摧毁（无视保护）。`);
             cardAbove.destroyedAt = original;
             const destroyedAttack = cardAbove.currentAttack;
             const ownEffectDefinition = coreCardEffectDefinition(cardAbove);
@@ -1135,8 +1163,14 @@
         return true;
       },
       hasDestroyEffect: (target) => typeof coreCardEffectDefinition(target)?.onDestroy === "function",
-      logMessage: (message) => log.push(message),
-      log: (message) => log.push(message),
+      logMessage: (message) => {
+        log.push(message);
+        coreRecordCardFlow(game, "skill", `${coreCardName(card)}：${message}`);
+      },
+      log: (message) => {
+        log.push(message);
+        coreRecordCardFlow(game, "skill", `${coreCardName(card)}：${message}`);
+      },
       ...extra
     };
   }
@@ -1252,6 +1286,7 @@
       flowPrompt: "",
       roundLog: [],
       actionHistory: [],
+      cardFlowHistory: [],
       lastResolvedTurn: 0,
       lastResolution: "卡组已确定，等待展示先后手。"
     };
@@ -1319,8 +1354,10 @@
     });
     corePruneV2TimedState(game);
     game.roundLog = [`${active.name} 的${game.turn === 1 ? "第一个" : "本"}回合开始。`];
+    coreRecordCardFlow(game, "turn", game.roundLog[0]);
     const drawLog = coreDrawAtTurnStart(game, active);
     game.roundLog.push(drawLog);
+    coreRecordCardFlow(game, "action", drawLog);
     let wonAtStart = coreRunStartSkills(game, active);
     const eliteTraitOwnerId = Number(game.eliteAiTraitOwnerId) || coreEliteAiTraitOwner(game)?.id;
     if (!wonAtStart && active.id === eliteTraitOwnerId) {
@@ -1415,7 +1452,7 @@
     return resolvedAmount;
   }
 
-  function coreAdjustAttack(card, delta, temporary = false, isolated = false) {
+  function coreAdjustAttack(card, delta, temporary = false, isolated = false, animationSource = null) {
     if (!card || !delta) return;
     const game = state.game;
     delta = coreResolveV2AdjustAmount(game, card, delta);
@@ -1428,12 +1465,12 @@
     if (game) coreEnforceElitePowerBounds(game);
     const actualDelta = card.currentAttack - previous;
     if (game && !game.isAiSimulation && actualDelta && game.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
-      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack, animationSource);
     }
     if (card.currentAttack > previous && !isolated) coreNotifyV2AttackIncrease(game, card, card.currentAttack - previous, temporary);
   }
 
-  function coreSetAttack(game, card, nextAttack, temporary = true) {
+  function coreSetAttack(game, card, nextAttack, temporary = true, animationSource = null) {
     if (!card) return false;
     const previous = Number(card.currentAttack ?? card.attack) || 0;
     const requestedDelta = (Number(nextAttack) || 0) - previous;
@@ -1449,13 +1486,13 @@
     if (game) coreEnforceElitePowerBounds(game);
     const actualDelta = card.currentAttack - previous;
     if (actualDelta && !game?.isAiSimulation && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
-      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack, animationSource);
     }
     if (next > previous) coreNotifyV2AttackIncrease(game, card, next - previous, temporary);
     return true;
   }
 
-  function coreSetPermanentAttack(game, card, nextAttack) {
+  function coreSetPermanentAttack(game, card, nextAttack, animationSource = null) {
     if (!card) return false;
     const previous = Number(card.currentAttack ?? card.attack) || 0;
     const requestedDelta = Math.max(0, Number(nextAttack) || 0) - previous;
@@ -1468,9 +1505,25 @@
     if (game) coreEnforceElitePowerBounds(game);
     const actualDelta = card.currentAttack - previous;
     if (actualDelta && !game?.isAiSimulation && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
-      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack);
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack, animationSource);
     }
     if (actualDelta > 0) coreNotifyV2AttackIncrease(game, card, actualDelta, false);
+    return true;
+  }
+
+  function coreRestoreTurnStartAttack(game, card, animationSource = null) {
+    const startAttack = Number(card?.v2StartAttack);
+    if (!card || !Number.isFinite(startAttack)) return false;
+    const previous = Number(card.currentAttack ?? card.attack) || 0;
+    const next = Math.max(0, startAttack);
+    card.v2PermanentBonus = next - (Number(card.attack) || 0);
+    card.v2TempBonus = 0;
+    card.currentAttack = next;
+    if (game) coreEnforceElitePowerBounds(game);
+    const actualDelta = card.currentAttack - previous;
+    if (actualDelta && !game?.isAiSimulation && game?.boardCards?.includes(card) && typeof queuePowerAnimation === "function") {
+      queuePowerAnimation(game, card, actualDelta, previous, card.currentAttack, animationSource);
+    }
     return true;
   }
 
@@ -1571,7 +1624,9 @@
         let result;
         if (eliteSuppressed) {
           result = "本回合未触发：被精英词条压制。";
+          coreRecordCardFlow(game, "protect", `${coreCardName(card)} 的回合开始技能被精英词条压制，未触发。`);
         } else {
+          coreRecordCardFlow(game, "skill", `${coreCardName(card)} 触发回合开始技能【${coreCardDisplay(card).skill}】。`);
           effectDefinition.onTurnStart(coreCreateCardEffectContext(game, player, card, log));
           result = coreBuildStartSkillResult(game, card, snapshot, log, logStart);
         }
@@ -1732,6 +1787,7 @@
   function coreApplyV2PlacementSkill(game, player, card, log) {
     const effectDefinition = coreCardEffectDefinition(card);
     if (typeof effectDefinition?.onPlace === "function") {
+      coreRecordCardFlow(game, "skill", `${coreCardName(card)} 触发入阵技能【${coreCardDisplay(card).skill}】。`);
       effectDefinition.onPlace(coreCreateCardEffectContext(game, player, card, log));
     }
   }
@@ -1758,6 +1814,7 @@
     watchers.forEach((card) => {
       const effectDefinition = coreCardEffectDefinition(card);
       if (effectDefinition?.onOtherPlaced) {
+        coreRecordCardFlow(game, "skill", `${coreCardName(card)} 因 ${coreCardName(placedCard)} 入阵触发技能【${coreCardDisplay(card).skill}】。`);
         effectDefinition.onOtherPlaced(coreCreateCardEffectContext(game, player, card, log, { placedCard }));
       }
     });
@@ -1770,6 +1827,7 @@
         if (!game.boardCards.includes(card)) return;
         const effectDefinition = coreCardEffectDefinition(card);
         if (typeof effectDefinition?.onDrawFailed === "function") {
+          coreRecordCardFlow(game, "skill", `${coreCardName(card)} 因 ${player.name} 抽牌失败触发技能【${coreCardDisplay(card).skill}】。`);
           effectDefinition.onDrawFailed(coreCreateCardEffectContext(game, player, card, log, {
             drawFailureReason: reason,
             drawingPlayer: player
@@ -1783,6 +1841,7 @@
       if (!game.boardCards.includes(card)) return;
       const effectDefinition = coreCardEffectDefinition(card);
       if (typeof effectDefinition?.onOtherDrawn !== "function") return;
+      coreRecordCardFlow(game, "skill", `${coreCardName(card)} 因 ${player.name} 抽牌触发技能【${coreCardDisplay(card).skill}】。`);
       effectDefinition.onOtherDrawn(coreCreateCardEffectContext(
         game,
         corePlayer(game, card.ownerId),
@@ -1882,6 +1941,7 @@
     ].forEach((entry) => {
       const definition = coreCardEffectDefinition(entry.card);
       if (typeof definition?.onCombatResolved !== "function") return;
+      coreRecordCardFlow(game, "skill", `${coreCardName(entry.card)} 结算战斗技能【${coreCardDisplay(entry.card).skill}】。`);
       definition.onCombatResolved(coreCreateCardEffectContext(
         game,
         corePlayer(game, entry.card.ownerId),
@@ -1908,6 +1968,7 @@
     // Trigger onBeforeAttack effects on attacker
     const attackerDef = coreCardEffectDefinition(attacker);
     if (typeof attackerDef?.onBeforeAttack === "function") {
+      coreRecordCardFlow(game, "skill", `${coreCardName(attacker)} 触发攻击前技能【${coreCardDisplay(attacker).skill}】。`);
       attackerDef.onBeforeAttack(coreCreateCardEffectContext(game, player, attacker, log, {
         targetCard: defender,
         attackKind: "skill"
@@ -1918,6 +1979,7 @@
     const defenderPlayer = corePlayer(game, defender.ownerId);
     const defenderDef = coreCardEffectDefinition(defender);
     if (typeof defenderDef?.onUnderAttack === "function") {
+      coreRecordCardFlow(game, "skill", `${coreCardName(defender)} 触发受击技能【${coreCardDisplay(defender).skill}】。`);
       defenderDef.onUnderAttack(coreCreateCardEffectContext(game, defenderPlayer, defender, log, {
         attacker,
         attackKind: "skill"
@@ -1970,6 +2032,7 @@
     watchers.forEach((watcher) => {
       const effectDefinition = coreCardEffectDefinition(watcher);
       if (!effectDefinition?.onOtherDestroyed || !game.boardCards.includes(watcher)) return;
+      coreRecordCardFlow(game, "skill", `${coreCardName(watcher)} 因 ${coreCardName(destroyedCard)} 被摧毁触发技能【${coreCardDisplay(watcher).skill}】。`);
       effectDefinition.onOtherDestroyed(coreCreateCardEffectContext(
         game,
         corePlayer(game, watcher.ownerId),
@@ -1985,6 +2048,7 @@
     const original = { row: card.row, col: card.col };
     if (coreApplyEliteAiTraitEvent(game, "beforeDestroy", { card, causeCard, original }, log) === false) {
       log.push(`精英特性【城下盟】使 ${coreCardName(card)} 在持有者回合内免于摧毁。`);
+      coreRecordCardFlow(game, "protect", `${coreCardName(card)} 因精英特性【城下盟】免于被 ${causeCard ? coreCardName(causeCard) : "当前效果"} 摧毁。`);
       return false;
     }
     const ownEffectDefinition = coreCardEffectDefinition(card);
@@ -1996,13 +2060,17 @@
         log,
         { original, causeCard }
       ));
-      if (result === false) return false;
+      if (result === false) {
+        coreRecordCardFlow(game, "protect", `${coreCardName(card)} 因自身技能【${coreCardDisplay(card).skill}】免于被 ${causeCard ? coreCardName(causeCard) : "当前效果"} 摧毁。`);
+        return false;
+      }
     }
     // A card's own destruction replacement takes precedence over protections granted by another card.
     if (card.v2ProtectedUntilTurn === game.turn) {
       card.v2ProtectedUntilTurn = null;
       coreSetAttack(game, card, 1, true);
       log.push(`${coreCardName(card)} 触发保护，保留在原格并将战力变为1。`);
+      coreRecordCardFlow(game, "protect", `${coreCardName(card)} 因本回合保护效果免于被 ${causeCard ? coreCardName(causeCard) : "当前效果"} 摧毁，战力变为1。`);
       return false;
     }
     const adjacentProtectors = coreCardEffectHasFlag(card, "substituteAdjacent") ? [] : game.boardCards.filter((item) => (
@@ -2012,7 +2080,7 @@
       && Math.abs(item.row - card.row) + Math.abs(item.col - card.col) === 1
     ));
     const adjacentProtector = corePickRandom(adjacentProtectors);
-    if (adjacentProtector) { coreDestroyV2Card(game, adjacentProtector, log, causeCard); log.push(`${coreCardName(adjacentProtector)} 代替 ${coreCardName(card)} 被摧毁。`); return false; }
+    if (adjacentProtector) { coreDestroyV2Card(game, adjacentProtector, log, causeCard); log.push(`${coreCardName(adjacentProtector)} 代替 ${coreCardName(card)} 被摧毁。`); coreRecordCardFlow(game, "protect", `${coreCardName(adjacentProtector)} 以相邻替身技能保护 ${coreCardName(card)}，代替其承受摧毁。`); return false; }
     const adjacentProtectionSources = game.boardCards.filter((item) => (
       item.ownerId === card.ownerId
       && item.uid !== card.uid
@@ -2027,7 +2095,10 @@
         log,
         { protectedCard: card, original, causeCard }
       ));
-      if (result === false) return false;
+      if (result === false) {
+        coreRecordCardFlow(game, "protect", `${coreCardName(protector)} 因技能【${coreCardDisplay(protector).skill}】保护 ${coreCardName(card)}，使其免于摧毁。`);
+        return false;
+      }
     }
     const allyProtectionSources = game.boardCards.filter((item) => (
       item.ownerId === card.ownerId
@@ -2042,13 +2113,17 @@
         log,
         { protectedCard: card, original, causeCard }
       ));
-      if (result === false) return false;
+      if (result === false) {
+        coreRecordCardFlow(game, "protect", `${coreCardName(protector)} 因技能【${coreCardDisplay(protector).skill}】保护 ${coreCardName(card)}，使其免于摧毁。`);
+        return false;
+      }
     }
     const index = game.boardCards.findIndex((item) => item.uid === card.uid);
     game.boardCards.splice(index, 1);
     card.destroyedAt = original;
     const destroyedAttack = card.currentAttack;
     if (ownEffectDefinition?.onDestroy) {
+      coreRecordCardFlow(game, "skill", `${coreCardName(card)} 触发遗志技能【${coreCardDisplay(card).skill}】。`);
       ownEffectDefinition.onDestroy(coreCreateCardEffectContext(game, corePlayer(game, card.ownerId), card, log, {
         original,
         causeCard,
@@ -2059,6 +2134,7 @@
     // A replacement watcher may have re-entered this card. In that case the
     // original destruction did not clear its square for combat movement.
     if (game.boardCards.includes(card)) return false;
+    coreRecordCardFlow(game, "destroy", `${coreCardName(card)} 被 ${causeCard ? coreCardName(causeCard) : "战场效果"} 摧毁，原因：${causeCard && causeCard.uid !== card.uid ? "交战或卡牌技能" : causeCard ? "自身技能" : "战场结算"}。`);
     coreEmitV2Event(game, CORE_V2_EVENT.CARD_DESTROYED, { destroyedCard: card, original, causeCard, log });
     coreEnforceElitePowerBounds(game);
     return true;
@@ -2070,6 +2146,7 @@
     game.boardCards.filter((watcher) => watcher.uid !== card.uid).forEach((watcher) => {
       const effectDefinition = coreCardEffectDefinition(watcher);
       if (effectDefinition?.onOtherMoved) {
+        coreRecordCardFlow(game, "skill", `${coreCardName(watcher)} 因 ${coreCardName(card)} 移动触发技能【${coreCardDisplay(watcher).skill}】。`);
         effectDefinition.onOtherMoved(coreCreateCardEffectContext(game, corePlayer(game, watcher.ownerId), watcher, game.roundLog || [], { movedCard: card, source, target }));
       }
     });
@@ -2189,9 +2266,16 @@
     return null;
   }
 
+  function coreRecordCardFlow(game, type, message) {
+    if (!game || game.isAiSimulation || !message) return;
+    if (!Array.isArray(game.cardFlowHistory)) game.cardFlowHistory = [];
+    game.cardFlowHistory.push({ turn: game.turn, type, message: String(message) });
+  }
+
   function coreAppendLog(game, message) {
     game.roundLog.push(message);
     game.actionHistory.push(`第 ${game.turn} 回合：${message}`);
+    coreRecordCardFlow(game, "action", message);
     game.lastResolvedTurn = game.turn;
   }
 
@@ -2419,6 +2503,7 @@
     game.boardCards.filter((card) => card.ownerId === active.id).forEach((source) => {
       const effectDefinition = coreCardEffectDefinition(source);
       if (effectDefinition?.onTurnEnd) {
+        coreRecordCardFlow(game, "skill", `${coreCardName(source)} 触发回合结束技能【${coreCardDisplay(source).skill}】。`);
         effectDefinition.onTurnEnd(coreCreateCardEffectContext(game, active, source, log));
         return;
       }
@@ -2432,6 +2517,21 @@
       // Clear free action usage counter at end of turn
       card.freeActionUsedThisTurn = 0;
     });
+    game.boardCards
+      .filter((source) => source.ownerId && source.ownerId !== active.id)
+      .forEach((source) => {
+        if (!game.boardCards.includes(source)) return;
+        const effectDefinition = coreCardEffectDefinition(source);
+        if (typeof effectDefinition?.onEnemyTurnEnd !== "function") return;
+        coreRecordCardFlow(game, "skill", `${coreCardName(source)} 因敌方回合结束触发技能【${coreCardDisplay(source).skill}】。`);
+        effectDefinition.onEnemyTurnEnd(coreCreateCardEffectContext(
+          game,
+          corePlayer(game, source.ownerId),
+          source,
+          log,
+          { endedPlayer: active }
+        ));
+      });
     coreEnforceElitePowerBounds(game);
     active.v2NextPlacementExtra = null;
     active.v2NextPlacementExtraTurn = null;
@@ -2442,7 +2542,7 @@
   async function coreStartTurnWithAnimations(game) {
     if (!game) return false;
     game.isAnimating = true;
-    game.flowPrompt = `第 ${game.turn} 回合开始：正在依次结算卡牌技能。`;
+    game.flowPrompt = `第 ${game.turn} 回合开始：正在结算卡牌技能。`;
     let wonAtStart = false;
     try {
       wonAtStart = coreStartTurn(game);
@@ -3217,12 +3317,14 @@
     ui.detailLines.innerHTML = selectedCard ? `<div class="detail-line"><strong>技能效果</strong><span class="skill-effect-list">${coreSkillEffectHtml(selectedCard)}</span></div><div class="detail-line"><strong>状态</strong><span>${selectedCard.restedTurn === game.turn ? "本回合休整，不能主动移动" : "可进行移动"}</span></div>` : "";
     ui.actionLogTurn.textContent = `第 ${game.turn} 回合`;
     ui.actionLogList.innerHTML = "";
-    (game.roundLog.length ? game.roundLog : ["本回合尚无行动记录。"]).forEach((entry, index) => {
+    const recentFlow = (game.cardFlowHistory || []).filter((entry) => entry.turn === game.turn).slice(-3);
+    (recentFlow.length ? recentFlow.map((entry) => entry.message) : game.roundLog.length ? game.roundLog.slice(-3) : ["本回合尚无行动记录。"]).forEach((entry, index) => {
       const item = document.createElement("div");
       item.className = "action-log-item";
-      item.innerHTML = `<strong>${String(index + 1).padStart(2, "0")}</strong><span>${entry}</span>`;
+      item.innerHTML = `<strong>${String(index + 1).padStart(2, "0")}</strong><span>${coreEscapeHtml(entry)}</span>`;
       ui.actionLogList.appendChild(item);
     });
+    if (ui.actionLogModal?.classList.contains("visible")) renderActionLog();
     coreRenderBoard(game, active, control);
     coreRenderHand(game, handOwner);
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => coreFitSingleLineText(ui.board));

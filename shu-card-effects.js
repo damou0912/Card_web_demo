@@ -231,19 +231,24 @@
     }
   };
 
+  function attackRandomAdjacentEnemy(ctx) {
+    const target = ctx.pickRandom(ctx.enemies().filter((enemy) => (
+      enemy.ownerId === ctx.otherPlayer?.id && ctx.canFight(ctx.card, enemy)
+    )));
+    if (!target) return false;
+    ctx.skillAttack(ctx.card, target);
+    return true;
+  }
+
   shu["01328"] = {
-    onPlace(ctx) {
-      let target = ctx.pickRandom(ctx.enemies());
-      if (target) {
-        ctx.skillAttack(ctx.card, target);
-        if (!ctx.isOnBoard(target)) {
-          target = ctx.pickRandom(ctx.enemies());
-          if (target) ctx.skillAttack(ctx.card, target);
-        }
-      }
-    },
+    onPlace(ctx) { attackRandomAdjacentEnemy(ctx); },
     onTurnStart(ctx) {
       ctx.adjust(ctx.card, -2, true);
+      attackRandomAdjacentEnemy(ctx);
+    },
+    onCombatResolved(ctx) {
+      if (!ctx.opponentDestroyed || ctx.opponent?.ownerId !== ctx.otherPlayer?.id || !ctx.isOnBoard(ctx.card)) return;
+      attackRandomAdjacentEnemy(ctx);
     }
   };
 
@@ -252,17 +257,20 @@
     onTurnStart(ctx) {
       ctx.board
         .filter((card) => card.ownerId === ctx.card.ownerId)
-        .forEach((card) => ctx.adjust(card, 1));
+        .forEach((card) => ctx.adjust(card, 1, true));
+      ctx.setPermanentAttack(ctx.card, 1);
     },
-    onBeforeAdjust(ctx, target, amount) {
-      if (target?.ownerId && target.ownerId !== ctx.card.ownerId && amount > 0) return 0;
+    onEnemyTurnEnd(ctx) {
+      ctx.board
+        .filter((card) => card.ownerId === ctx.endedPlayer?.id && Number.isFinite(Number(card.v2StartAttack)))
+        .forEach((card) => ctx.restoreTurnStartAttack(card));
     }
   };
 
   shu["01530"] = {
     onBeforeAllyDestroy(ctx) {
       if (ctx.card.v2ResolvingEndDestruction) return;
-      ctx.adjust(ctx.card, -3);
+      ctx.adjust(ctx.protectedCard, -3);
       return false;
     },
     onTurnEnd(ctx) {

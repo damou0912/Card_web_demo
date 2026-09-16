@@ -559,7 +559,7 @@ const CARD_INFO = [
     "baseAttack": 4,
     "attack": 4,
     "rarity": "传说",
-    "effect": "1、当有卡牌被摧毁时，且其战力不大于此卡时，此卡战力+1。\r\n2、攻击前，本回合战力+3。\r\n3、起势：可以额外移动一次。"
+    "effect": "1、攻击前，战力+1。\r\n2、起势：可以额外移动一次。"
   },
   {
     "id": "03517",
@@ -602,5 +602,5 @@ const CARD_INFO = [
     "effect": "入阵：全场卡牌本回合战力-2。\r\n入阵：本回合我方行动数+1。"
   }
 ];
-window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-wu-replacements-20260915";
+window.CARD_INFO_SCHEMA_VERSION = "card-info-v2-description-effects-20260916";
 window.CARD_INFO = CARD_INFO;

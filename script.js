@@ -4,14 +4,14 @@ const ACTION_IMPACT_HOLD_MS = 140;
 const BOARD_PULSE_VISIBLE_MS = 320;
 const BOARD_PULSE_FADE_MS = 140;
 const BOARD_PULSE_STEP_GAP_MS = 80;
-const TURN_START_PULSE_VISIBLE_MS = 1200;
-const TURN_START_PULSE_FADE_MS = 200;
-const TURN_START_PULSE_STEP_GAP_MS = 120;
+const TURN_START_PULSE_VISIBLE_MS = 760;
+const TURN_START_PULSE_FADE_MS = 140;
+const TURN_START_PULSE_STEP_GAP_MS = 40;
 const CARD_FLOW_VISIBLE_MS = 380;
 const CARD_FLOW_FADE_MS = 100;
 const CARD_FLOW_STEP_GAP_MS = 50;
-const POWER_CHANGE_VISIBLE_MS = 480;
-const POWER_CHANGE_FADE_MS = 150;
+const POWER_CHANGE_VISIBLE_MS = 340;
+const POWER_CHANGE_FADE_MS = 110;
 const SKILL_DESTRUCTION_MS = 600;
 let destructionAnimationSequence = 0;
 
@@ -34,7 +34,7 @@ const GAME_CARD_SLOT_TEMPLATES = Object.freeze([...new Map(
   [...DEFAULT_CARD_SLOT_TEMPLATES, ...REPLACEMENT_CARD_SLOT_TEMPLATES]
     .map((slot) => [String(slot.id), slot])
 ).values()]);
-if (window.CARD_LIBRARY?.version !== "card-info-v2-wu-replacements-20260915"
+if (window.CARD_LIBRARY?.version !== "card-info-v2-description-effects-20260916"
   || !Array.isArray(window.CARD_LIBRARY?.cardSlots) || DEFAULT_CARD_SLOT_TEMPLATES.length === 0) {
   throw new Error("当前卡牌数据未正确加载，游戏已停止初始化。");
 }
@@ -192,7 +192,6 @@ const ui = {
   currentCardsList: document.getElementById("current-cards-list"),
   candidateCardsList: document.getElementById("candidate-cards-list"),
   modifyDeckResetBtn: document.getElementById("modify-deck-reset-btn"),
-  modifyDeckSaveBtn: document.getElementById("modify-deck-save-btn"),
   challengeTypeButtons: [...document.querySelectorAll(".challenge-type-btn")],
   challengeSelectBackBtn: document.getElementById("challenge-select-back-btn")
 };
@@ -821,96 +820,62 @@ function renderCardReplacementUI(rarity) {
   ui.candidateCardsList.innerHTML = '';
 
   cardsInRarity.forEach((card, rarityIndex) => {
-    const cardDisplay = getCardDisplay(card);
     const replacement = modifications[rarityIndex];
-    const replacementDisplay = replacement ? getCardDisplay(replacement) : null;
+    const currentCard = replacement || card;
+    const currentCardDisplay = getCardDisplay(currentCard);
 
     const container = document.createElement('div');
     container.className = 'current-card-item';
     container.dataset.rarityIndex = String(rarityIndex);
     container.innerHTML = `
       <div class="current-card">
-        <strong>${cardDisplay.name}</strong>
-        <small>${cardDisplay.skill}</small>
+        <strong>${currentCardDisplay.name}</strong>
+        <small>${currentCardDisplay.skill}</small>
       </div>
-      ${replacement ? `
-        <div class="replacement-arrow">→</div>
-        <div class="replacement-card">
-          <strong>${replacementDisplay.name}</strong>
-          <small>${replacementDisplay.skill}</small>
-        </div>
-        <button type="button" class="reset-replacement-btn" aria-label="取消替换">✕</button>
-      ` : `
-        <button type="button" class="select-replacement-btn" aria-label="选择替换">选择</button>
-      `}
+      <button type="button" class="select-replacement-btn" aria-label="替换${currentCardDisplay.name}">替换</button>
     `;
-
-    const resetBtn = container.querySelector('.reset-replacement-btn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => {
-        delete modifications[rarityIndex];
-        if (Object.keys(modifications).length === 0) delete state.modifyDeck.modifications[rarity];
-        renderCardReplacementUI(rarity);
-      });
-    }
 
     const selectBtn = container.querySelector('.select-replacement-btn');
     if (selectBtn) {
       selectBtn.addEventListener('click', () => {
-        showCandidateCards(rarity, rarityIndex, card);
+        showCandidateCards(rarity, rarityIndex);
       });
     }
 
-    bindModifyDeckSkillTooltip(container.querySelector('.current-card'), card);
-    if (replacement) bindModifyDeckSkillTooltip(container.querySelector('.replacement-card'), replacement);
+    bindModifyDeckSkillTooltip(container.querySelector('.current-card'), currentCard);
 
     currentCardsList.appendChild(container);
   });
   showCandidateCards(rarity);
 }
 
-function getAvailableModifyDeckCandidates(rarity, originalCard = null) {
+function getAvailableModifyDeckCandidates(rarity, targetRarityIndex = null) {
   const camp = state.modifyDeck.selectedCamp;
   const currentModifications = state.modifyDeck.modifications[rarity] || {};
   const originalDeck = state.modifyDeck.originalDeck;
-  const originalCardId = originalCard?.id ? String(originalCard.id) : null;
-
-  // 收集该品质中所有已被选中的卡牌 ID（来自修改）
-  const replacedCardIds = new Set();
-  Object.values(currentModifications).forEach(card => {
-    if (card?.id && String(card.id) !== originalCardId) {
-      replacedCardIds.add(String(card.id));
-    }
-  });
-
-  // 收集原卡组中已存在的卡牌 ID
-  const cardsInOriginalDeck = new Set();
-  originalDeck.forEach(card => {
-    if (String(card.id) !== originalCardId) {
-      cardsInOriginalDeck.add(String(card.id));
-    }
-  });
+  const cardsInRarity = originalDeck.filter((card) => getCardQuality(card) === rarity);
+  const currentCardIds = new Set(cardsInRarity.map((card, rarityIndex) => (
+    String(currentModifications[rarityIndex]?.id || card.id)
+  )));
 
   return GAME_CARD_SLOT_TEMPLATES.filter((candidateSlot) => (
     candidateSlot.rarity === rarity
     && candidateSlot.camp === camp
-    && String(candidateSlot.id) !== originalCardId
-    && !replacedCardIds.has(String(candidateSlot.id))
-    && !cardsInOriginalDeck.has(String(candidateSlot.id))
+    && !currentCardIds.has(String(candidateSlot.id))
   ));
 }
 
-function showCandidateCards(rarity, rarityIndex = null, originalCard = null) {
+function showCandidateCards(rarity, rarityIndex = null) {
   hideModifyDeckSkillTooltip();
   const candidateCardsList = ui.candidateCardsList;
   candidateCardsList.innerHTML = '';
-  const hasReplacementTarget = Number.isInteger(rarityIndex) && Boolean(originalCard);
+  const hasReplacementTarget = Number.isInteger(rarityIndex);
 
   ui.currentCardsList.querySelectorAll('.current-card-item').forEach((item) => {
     item.classList.toggle('selecting', hasReplacementTarget && Number(item.dataset.rarityIndex) === rarityIndex);
   });
 
-  const availableCards = getAvailableModifyDeckCandidates(rarity, originalCard);
+  const availableCards = getAvailableModifyDeckCandidates(rarity, rarityIndex);
   availableCards.forEach(candidateSlot => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -935,11 +900,9 @@ function showCandidateCards(rarity, rarityIndex = null, originalCard = null) {
         showToast('请先选择要替换的卡牌', '选定左侧卡牌后，即可使用这张备选卡。');
         return;
       }
-      if (!state.modifyDeck.modifications[rarity]) {
-        state.modifyDeck.modifications[rarity] = {};
-      }
-      state.modifyDeck.modifications[rarity][rarityIndex] = makeCardTemplate(candidateSlot);
+      applyModifyDeckReplacement(rarity, rarityIndex, candidateSlot);
       renderCardReplacementUI(rarity);
+      void queueModifiedDeckAutosave();
     });
 
     candidateCardsList.appendChild(button);
@@ -947,6 +910,23 @@ function showCandidateCards(rarity, rarityIndex = null, originalCard = null) {
   if (!candidateCardsList.children.length) {
     candidateCardsList.innerHTML = '<p class="candidate-cards-empty">当前没有可用的同势力、同品质卡牌。</p>';
   }
+}
+
+function applyModifyDeckReplacement(rarity, rarityIndex, candidateSlot) {
+  const originalCards = state.modifyDeck.originalDeck.filter((card) => getCardQuality(card) === rarity);
+  const originalCard = originalCards[rarityIndex];
+  if (!originalCard || !candidateSlot) return false;
+
+  if (!state.modifyDeck.modifications[rarity]) state.modifyDeck.modifications[rarity] = {};
+  if (String(candidateSlot.id) === String(originalCard.id)) {
+    delete state.modifyDeck.modifications[rarity][rarityIndex];
+    if (!Object.keys(state.modifyDeck.modifications[rarity]).length) {
+      delete state.modifyDeck.modifications[rarity];
+    }
+  } else {
+    state.modifyDeck.modifications[rarity][rarityIndex] = makeCardTemplate(candidateSlot);
+  }
+  return true;
 }
 
 function buildCustomDeckCardIds(camp, modifications) {
@@ -971,43 +951,48 @@ function buildModifiedDeck(camp, modifications) {
   return buildCampDeck(camp, cardIds);
 }
 
-async function saveModifiedDeck() {
+let modifyDeckSaveQueue = Promise.resolve();
+
+function queueModifiedDeckAutosave() {
   const camp = state.modifyDeck.selectedCamp;
   if (!camp) {
     showToast('请先选择要修改的卡组', 'error');
-    return;
+    return Promise.resolve(false);
   }
 
   const modifications = state.modifyDeck.modifications;
   const cardIds = buildCustomDeckCardIds(camp, modifications);
   if (!cardIds) {
     showToast('卡组不符合规则', '请确保卡组包含 20 张不重复的同势力卡牌，并保持各品质数量不变。');
-    return;
+    return Promise.resolve(false);
   }
   const deckData = { version: 2, cardIds };
+  state.customDecks[camp] = deckData;
   const username = authClient?.loadUser?.();
   if (!username) {
-    state.customDecks[camp] = deckData;
     showToast(`${getCampDisplayName(camp)}卡组已临时应用`, '刷新页面后将恢复默认卡组。');
-    closeModifyDeck();
-    return;
+    return Promise.resolve(true);
   }
 
-  try {
-    const response = await fetch('/api/save-custom-deck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, camp, deckData })
-    });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.error || '保存失败');
-    state.customDecks[camp] = deckData;
-    showToast(`${getCampDisplayName(camp)}卡组已保存`, '登录后会自动用于对应势力。');
-    closeModifyDeck();
-  } catch (error) {
-    console.error('保存卡组失败:', error);
-    showToast('保存卡组失败', error.message || '请稍后重试。');
-  }
+  const saveOperation = async () => {
+    try {
+      const response = await fetch('/api/save-custom-deck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, camp, deckData })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '保存失败');
+      showToast(`${getCampDisplayName(camp)}卡组已自动保存`, '后续对局将使用当前卡组。');
+      return true;
+    } catch (error) {
+      console.error('自动保存卡组失败:', error);
+      showToast('自动保存卡组失败', error.message || '请稍后重试。');
+      return false;
+    }
+  };
+  modifyDeckSaveQueue = modifyDeckSaveQueue.then(saveOperation, saveOperation);
+  return modifyDeckSaveQueue;
 }
 
 async function resetModifiedDeck() {
@@ -1015,30 +1000,33 @@ async function resetModifiedDeck() {
   if (!camp) return;
 
   const username = authClient?.loadUser?.();
+  delete state.customDecks[camp];
+  state.modifyDeck.modifications = {};
+  selectCampForModify(camp);
   if (!username) {
-    delete state.customDecks[camp];
-    state.modifyDeck.modifications = {};
     showToast(`${getCampDisplayName(camp)}卡组已重置`, '当前页面已恢复默认卡组。');
-    selectCampForModify(camp);
     return;
   }
 
-  try {
-    const response = await fetch('/api/reset-custom-deck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, camp })
-    });
-    const data = await response.json();
-    if (!response.ok || !data.success) throw new Error(data.error || '重置失败');
-    delete state.customDecks[camp];
-    state.modifyDeck.modifications = {};
-    showToast(`${getCampDisplayName(camp)}卡组已重置为默认`, '后续对局将使用默认卡组。');
-    selectCampForModify(camp);
-  } catch (error) {
-    console.error('重置卡组失败:', error);
-    showToast('重置卡组失败', error.message || '请稍后重试。');
-  }
+  const resetOperation = async () => {
+    try {
+      const response = await fetch('/api/reset-custom-deck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, camp })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '重置失败');
+      showToast(`${getCampDisplayName(camp)}卡组已重置为默认`, '后续对局将使用默认卡组。');
+      return true;
+    } catch (error) {
+      console.error('重置卡组失败:', error);
+      showToast('重置卡组失败', error.message || '请稍后重试。');
+      return false;
+    }
+  };
+  modifyDeckSaveQueue = modifyDeckSaveQueue.then(resetOperation, resetOperation);
+  return modifyDeckSaveQueue;
 }
 
 async function loadLoginProfile(username) {
@@ -1192,18 +1180,28 @@ function renderActionLog() {
     return;
   }
 
-  const logs = game.actionLogs || [];
+  const logs = Array.isArray(game.cardFlowHistory) && game.cardFlowHistory.length
+    ? game.cardFlowHistory
+    : (Array.isArray(game.actionLogs) ? game.actionLogs : (game.actionHistory || []).map((message) => ({ type: 'action', message })));
   if (logs.length === 0) {
     ui.actionLogContent.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary);">暂无行动记录。</p>';
     return;
   }
 
+  let lastTurn = null;
   const html = logs.map((log, index) => {
+    const turn = Number(log.turn);
+    const turnHeading = Number.isFinite(turn) && turn !== lastTurn
+      ? `<div class="log-turn-heading">第 ${turn} 回合</div>`
+      : '';
+    if (Number.isFinite(turn)) lastTurn = turn;
     const time = log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : '';
     const timeStr = time ? `<span class="log-time">${time}</span>` : '';
     const content = escapeAnimationText(log.content || log.message || '');
-    return `<div class="log-entry log-entry-${log.type || 'action'}">
+    const typeLabel = { power: '属性', skill: '技能', destroy: '摧毁', protect: '保护', turn: '回合', action: '行动' }[log.type] || '流程';
+    return `${turnHeading}<div class="log-entry log-entry-${log.type || 'action'}">
       <span class="log-index">#${index + 1}</span>
+      <span class="log-type">${typeLabel}</span>
       ${timeStr}
       <span class="log-content">${content}</span>
     </div>`;
@@ -1699,7 +1697,7 @@ function queueBoardAnimation(game, event) {
   return event;
 }
 
-function queuePowerAnimation(game, card, delta, previousPower = null, currentPower = null) {
+function queuePowerAnimation(game, card, delta, previousPower = null, currentPower = null, sourceCard = null) {
   if (!game || !card || !delta || typeof card.row !== "number" || typeof card.col !== "number") return;
   const before = Number.isFinite(Number(previousPower)) ? Number(previousPower) : Math.max(0, (Number(card.currentAttack) || 0) - delta);
   const after = Number.isFinite(Number(currentPower)) ? Number(currentPower) : Number(card.currentAttack) || 0;
@@ -1715,8 +1713,62 @@ function queuePowerAnimation(game, card, delta, previousPower = null, currentPow
     delta,
     previousPower: before,
     currentPower: after,
-    cardUid: card.uid
+    cardUid: card.uid,
+    sourceCardUid: sourceCard?.uid || null,
+    sourceRow: Number.isInteger(sourceCard?.row) ? sourceCard.row : null,
+    sourceCol: Number.isInteger(sourceCard?.col) ? sourceCard.col : null
   });
+}
+
+function isOrthogonallyAdjacentPowerLink(event) {
+  if (!event || event.kind !== "power" || Number(event.delta) <= 0 || !event.sourceCardUid
+    || event.sourceCardUid === event.cardUid) return false;
+  const coordinates = [event.row, event.col, event.sourceRow, event.sourceCol];
+  if (!coordinates.every(Number.isInteger)) return false;
+  return Math.abs(event.row - event.sourceRow) + Math.abs(event.col - event.sourceCol) === 1;
+}
+
+function createAdjacentPowerLink(stageRect, sourceRect, targetRect) {
+  const startX = sourceRect.left - stageRect.left + sourceRect.width / 2;
+  const startY = sourceRect.top - stageRect.top + sourceRect.height / 2;
+  const endX = targetRect.left - stageRect.left + targetRect.width / 2;
+  const endY = targetRect.top - stageRect.top + targetRect.height / 2;
+  const link = document.createElement("div");
+  link.className = "adjacent-power-link";
+  link.style.left = `${startX}px`;
+  link.style.top = `${startY - 3}px`;
+  const distance = Math.max(8, Math.hypot(endX - startX, endY - startY));
+  link.style.width = `${distance}px`;
+  link.style.setProperty("--power-link-distance", `${distance}px`);
+  link.style.setProperty("--power-link-angle", `${Math.atan2(endY - startY, endX - startX) * 180 / Math.PI}deg`);
+  link.innerHTML = '<span class="adjacent-power-link-core"></span><span class="adjacent-power-link-spark"></span>';
+  return link;
+}
+
+const adjacentBuffClassCounts = new WeakMap();
+
+function retainAdjacentBuffClass(element, className) {
+  if (!element) return;
+  let counts = adjacentBuffClassCounts.get(element);
+  if (!counts) {
+    counts = new Map();
+    adjacentBuffClassCounts.set(element, counts);
+  }
+  counts.set(className, (counts.get(className) || 0) + 1);
+  element.classList.add(className);
+}
+
+function releaseAdjacentBuffClass(element, className) {
+  if (!element) return;
+  const counts = adjacentBuffClassCounts.get(element);
+  const nextCount = Math.max(0, (counts?.get(className) || 0) - 1);
+  if (nextCount > 0) {
+    counts.set(className, nextCount);
+    return;
+  }
+  counts?.delete(className);
+  if (counts?.size === 0) adjacentBuffClassCounts.delete(element);
+  element.classList.remove(className);
 }
 
 function createPowerChangeEffect(event) {
@@ -1918,8 +1970,77 @@ function createCardFlowEffect(event) {
   return effect;
 }
 
-async function playBoardAnimations(game, events) {
+function isConcurrentEffectAnimation(event) {
+  return ["power", "turn-start", "skill", "skill-warn"].includes(event?.kind);
+}
+
+function groupBoardAnimationEvents(events) {
+  const groups = [];
+  let concurrentGroup = null;
+  events.forEach((event) => {
+    if (isConcurrentEffectAnimation(event)) {
+      if (!concurrentGroup) {
+        concurrentGroup = [];
+        groups.push(concurrentGroup);
+      }
+      concurrentGroup.push(event);
+      return;
+    }
+    concurrentGroup = null;
+    groups.push([event]);
+  });
+  return groups;
+}
+
+function addAnimationStackMetadata(events) {
+  const totals = new Map();
+  events.forEach((event) => {
+    const key = event.cardUid ? `card:${event.cardUid}` : `cell:${event.row}:${event.col}`;
+    totals.set(key, (totals.get(key) || 0) + 1);
+  });
+  const indexes = new Map();
+  return events.map((event) => {
+    const key = event.cardUid ? `card:${event.cardUid}` : `cell:${event.row}:${event.col}`;
+    const stackIndex = indexes.get(key) || 0;
+    indexes.set(key, stackIndex + 1);
+    return { ...event, animationStackIndex: stackIndex, animationStackCount: totals.get(key) || 1 };
+  });
+}
+
+function positionStackedAnimation(element, event) {
+  const count = Math.max(1, Number(event.animationStackCount) || 1);
+  if (!element || count < 2) return;
+  const index = Math.max(0, Number(event.animationStackIndex) || 0);
+  const centeredIndex = index - (count - 1) / 2;
+  element.classList.add("animation-stacked");
+  element.style.setProperty("--animation-stack-x", `${centeredIndex * 32}px`);
+  element.style.setProperty("--animation-stack-y", `${centeredIndex * -20}px`);
+}
+
+function showConcurrentEffectPrompt(game, count) {
+  if (count < 2) return;
+  const prompt = `正在同时展示 ${count} 个技能与战力变化效果。`;
+  if (state.game && state.game.turn === game?.turn) state.game.flowPrompt = prompt;
+  if (ui.statusMessage) ui.statusMessage.textContent = prompt;
+  if (ui.statusSubtext) ui.statusSubtext.textContent = "多个效果正在叠加播放。";
+}
+
+async function playBoardAnimations(game, events, allowConcurrent = true) {
   if (!Array.isArray(events) || events.length === 0) {
+    return;
+  }
+  if (allowConcurrent && events.length > 1) {
+    const groups = groupBoardAnimationEvents(events);
+    for (const group of groups) {
+      if (group.length > 1 && group.every(isConcurrentEffectAnimation)) {
+        const runningAnimations = addAnimationStackMetadata(group)
+          .map((event) => playBoardAnimations(game, [event], false));
+        showConcurrentEffectPrompt(game, group.length);
+        await Promise.all(runningAnimations);
+      } else {
+        await playBoardAnimations(game, group, false);
+      }
+    }
     return;
   }
   const stageRect = ui.boardStage.getBoundingClientRect();
@@ -1949,19 +2070,37 @@ async function playBoardAnimations(game, events) {
       const effect = createPowerChangeEffect(event);
       const targetUnit = event.cardUid ? ui.board.querySelector(`.unit[data-card-uid="${event.cardUid}"]`) : null;
       const effectType = event.effectType === "weaken" ? "weaken" : "boost";
+      const hasAdjacentLink = isOrthogonallyAdjacentPowerLink(event);
+      const sourceCell = hasAdjacentLink ? getBoardCellElement(event.sourceRow, event.sourceCol) : null;
+      const sourceUnit = hasAdjacentLink && event.sourceCardUid
+        ? ui.board.querySelector(`.unit[data-card-uid="${event.sourceCardUid}"]`)
+        : null;
+      const sourceRect = sourceCell?.getBoundingClientRect();
+      const powerLink = sourceRect ? createAdjacentPowerLink(stageRect, sourceRect, rect) : null;
       effect.style.left = `${rect.left - stageRect.left + rect.width / 2}px`;
       effect.style.top = `${rect.top - stageRect.top + rect.height / 2}px`;
+      positionStackedAnimation(effect, event);
+      if (powerLink) ui.boardAnimationLayer.appendChild(powerLink);
       ui.boardAnimationLayer.appendChild(effect);
       cell.classList.add("power-change-impact", `power-change-impact-${effectType}`);
       targetUnit?.classList.add("power-change-target", `power-change-target-${effectType}`);
+      retainAdjacentBuffClass(sourceCell, "adjacent-buff-source-cell");
+      retainAdjacentBuffClass(sourceUnit, "adjacent-buff-source");
+      if (powerLink) retainAdjacentBuffClass(cell, "adjacent-buff-target-cell");
       await nextFrame();
+      powerLink?.classList.add("visible");
       effect.classList.add("visible");
       await wait(POWER_CHANGE_VISIBLE_MS);
+      powerLink?.classList.add("fade");
       effect.classList.add("fade");
       await wait(POWER_CHANGE_FADE_MS);
+      powerLink?.remove();
       effect.remove();
       cell.classList.remove("power-change-impact", "power-change-impact-boost", "power-change-impact-weaken");
       targetUnit?.classList.remove("power-change-target", "power-change-target-boost", "power-change-target-weaken");
+      releaseAdjacentBuffClass(sourceCell, "adjacent-buff-source-cell");
+      releaseAdjacentBuffClass(sourceUnit, "adjacent-buff-source");
+      if (powerLink) releaseAdjacentBuffClass(cell, "adjacent-buff-target-cell");
       continue;
     }
     if (event.kind === "skill-move" && typeof event.fromRow === "number" && typeof event.toRow === "number") {
@@ -2005,6 +2144,7 @@ async function playBoardAnimations(game, events) {
     pulse.style.top = `${rect.top - stageRect.top}px`;
     pulse.style.width = `${rect.width}px`;
     pulse.style.height = `${rect.height}px`;
+    positionStackedAnimation(pulse, event);
     ui.boardAnimationLayer.appendChild(pulse);
     if (destructionCard) {
       destructionCard.style.left = `${rect.left - stageRect.left}px`;
@@ -2189,7 +2329,6 @@ function bindEvents() {
   ui.modifyDeckModal?.addEventListener("scroll", refreshModifyDeckSkillTooltipPosition, true);
   window.addEventListener?.("scroll", refreshModifyDeckSkillTooltipPosition, true);
   window.addEventListener?.("resize", refreshModifyDeckSkillTooltipPosition);
-  ui.modifyDeckSaveBtn?.addEventListener("click", saveModifiedDeck);
   ui.modifyDeckResetBtn?.addEventListener("click", resetModifiedDeck);
   ui.expandActionLogBtn?.addEventListener("click", () => setActionLogOpen(true));
   ui.themeSubmenuBtn?.addEventListener("click", () => {
@@ -2332,8 +2471,10 @@ window.__CARD_DEMO_DEBUG__ = {
   state, ui, resetSelection, cloneCard, buildCampDeck, buildCardCatalogFromIds, drawOneCard, getCardByUid,
   getBoardCardAt, getCampDisplayName, getCardDisplay, getCardDisplayName, getCardBaseAttack,
   getAvailableDeckKeys, getRandomDeckKey, getConfiguredDeckCardIds, normalizeCustomDeckData,
-  getModifyDeckCardDetails, getAvailableModifyDeckCandidates, buildCustomDeckCardIds, buildModifiedDeck,
-  shouldAutoOpenLogin, applyTheme
+  getModifyDeckCardDetails, getAvailableModifyDeckCandidates, applyModifyDeckReplacement,
+  buildCustomDeckCardIds, buildModifiedDeck, queueModifiedDeckAutosave,
+  shouldAutoOpenLogin, applyTheme, groupBoardAnimationEvents, addAnimationStackMetadata,
+  isOrthogonallyAdjacentPowerLink
 };
 window.bindCardSkillTooltip = bindModifyDeckSkillTooltip;
 window.hideCardSkillTooltip = hideModifyDeckSkillTooltip;

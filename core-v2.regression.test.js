@@ -61,13 +61,45 @@ vm.runInContext(fs.readFileSync(path.join(__dirname, "replacement-cards.js"), "u
 const expectedCardCount = 60 + (Array.isArray(context.REPLACEMENT_CARDS) ? context.REPLACEMENT_CARDS.length : 0);
 context.CARD_LIBRARY = { version: "legacy", cardSlots: [{ id: "old-card" }], campNamePool: { old: true } };
 vm.runInContext(fs.readFileSync(path.join(__dirname, "v2-card-data.js"), "utf8"), context, { filename: "v2-card-data.js" });
-const legacyLibraryReplaced = context.CARD_LIBRARY.version === "card-info-v2-wu-replacements-20260915"
+const legacyLibraryReplaced = context.CARD_LIBRARY.version === "card-info-v2-description-effects-20260916"
   && context.CARD_LIBRARY.cardSlots.length === expectedCardCount
   && !("campNamePool" in context.CARD_LIBRARY);
 const originalLibrary = context.CARD_LIBRARY;
 ["script.js", "core-v2.js", "core-v2.test-suite.js"].forEach((file) => {
   vm.runInContext(fs.readFileSync(path.join(__dirname, file), "utf8"), context, { filename: file });
 });
+const animationGroups = context.__CARD_DEMO_DEBUG__.groupBoardAnimationEvents([
+  { kind: "turn-start", cardUid: "a", row: 0, col: 0 },
+  { kind: "power", cardUid: "a", row: 0, col: 0 },
+  { kind: "power", cardUid: "b", row: 0, col: 1 },
+  { kind: "draw" },
+  { kind: "skill", cardUid: "a", row: 0, col: 0 },
+  { kind: "skill-move", cardUid: "a", row: 0, col: 1 },
+  { kind: "skill-warn", cardUid: "a", row: 0, col: 1 },
+  { kind: "destroy", cardUid: "a", row: 0, col: 1 }
+]);
+const stackedAnimations = context.__CARD_DEMO_DEBUG__.addAnimationStackMetadata(animationGroups[0]);
+const animationGroupingValid = animationGroups.length === 6
+  && animationGroups[0].length === 3
+  && animationGroups.slice(1).every((group) => group.length === 1)
+  && stackedAnimations[0].animationStackIndex === 0
+  && stackedAnimations[0].animationStackCount === 2
+  && stackedAnimations[1].animationStackIndex === 1
+  && stackedAnimations[1].animationStackCount === 2
+  && stackedAnimations[2].animationStackIndex === 0
+  && stackedAnimations[2].animationStackCount === 1
+  && context.__CARD_DEMO_DEBUG__.isOrthogonallyAdjacentPowerLink({
+    kind: "power", delta: 1, cardUid: "target", row: 1, col: 2,
+    sourceCardUid: "source", sourceRow: 1, sourceCol: 1
+  })
+  && !context.__CARD_DEMO_DEBUG__.isOrthogonallyAdjacentPowerLink({
+    kind: "power", delta: 1, cardUid: "target", row: 3, col: 3,
+    sourceCardUid: "source", sourceRow: 1, sourceCol: 1
+  })
+  && !context.__CARD_DEMO_DEBUG__.isOrthogonallyAdjacentPowerLink({
+    kind: "power", delta: -1, cardUid: "target", row: 1, col: 2,
+    sourceCardUid: "source", sourceRow: 1, sourceCol: 1
+  });
 const expectedChaosRarities = { "普通": 7, "稀有": 5, "史诗": 3, "传说": 1, "特殊": 4 };
 const chaosDeck = context.__CARD_DEMO_DEBUG__.buildCampDeck("混沌");
 const chaosRarityCounts = chaosDeck.reduce((counts, card) => {
@@ -135,7 +167,23 @@ deckDebug.state.modifyDeck = {
   originalDeck: deckDebug.buildCampDeck("三国~蜀")
 };
 const initialCommonCandidates = deckDebug.getAvailableModifyDeckCandidates("普通");
+const firstDefaultCommon = deckDebug.state.modifyDeck.originalDeck.find((card) => (
+  deckDebug.getCardDisplay(card).rarity === "普通"
+));
+const replacementApplied = deckDebug.applyModifyDeckReplacement("普通", 0, replacementCommon);
+const idsAfterDirectReplacement = deckDebug.buildCustomDeckCardIds("三国~蜀", deckDebug.state.modifyDeck.modifications);
+const candidatesAfterDirectReplacement = deckDebug.getAvailableModifyDeckCandidates("普通", 0);
+const originalCardCanBeSelectedAgain = candidatesAfterDirectReplacement.some((card) => (
+  String(card.id) === String(firstDefaultCommon.id)
+));
+const activeCardIsNotOfferedAgain = candidatesAfterDirectReplacement.every((card) => (
+  String(card.id) !== String(replacementCommon.id)
+));
+const replacementReverted = deckDebug.applyModifyDeckReplacement("普通", 0, firstDefaultCommon);
+const idsAfterRevert = deckDebug.buildCustomDeckCardIds("三国~蜀", deckDebug.state.modifyDeck.modifications);
+const modificationsClearedAfterRevert = Object.keys(deckDebug.state.modifyDeck.modifications || {}).length === 0;
 deckDebug.state.modifyDeck = previousModifyDeck;
+const indexSource = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 const customDeckValidation = {
   savedDeckIsResolved: configuredShuIds[0] === replacementCommon.id,
   pvePlayerUsesCustomDeck: pveCustomGame.players[0].deckCatalog.some((card) => card.id === replacementCommon.id),
@@ -152,7 +200,15 @@ const customDeckValidation = {
     && replacementCommonDetails.baseAttack === replacementCommon.baseAttack,
   candidatesVisibleBeforeTargetSelection: initialCommonCandidates.length > 0
     && initialCommonCandidates.every((card) => card.camp === "三国~蜀" && card.rarity === "普通")
-    && initialCommonCandidates.every((card) => !defaultShuIds.includes(String(card.id)))
+    && initialCommonCandidates.every((card) => !defaultShuIds.includes(String(card.id))),
+  replacementDirectlyUpdatesSlot: replacementApplied
+    && idsAfterDirectReplacement?.[0] === String(replacementCommon.id),
+  replacedSlotCanBeReplacedAgain: originalCardCanBeSelectedAgain && activeCardIsNotOfferedAgain,
+  selectingOriginalCardRestoresSlot: replacementReverted
+    && idsAfterRevert?.[0] === String(firstDefaultCommon.id)
+    && modificationsClearedAfterRevert,
+  manualSaveControlRemoved: !indexSource.includes('id="modify-deck-save-btn"')
+    && indexSource.includes('script.js?v=20260916-deck-autosave')
 };
 const customDeckPassed = Object.values(customDeckValidation).every(Boolean);
 const loginPromptPolicyValid = deckDebug.shouldAutoOpenLogin(null)
@@ -193,7 +249,7 @@ const legacyRuntimeDisplayRemoved = [legacyRuntimeGame.boardCards[0], legacyRunt
 const onlineRuntimeProbe = {
   ruleset: "core-v2",
   cardDataVersion: originalLibrary.version,
-  runtimeSchemaVersion: "runtime-wu-replacements-20260915",
+  runtimeSchemaVersion: "runtime-description-effects-20260916",
   boardCards: [{ id: "02101", name: "旧卡名", skill: "旧技能", effect: "旧描述", camp: "旧势力", rarity: "旧品质" }],
   players: []
 };
@@ -241,8 +297,8 @@ const testedCardIds = new Set(boundary.results.map((test) => test.id));
 const missingBoundaryTests = [...cardIds].filter((id) => !testedCardIds.has(id));
 const unexpectedBoundaryTests = [...testedCardIds].filter((id) => !cardIds.has(id));
 const coverage = { testedCards: testedCardIds.size, missingBoundaryTests, unexpectedBoundaryTests };
-if (validation.cardDataVersion !== "card-info-v2-wu-replacements-20260915" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed || !customDeckPassed || !loginPromptPolicyValid) {
-  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, customDeckValidation, loginPromptPolicyValid, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
+if (validation.cardDataVersion !== "card-info-v2-description-effects-20260916" || validation.cardCount !== expectedCardCount || validation.duplicateIds.length || validation.invalidCards.length || validation.missingEffectIds.length || result.failed || boundary.failed || boundaryWithoutDisplayFields.failed || missingBoundaryTests.length || unexpectedBoundaryTests.length || missingIndependentEffects.length || effectIds.size !== cardIds.size || effectCountBeforeDisplayData !== expectedCardCount || document.writtenScripts.length !== 0 || effectSourceViolations.length || hardcodedTraitIds.length || !effectsSurviveDisplayDeletion || !runtimeDisplayFieldsAbsent || !displayUsesTableById || !legacyRuntimeDisplayRemoved || !onlineRuntimeDisplayRemoved || !staleOnlineRuntimeRejected || !legacyLibraryReplaced || !legacySchemaRejected || !chaosDeckPassed || !customDeckPassed || !loginPromptPolicyValid || !animationGroupingValid) {
+  console.error(JSON.stringify({ validation, missingIndependentEffects, effectCountBeforeDisplayData, effectSourceViolations, hardcodedTraitIds, writtenScripts: document.writtenScripts, effectsSurviveDisplayDeletion, runtimeDisplayFieldsAbsent, displayUsesTableById, legacyRuntimeDisplayRemoved, onlineRuntimeDisplayRemoved, staleOnlineRuntimeRejected, legacyLibraryReplaced, legacySchemaRejected, chaosDeckValidation, customDeckValidation, loginPromptPolicyValid, animationGroupingValid, result, boundary, boundaryWithoutDisplayFields, coverage }, null, 2));
   process.exitCode = 1;
 } else {
   console.log(`V2 regression tests passed: ${result.passed}/${result.results.length}`);
@@ -258,4 +314,5 @@ if (validation.cardDataVersion !== "card-info-v2-wu-replacements-20260915" || va
   console.log(`Chaos deck generation: ${Object.keys(chaosDeckValidation).length}/${Object.keys(chaosDeckValidation).length}`);
   console.log(`Custom deck integration: ${Object.keys(customDeckValidation).length}/${Object.keys(customDeckValidation).length}`);
   console.log(`Guest login prompt policy: ${loginPromptPolicyValid ? "passed" : "failed"}`);
+  console.log(`Concurrent effect animation grouping: ${animationGroupingValid ? "passed" : "failed"}`);
 }

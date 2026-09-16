@@ -14,7 +14,7 @@
       // Keep the default palette when browser storage is unavailable.
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20260915-challenge-mode-descriptions">
+  <link rel="stylesheet" href="style.css?v=20260916-adjacent-buff-links">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -143,7 +143,7 @@
             <p class="theme-submenu-hint">输入 6 位 GM 密码后启用。</p>
           </div>
           <button id="action-log-btn" class="theme-menu-item" type="button" aria-controls="action-log-modal" aria-expanded="false">
-            <span>页面行动日志</span>
+            <span>卡牌流程</span>
             <span class="theme-menu-chevron" aria-hidden="true">›</span>
           </button>
           <a id="test-entry-link" class="theme-menu-item theme-menu-link" href="card-test.html">
@@ -358,9 +358,9 @@
 
     <div id="action-log-modal" class="action-log-modal" aria-hidden="true">
       <section class="action-log-card" role="dialog" aria-modal="true" aria-labelledby="action-log-title">
-        <button id="action-log-close" class="overlay-close" type="button" aria-label="关闭页面行动日志" title="关闭">×</button>
-        <p class="phase-banner-eyebrow">PAGE ACTION LOG</p>
-        <h2 id="action-log-title">页面行动日志</h2>
+        <button id="action-log-close" class="overlay-close" type="button" aria-label="关闭卡牌流程" title="关闭">×</button>
+        <p class="phase-banner-eyebrow">CARD FLOW</p>
+        <h2 id="action-log-title">卡牌流程</h2>
         <div id="action-log-content" class="action-log-content"></div>
       </section>
     </div>
@@ -391,7 +391,6 @@
         </div>
         <div class="modify-deck-actions">
           <button id="modify-deck-reset-btn" class="secondary-btn" type="button">重置为默认</button>
-          <button id="modify-deck-save-btn" class="primary-btn" type="button">保存修改</button>
         </div>
       </section>
     </div>
@@ -453,7 +452,7 @@
     </div>
   </main>
 
-  <script src="card-info.js?v=card-info-404cf7f84575"></script>
+  <script src="card-info.js?v=card-info-36fb0b333be9"></script>
   <script>
     if (!window.CARD_INFO) {
       console.error("❌ card-info.js 加载失败或执行错误");
@@ -462,7 +461,7 @@
       console.log("✓ card-info.js 已加载，" + CARD_INFO.length + " 张卡牌");
     }
   </script>
-  <script src="replacement-cards.js?v=card-info-404cf7f84575"></script>
+  <script src="replacement-cards.js?v=card-info-36fb0b333be9"></script>
   <script>
     if (!window.REPLACEMENT_CARDS) {
       console.error("❌ replacement-cards.js 加载失败或执行错误");
@@ -470,7 +469,7 @@
       console.log("✓ replacement-cards.js 已加载，" + window.REPLACEMENT_CARDS.length + " 张可替换卡牌");
     }
   </script>
-  <script src="v2-card-data.js?v=card-info-404cf7f84575"></script>
+  <script src="v2-card-data.js?v=card-info-36fb0b333be9"></script>
   <script>
     if (!window.CARD_LIBRARY) {
       console.error("❌ v2-card-data.js 加载失败或执行错误");
@@ -481,13 +480,13 @@
     }
   </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260915-wu-replacements"></script>
+  <script src="script.js?v=20260916-deck-autosave"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
-  <script src="shu-card-effects.js?v=20260908-display-effect-isolation"></script>
+  <script src="shu-card-effects.js?v=20260916-description-effects"></script>
   <script src="wei-card-effects.js?v=20260915-wei-replacements"></script>
-  <script src="wu-card-effects.js?v=20260915-wu-replacements"></script>
+  <script src="wu-card-effects.js?v=20260916-description-effects"></script>
   <script src="elite-ai-info.js?v=20260914-1008-enabled"></script>
   <script src="elite-ai-effects.js?v=20260914-1008-enabled"></script>
-  <script src="core-v2.js?v=20260915-wu-replacements"></script>
+  <script src="core-v2.js?v=20260916-description-effects"></script>
 </body>
 </html>

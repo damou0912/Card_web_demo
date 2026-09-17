@@ -69,7 +69,7 @@
       },
       onDrawPileChanged(context) {
         const player = context.player;
-        if (player?.id !== own(context).id || !player.eliteTraitState?.waitingForDrawPileRefill || !player.drawPile.length || player.hand.length) return;
+        if (player?.id !== own(context).id || !player.drawPile.length || player.hand.length) return;
         context.operations.drawCard(player);
         context.operations.setPlayerState(player, "waitingForDrawPileRefill", false);
       }

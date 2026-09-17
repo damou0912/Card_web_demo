@@ -300,7 +300,7 @@
     },
     onDestroy(ctx) {
       let drawn = 0;
-      while (ctx.otherPlayer.hand.length < ctx.handLimit && ctx.otherPlayer.drawPile.length) {
+      while (ctx.otherPlayer.hand.length < ctx.handLimitFor(ctx.otherPlayer) && ctx.otherPlayer.drawPile.length) {
         if (!ctx.draw(ctx.otherPlayer)) break;
         drawn += 1;
       }

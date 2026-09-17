@@ -44,6 +44,64 @@
       { const game = traitGame("1004"); game.players[1].drawPile = [makeCard("02102", 2, null, null)]; coreApplyEliteAiTrait(game, game.players[1], []); check("1004 军备", game.players[1].hand.length === 1); }
       { const game = traitGame("1005"); coreDrawOneCard(game, game.players[1], []); check("1005 援军", game.players[1].hand.length === 1 && game.players[1].hand[0].customName === "援兵" && game.players[1].hand[0].currentAttack === 1); }
       { const game = traitGame("1008"); const ai = game.players[1]; ai.hand = []; ai.drawPile = [makeCard("02101", 2, null, null), makeCard("02102", 2, null, null)]; coreMaintainEliteAiHand(game, ai, []); const limited = ai.hand.length === 1 && coreHandLimitForPlayer(game, ai) === 1; ai.hand = []; ai.drawPile = []; coreMaintainEliteAiHand(game, ai, []); const waiting = ai.hand.length === 0 && ai.eliteTraitState?.waitingForDrawPileRefill === true; coreAddCardsToDrawPile(game, ai, [makeCard("02103", 2, null, null)], []); const refilled = ai.hand.length === 1 && ai.eliteTraitState?.waitingForDrawPileRefill === false; check("1008 断粮", limited && waiting && refilled); }
+      {
+        const opening = coreCreateGame("pve-challenge", { 1: "三国~蜀", 2: "三国~魏" }, 5, 1, 1, ["1011"], ["1008"]);
+        check("1008 玩家持有时开局仅抽一张且不影响对方", opening.players[0].hand.length === 1
+          && coreHandLimitForPlayer(opening, opening.players[0]) === 1
+          && opening.players[1].hand.length === 3
+          && coreHandLimitForPlayer(opening, opening.players[1]) === HAND_LIMIT);
+        for (const ownerId of [1, 2]) {
+          const game = traitGame("1008");
+          if (ownerId === 1) {
+            game.eliteAiEffectIds = ["1011"];
+            game.eliteAiEffectId = "1011";
+            game.challengePlayerTraitIds = ["1008"];
+          }
+          game.activePlayerId = ownerId;
+          const played = makeCard(ownerId === 1 ? "01101" : "02106", ownerId, null, null);
+          const next = makeCard(ownerId === 1 ? "01102" : "02102", ownerId, null, null);
+          game.players[ownerId - 1].hand = [played];
+          game.players[ownerId - 1].drawPile = [next];
+          const outcome = coreSimulateActionOutcome(game, game.players[ownerId - 1], {
+            type: "place", playerId: ownerId, cardUid: played.uid, target: { row: 1, col: 1 }
+          });
+          check(`1008 ${ownerId === 1 ? "玩家" : "AI"}放置最后一张后补抽`, outcome?.game.players[ownerId - 1].hand.length === 1
+            && outcome.game.players[ownerId - 1].hand[0].uid === next.uid
+            && outcome.game.players[ownerId - 1].drawPile.length === 0);
+        }
+        const game = traitGame("1011");
+        game.challengePlayerTraitIds = ["1008"];
+        const player = game.players[0];
+        player.hand = [makeCard("01101", 1, null, null)];
+        player.drawPile = [makeCard("01102", 1, null, null)];
+        const discardCard = makeCard("03107", 2, 0, 0);
+        game.boardCards = [discardCard];
+        coreDestroyV2Card(game, discardCard, []);
+        const refilledAfterDiscard = player.hand.length === 1 && player.drawPile.length === 0;
+        player.hand = [];
+        player.eliteTraitState = { waitingForDrawPileRefill: false };
+        player.drawPile = [];
+        coreAddCardsToDrawPile(game, player, [makeCard("01103", 1, null, null)], []);
+        check("1008 弃掉最后一张后补抽", refilledAfterDiscard);
+        check("1008 手牌空时牌库新增卡牌立即补抽", player.hand.length === 1 && player.drawPile.length === 0);
+      }
+      {
+        const game = traitGame("1008");
+        const ai = game.players[1];
+        ai.hand = [makeCard("02101", 2, null, null)];
+        game.players[0].drawPile = [makeCard("01101", 1, null, null)];
+        const raider = makeCard("03208", 2, 0, 0);
+        coreApplyV2PlacementSkill(game, ai, raider, []);
+        const blockedAtLimit = ai.hand.length === 1 && game.players[0].drawPile.length === 1;
+        ai.hand = [];
+        coreApplyV2PlacementSkill(game, ai, raider, []);
+        const drawnFromEnemy = ai.hand.length === 1 && game.players[0].drawPile.length === 0;
+        ai.hand = [];
+        ai.drawPile = [makeCard("02102", 2, null, null), makeCard("02103", 2, null, null)];
+        coreApplyV2PlacementSkill(game, ai, makeCard("02518", 2, 0, 1), []);
+        check("1008 卡牌抽牌效果遵守一张上限", blockedAtLimit && drawnFromEnemy
+          && ai.hand.length === 1 && ai.drawPile.length === 1);
+      }
       { const placed = makeCard("02106", 2, 0, 0); const game = traitGame("1006", [placed]); coreApplyV2PlacementSkill(game, game.players[1], placed, []); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); check("1006 当先", placed.currentAttack === placed.attack + 2); }
       { const placed = makeCard("02101", 2, 0, 0); const game = traitGame("1007", [placed]); coreApplyEliteAiTraitEvent(game, "cardPlaced", { player: game.players[1], card: placed }, []); const gained = placed.currentAttack === placed.attack + 3; coreRunV2EndSkills(game, game.players[1], []); const persisted = placed.currentAttack === placed.attack + 3; game.turn = 3; coreStartTurn(game); check("1007 慎行", gained && persisted && placed.currentAttack === placed.attack); }
       { const rested = makeCard("02101", 2, 1, 1); const game = traitGame("1011", [rested]); game.currentPhase = "行动阶段"; game.activePlayerId = 2; rested.restedTurn = game.turn; game.players[1].hand = []; game.players[1].drawPile = []; const blocked = coreValidMoves(game, rested).length === 0 && corePlanAiAction(game, game.players[1]) === null; rested.restedTurn = String(game.turn); const stringStateBlocked = coreValidMoves(game, rested).length === 0; check("AI 普通行动遵守卡牌休整", blocked && stringStateBlocked); }
@@ -134,6 +192,8 @@
         && suppliedTraitGame.eliteAiEffectIds.length === 1
         && suppliedTraitGame.eliteAiEffectIds[0] === "1001"
         && famineOpeningGame.players[1].hand.length === 1
+        && famineOpeningGame.players[0].hand.length === 2
+        && coreHandLimitForPlayer(famineOpeningGame, famineOpeningGame.players[0]) === HAND_LIMIT
         && coreHandLimitForPlayer(famineOpeningGame, famineOpeningGame.players[1]) === 1);
       state.game = challengeGame;
       window.render();

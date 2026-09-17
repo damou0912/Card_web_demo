@@ -548,7 +548,9 @@
   function coreHandLimitForPlayer(game, player) {
     if (!coreIsPveChallenge(game) || !player) return HAND_LIMIT;
     const limits = coreResolveEliteAiRule(game, "handLimit", { player });
-    return Math.max(1, Math.min(HAND_LIMIT, limits.reduce((limit, value) => Number.isFinite(Number(value)) ? Math.min(limit, Number(value)) : limit, HAND_LIMIT)));
+    return Math.max(1, Math.min(HAND_LIMIT, limits.reduce((limit, value) =>
+      value !== null && value !== undefined && Number.isFinite(Number(value))
+        ? Math.min(limit, Number(value)) : limit, HAND_LIMIT)));
   }
 
   function coreEliteAiTraitIdsForGame(game) {
@@ -930,7 +932,8 @@
       coreRecordCardFlow(game, "power", `${coreCardName(card)} 对 ${coreCardName(target)} ${temporary ? "本回合" : "永久"}战力${delta > 0 ? "+" : ""}${delta}（${before} → ${after}），因技能【${coreCardDisplay(card).skill}】。`);
     };
     return {
-      game, player, card, logEntries: log, handLimit: HAND_LIMIT,
+      game, player, card, logEntries: log, handLimit: coreHandLimitForPlayer(game, player),
+      handLimitFor: (targetPlayer) => coreHandLimitForPlayer(game, targetPlayer),
       otherPlayer: corePlayer(game, otherPlayerId(player?.id ?? card?.ownerId)),
       board: game.boardCards,
       controlCounts: () => ({ ...coreControlMap(game).counts }),
@@ -998,7 +1001,6 @@
           }
         }
         if (amount > 0 && targetPlayer.hand.length === 0) coreMaintainEliteAiHand(game, targetPlayer, log);
-        // Note: coreTrimEliteAiHand was removed as "断粮" trait is deleted
         return amount;
       },
       destroy: (target, cause = card) => coreDestroyV2Card(game, target, log, cause),
@@ -1318,8 +1320,9 @@
     const handBefore = player.hand.length;
     const result = coreDrawOneCard(game, player, game.roundLog || []);
     if (result.status === "hand-full") {
-      showToast("手牌已满", `${player.name} 当前已有 ${HAND_LIMIT} 张手牌，本回合不抽牌。`);
-      return `${player.name} 手牌已满 ${HAND_LIMIT} 张，跳过抽牌。`;
+      const handLimit = coreHandLimitForPlayer(game, player);
+      showToast("手牌已满", `${player.name} 当前已有 ${handLimit} 张手牌，本回合不抽牌。`);
+      return `${player.name} 手牌已满 ${handLimit} 张，跳过抽牌。`;
     }
     if (result.status === "deck-empty") {
       if (player.hand.length > handBefore) return `${player.name} 牌库已空，精英特性【援军】抽出 1 张援兵。`;
@@ -1712,7 +1715,7 @@
     let drawn = 0;
     for (let index = 0; index < count; index += 1) {
       if (!owner || !enemy) break;
-      if (owner.hand.length >= HAND_LIMIT) {
+      if (owner.hand.length >= coreHandLimitForPlayer(game, owner)) {
         if (!game.isAiSimulation && typeof queueCardFlowAnimation === "function") {
           queueCardFlowAnimation(game, "draw-failed", owner, null, {
             reason: "hand-full",
@@ -1872,7 +1875,7 @@
     if (event === CORE_V2_EVENT.CARD_PLACED && payload.card && payload.player) {
       coreApplyEliteAiTraitEvent(game, "cardPlaced", payload, payload.log || []);
       const result = coreTriggerOtherV2PlacementEffects(game, payload.player, payload.card, payload.log || []);
-      coreMaintainEliteAiHand(game, coreEliteAiTraitOwner(game), payload.log || []);
+      coreMaintainEliteAiHand(game, payload.player, payload.log || []);
       coreEnforceElitePowerBounds(game);
       return result;
     }
@@ -2721,7 +2724,7 @@
     // Score global and delayed effects by the units they can actually affect, not only by adjacency.
     if (cardId === "02416") score += game.boardCards.filter((target) => target.ownerId === player.id).length * 2.1;
     if (cardId === "01520") score += openNeighbors * 1.4;
-    if (cardId === "02518") score += Math.min(HAND_LIMIT - player.hand.length, player.drawPile.length) * 1.25;
+    if (cardId === "02518") score += Math.min(coreHandLimitForPlayer(game, player) - player.hand.length, player.drawPile.length) * 1.25;
     if (cardId === "02208") score += Math.min(2, game.players.find((target) => target.id !== player.id)?.hand.length || 0) * 1.2;
     if (cardId === "02519") score += winningAdjacentTargets.length * 3.5;
     if (cardId === "02314" && !game.boardCards.some((target) => target.currentAttack === 0 && target.uid !== card.uid)) {
@@ -3240,13 +3243,14 @@
     const renderPlayerPanel = (player, controlElement, summaryElement) => {
       if (!player) return;
       const campName = getCampDisplayName(player.deckKey);
+      const handLimit = coreHandLimitForPlayer(game, player);
       controlElement.textContent = `${control.counts[player.id]} / ${target} 格`;
-      summaryElement.setAttribute("aria-label", `${player.name}，${campName}，手牌 ${player.hand.length}/${HAND_LIMIT}，牌库 ${player.drawPile.length}`);
+      summaryElement.setAttribute("aria-label", `${player.name}，${campName}，手牌 ${player.hand.length}/${handLimit}，牌库 ${player.drawPile.length}`);
       summaryElement.innerHTML = `
         <span class="player-summary-name">${coreEscapeHtml(player.name)}</span>
         <span class="player-summary-camp">${coreEscapeHtml(campName)}</span>
         <span class="player-resource-row">
-          <span class="player-resource"><small>手牌</small><strong>${player.hand.length} / ${HAND_LIMIT}</strong></span>
+          <span class="player-resource"><small>手牌</small><strong>${player.hand.length} / ${handLimit}</strong></span>
           <span class="player-resource"><small>牌库</small><strong>${player.drawPile.length}</strong></span>
         </span>
       `;

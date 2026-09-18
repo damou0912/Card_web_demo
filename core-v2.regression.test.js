@@ -208,7 +208,7 @@ const customDeckValidation = {
     && idsAfterRevert?.[0] === String(firstDefaultCommon.id)
     && modificationsClearedAfterRevert,
   manualSaveControlRemoved: !indexSource.includes('id="modify-deck-save-btn"')
-    && indexSource.includes('script.js?v=20260916-deck-autosave')
+    && /<script src="script\.js\?v=[^"]+"><\/script>/.test(indexSource)
 };
 const customDeckPassed = Object.values(customDeckValidation).every(Boolean);
 const loginPromptPolicyValid = deckDebug.shouldAutoOpenLogin(null)

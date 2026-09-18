@@ -71,6 +71,12 @@ const GUARD_CARD_DISPLAY = Object.freeze({
   name: "守军", camp: "无势力", rarity: "普通", skill: "无",
   effect: "中立守军：双方均视为敌方卡牌。"
 });
+// Training units have no registered effects and never enter the normal card pool.
+// Resolve by ID so hand, board, combat and draw animations share the same display.
+const TUTORIAL_REINFORCEMENT_DISPLAY_BY_ID = new Map([1, 2, 3].map((baseAttack) => [
+  `tutorial-reinforcement-${baseAttack}`,
+  Object.freeze({ name: "援军", camp: "无势力", rarity: "普通", skill: "无", baseAttack, effect: "无技能效果。" })
+]));
 const UNKNOWN_CARD_DISPLAY = Object.freeze({
   name: "未知卡牌", camp: "无势力", rarity: "普通", skill: "无",
   effect: "无技能效果。"
@@ -237,7 +243,8 @@ function getCampDisplayName(campKey) {
 function getCardDisplay(cardOrId) {
   if (cardOrId?.isGuard) return GUARD_CARD_DISPLAY;
   const id = typeof cardOrId === "object" ? cardOrId?.id : cardOrId;
-  return GAME_CARD_DISPLAY_BY_ID.get(String(id || "")) || UNKNOWN_CARD_DISPLAY;
+  return GAME_CARD_DISPLAY_BY_ID.get(String(id || ""))
+    || TUTORIAL_REINFORCEMENT_DISPLAY_BY_ID.get(String(id || "")) || UNKNOWN_CARD_DISPLAY;
 }
 
 function getCardDisplayName(cardOrId) {
@@ -1478,6 +1485,7 @@ function cancelSelection() {
 }
 
 function resetToMenu() {
+  window.CardTutorial?.cleanup();
   closeGameMenu();
   if (state.game?.mode === "online" || state.online?.roomCode) leaveOnlineSession();
   state.game = null;
@@ -2431,6 +2439,10 @@ function bindEvents() {
   ui.cancelSelectionBtn.addEventListener("click", cancelSelection);
   ui.restartBtn.addEventListener("click", async () => {
     closeGameMenu();
+    if (state.game?.mode === "tutorial") {
+      window.CardTutorial?.restartLesson();
+      return;
+    }
     await loadCustomDecksForCurrentUser();
     window.startRandomGame?.(state.game?.mode || state.selectedMode);
   });

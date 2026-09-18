@@ -19,7 +19,7 @@
     { level: 4, name: "精英", offset: 2, powerLabel: "约 125% 强度", rarityWeights: { "普通": 0.4, "稀有": 0.3, "特殊": 0.15, "史诗": 0.1, "传说": 0.05 }, rewardWeights: { "稀有": 0.15, "史诗": 0.5, "特殊": 0.25, "传说": 0.1 } },
     { level: 5, name: "首领", offset: 3, powerLabel: "约 140% 强度", rarityWeights: { "普通": 0.3, "稀有": 0.3, "特殊": 0.15, "史诗": 0.15, "传说": 0.1 }, rewardWeights: { "史诗": 0.35, "特殊": 0.25, "传说": 0.4 } }
   ]);
-  const CORE_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online", "card-test"]);
+  const CORE_GAME_MODES = new Set(["pve", "pve-challenge", CORE_GAUNTLET_MODE, "online", "card-test", "tutorial"]);
   const CORE_PRODUCT_GAME_MODES = new Set(["pve", "pve-challenge", "online"]);
   // This is a client-side GM convenience gate, not a security boundary.
   const CORE_GM_3X3_PASSWORD = "dm0912";
@@ -117,6 +117,7 @@
 
   function coreCanViewerInteract(game) {
     if (!game) return false;
+    if (game.mode === "tutorial") return game.activePlayerId === 1 && !game.winner;
     if (coreIsSpectator()) return false;
     if (game.mode === "online") {
       return coreViewerPlayerId(game) === game.activePlayerId;
@@ -131,6 +132,7 @@
 
   function coreStartTurnTimer(game, now = Date.now()) {
     if (!game || game.winner) return null;
+    if (game.mode === "tutorial") { game.turnDeadlineAt = null; return null; }
     game.turnDeadlineAt = Number(now) + CORE_TURN_TIME_LIMIT_MS;
     return game.turnDeadlineAt;
   }
@@ -769,6 +771,7 @@
   }
 
   function coreModeLabel(mode) {
+    if (mode === "tutorial") return "新手教程";
     if (mode === CORE_GAUNTLET_MODE) return "过关斩将";
     if (mode === "pve-challenge") return "PVE 挑战";
     if (mode === "pve") return "PVE";
@@ -2306,6 +2309,7 @@
   }
 
   async function coreResolveAction(game, action) {
+    if (game.mode === "tutorial" && !window.CardTutorial?.allowAction(game, action)) return false;
     const player = corePlayer(game, action.playerId);
     const card = getCardByUid(game, action.cardUid);
     if (!player || !card || !coreCanUseAction(game, card) || (action.type === "place" && !coreCanPlaceCard(game, card))) {
@@ -2456,6 +2460,15 @@
     coreConsumeResolvedAction(game, player, card, action, freePlacementSource);
     const won = coreCheckVictory(game);
     game.isAnimating = false;
+    if (game.mode === "tutorial") {
+      if (won) {
+        game.currentPhase = "胜负结算";
+        game.lastResolution = game.winner.text;
+      }
+      window.CardTutorial?.afterAction(game, action);
+      coreRender();
+      return true;
+    }
     if (won) {
       game.currentPhase = "胜负结算";
       game.lastResolution = game.winner.text;
@@ -2563,6 +2576,11 @@
     if (!game || game.isAnimating || game.winner) {
       return;
     }
+    if (game.mode === "tutorial" && !window.CardTutorial?.allowEndTurn(game, automatic)) return;
+    if (game.mode === "tutorial") {
+      game.isAnimating = true;
+      coreRender();
+    }
     game.turnDeadlineAt = null;
     coreUpdateTurnTimerUi(game);
     const active = corePlayer(game, game.activePlayerId);
@@ -2600,6 +2618,10 @@
     if (wonAtStart) {
       await coreAnimateVictoryCells(game, game.winner.playerId);
       showResult();
+      return;
+    }
+    if (game.mode === "tutorial") {
+      await window.CardTutorial?.afterEndTurn(game);
       return;
     }
     showPhaseBanner("切换回合", `第 ${game.turn} / ${CORE_MAX_TURNS} 回合，${corePlayer(game, game.activePlayerId).name} 开始行动。`);
@@ -3181,6 +3203,7 @@
       const element = document.createElement("button");
       element.type = "button";
       element.className = `card rarity-${display.rarity || "普通"}`;
+      element.dataset.cardUid = card.uid;
       element.disabled = game.isAnimating || !coreCanViewerInteract(game);
       if (game.selection.handCardUid === card.uid) element.classList.add("selected");
       element.innerHTML = `
@@ -3331,6 +3354,7 @@
     if (ui.actionLogModal?.classList.contains("visible")) renderActionLog();
     coreRenderBoard(game, active, control);
     coreRenderHand(game, handOwner);
+    window.CardTutorial?.render(game);
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(() => coreFitSingleLineText(ui.board));
     else window.setTimeout(() => coreFitSingleLineText(ui.board), 0);
   }
@@ -3338,6 +3362,7 @@
   function coreHandleHandClick(cardUid) {
     const game = state.game;
     if (!game || game.isAnimating || !coreCanViewerInteract(game)) return;
+    if (game.mode === "tutorial" && !window.CardTutorial?.allowSelection(game, "hand", cardUid)) return;
     const active = corePlayer(game, game.activePlayerId);
     const card = active?.hand.find((item) => item.uid === cardUid);
     if (!card) return;
@@ -3358,6 +3383,7 @@
   function coreHandleBoardClick(row, col) {
     const game = state.game;
     if (!game || game.isAnimating || !coreCanViewerInteract(game) || isBrokenCell(game, row, col)) return;
+    if (game.mode === "tutorial" && !window.CardTutorial?.allowSelection(game, "board", { row, col })) return;
     const active = corePlayer(game, game.activePlayerId);
     const target = getBoardCardAt(game, row, col);
     const selectedCard = game.boardCards.find((item) => item.uid === game.selection.boardCardUid);
@@ -4364,9 +4390,10 @@
   coreUi.endTurnBtn.addEventListener("click", () => {
     const game = state.game;
     if (!game || game.isAnimating || game.winner || !coreCanViewerInteract(game)) return;
+    if (game.mode === "tutorial" && !window.CardTutorial?.allowEndTurn(game, false)) return;
     const activePlayer = corePlayer(game, game.activePlayerId);
     if (coreIsPveChallenge(game) && activePlayer?.isAI) return;
-    if (coreHasExecutableAction(game) && !window.confirm("本回合仍有可执行操作，确定要结束回合吗？")) return;
+    if (game.mode !== "tutorial" && coreHasExecutableAction(game) && !window.confirm("本回合仍有可执行操作，确定要结束回合吗？")) return;
     if (game.mode === "online") {
       if (!window.CardOnline?.send({ type: "end-turn-request" })) showToast("联网未连接", "请等待联网服务连接后再结束回合。");
       return;
@@ -4407,4 +4434,12 @@
     showToast("Card Test 场景已导入", "当前场景已切换为 V2 规则核心。");
   }
   window.__CARD_DEMO_CORE_V2__ = { coreCreateGame, coreStartTurn, coreResolveAction, coreEndTurn, coreSurrender, coreVictoryTarget, coreDataValidation };
+  // The tutorial uses the production rules and renderer; only its scenes and permitted inputs differ.
+  window.CardTutorialCore = Object.freeze({
+    createGame: () => coreRuntimeReady ? coreCreateGame("tutorial", { 1: "三国~蜀", 2: "三国~魏" }, 4, 1) : null,
+    createCard: (id) => cloneCard({ id, attack: coreCardBaseAttack(id) }), createGuard: coreCreateNeutralGuard,
+    startTurn: coreStartTurn, endTurn: coreEndTurn, render: coreRender,
+    getState: () => state, display: coreCardDisplay, control: coreControlMap,
+    showGame: () => switchScreen("game"), closeOverlay: coreCloseOverlay
+  });
 })();

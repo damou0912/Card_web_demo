@@ -15,6 +15,7 @@
     }
   </script>
   <link rel="stylesheet" href="style.css?v=20260916-adjacent-buff-links">
+  <link rel="stylesheet" href="tutorial.css?v=20260918-tutorial">
 </head>
 <body>
   <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
@@ -171,6 +172,11 @@
           <button class="mode-btn" data-mode="pve-challenge" data-description="挑战精英 AI；词条分为初级、中级、高级，胜利后可进入下一关。">PVE 挑战模式</button>
           <button class="mode-btn" data-mode="online" data-description="创建或加入房间，与另一位玩家联网对战。">联网对战</button>
         </div>
+        <button id="start-tutorial-btn" class="tutorial-entry" type="button">
+          <span class="tutorial-entry-icon" aria-hidden="true">学</span>
+          <span><strong>新手教程</strong><small id="tutorial-entry-status">约 5 分钟 · 4 节实操 · 从第一张牌开始</small></span>
+          <span class="tutorial-entry-arrow" aria-hidden="true">↗</span>
+        </button>
         <p id="mode-description" class="mode-description" aria-live="polite">与标准 AI 对战，系统随机为 AI 选择势力牌库。</p>
         <div class="player-id-bar" aria-label="当前玩家 ID">
           <span>玩家 ID</span>
@@ -291,6 +297,24 @@
 
       <section class="play-area">
         <aside class="side-panel">
+          <section id="tutorial-panel" class="tutorial-panel" aria-labelledby="tutorial-title" hidden>
+            <div class="tutorial-panel-top"><span>新手训练营</span><span id="tutorial-progress-label"></span></div>
+            <nav id="tutorial-chapters" class="tutorial-chapters" aria-label="教程章节"></nav>
+            <div id="tutorial-copy" aria-live="polite" aria-atomic="true">
+              <p id="tutorial-step-label" class="tutorial-step-label"></p>
+              <h2 id="tutorial-title" tabindex="-1"></h2>
+              <p id="tutorial-description" class="tutorial-description"></p>
+              <div id="tutorial-card" class="tutorial-card-preview" hidden></div>
+              <p id="tutorial-task" class="tutorial-task"></p>
+            </div>
+            <p id="tutorial-feedback" class="tutorial-feedback" role="status"></p>
+            <button id="tutorial-next-btn" class="primary-btn" type="button">继续</button>
+            <div class="tutorial-utilities">
+              <button id="tutorial-retry-btn" type="button">重练本课</button>
+              <button id="tutorial-exit-btn" type="button">退出教程</button>
+            </div>
+            <p class="tutorial-footnote">固定练习局面 · 无倒计时 · 可随时重练</p>
+          </section>
           <div class="panel-card">
             <div class="panel-head">
               <h2 id="opponent-player-title">对方玩家</h2>
@@ -480,13 +504,14 @@
     }
   </script>
   <script src="auth-client.js"></script>
-  <script src="script.js?v=20260916-deck-autosave"></script>
+  <script src="script.js?v=20260918-tutorial-reinforcements"></script>
   <script src="online-client.js?v=20260909-session-reconnect"></script>
   <script src="shu-card-effects.js?v=20260916-description-effects"></script>
   <script src="wei-card-effects.js?v=20260915-wei-replacements"></script>
   <script src="wu-card-effects.js?v=20260916-description-effects"></script>
   <script src="elite-ai-info.js?v=20260914-1008-enabled"></script>
   <script src="elite-ai-effects.js?v=20260914-1008-enabled"></script>
-  <script src="core-v2.js?v=20260916-description-effects"></script>
+  <script src="core-v2.js?v=20260918-tutorial"></script>
+  <script src="tutorial.js?v=20260918-tutorial-reinforcements"></script>
 </body>
 </html>

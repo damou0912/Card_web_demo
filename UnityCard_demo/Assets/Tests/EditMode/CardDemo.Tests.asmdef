@@ -1,0 +1,7 @@
+{
+  "name": "CardDemo.Tests",
+  "rootNamespace": "CardDemo.Tests",
+  "references": ["CardDemo.Core", "CardDemo.TestChecks"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

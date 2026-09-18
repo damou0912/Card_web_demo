@@ -1,0 +1,14 @@
+{
+  "title": "三国卡牌 · Unity 起步工程",
+  "playerId": "Player_001",
+  "aiId": "AI_Demo",
+  "boardSize": 4,
+  "deckSize": 20,
+  "handLimit": 5,
+  "maxTurns": 30,
+  "turnSeconds": 300,
+  "seed": 0,
+  "aiDelaySeconds": 0.65,
+  "serverUrl": "",
+  "wechatAppId": ""
+}

@@ -1,0 +1,5 @@
+{
+  "name": "CardDemo.Core",
+  "rootNamespace": "CardDemo.Core",
+  "noEngineReferences": true
+}

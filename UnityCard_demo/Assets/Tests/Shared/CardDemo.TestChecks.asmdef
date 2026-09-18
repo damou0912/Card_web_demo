@@ -1,0 +1,7 @@
+{
+  "name": "CardDemo.TestChecks",
+  "rootNamespace": "CardDemo.Tests",
+  "references": ["CardDemo.Core"],
+  "includePlatforms": ["Editor"],
+  "noEngineReferences": true
+}

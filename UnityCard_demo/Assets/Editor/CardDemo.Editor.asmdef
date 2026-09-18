@@ -1,0 +1,6 @@
+{
+  "name": "CardDemo.Editor",
+  "rootNamespace": "CardDemo.Editor",
+  "references": ["CardDemo.Core", "CardDemo.Runtime"],
+  "includePlatforms": ["Editor"]
+}

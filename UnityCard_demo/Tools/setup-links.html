@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UnityCard_demo · 新电脑配置</title>
+<style>
+body{font:17px/1.7 system-ui,sans-serif;background:#101827;color:#eaf0f8;max-width:860px;margin:48px auto;padding:0 24px}h1{font-size:32px}section{background:#1b293d;padding:20px 28px;margin:18px 0;border-radius:14px}a{color:#71d9d7}code{background:#0d1521;padding:3px 7px;border-radius:4px}.note{color:#b0bfd0}button{padding:9px 18px;cursor:pointer}
+</style>
+<h1>UnityCard_demo · 新电脑配置</h1>
+<p>独立 Unity 2D 起步工程。无需复制旧电脑的 Library、账号信息或缓存。</p>
+<section><h2>1. 安装 Unity</h2>
+<p><a href="https://unity.com/download">Unity Hub 官方下载</a> → 登录并激活适用许可证。</p>
+<p><a href="unityhub://2022.3.62f3/96770f904ca7">通过 Unity Hub 安装 2022.3.62f3</a></p>
+<p>可选安装 WebGL Build Support。若链接未打开，前往 <a href="https://unity.com/releases/editor/archive">官方版本归档</a> 搜索相同版本。不要直接升级工程。</p></section>
+<section><h2>2. 打开工程</h2>
+<p>Unity Hub → Projects → Add project from disk → 选择 <code>UnityCard_demo</code> 文件夹，而不是 Assets。</p>
+<p>首次打开等待依赖导入，然后打开 <code>Assets/Scenes/Main.unity</code>，点击 Play。</p></section>
+<section><h2>3. 调整参数</h2>
+<p>菜单 <code>Card Demo → Configuration</code> 可修改棋盘、回合时间、随机种子和 AI 速度，并查询正式卡表。</p>
+<p>菜单 <code>Card Demo → Validate Project</code> 检查项目，<code>Window → General → Test Runner</code> 运行 EditMode 测试。</p></section>
+<section><h2>可选开发工具</h2>
+<p><a href="https://git-scm.com/downloads">Git</a> · <a href="https://code.visualstudio.com/">Visual Studio Code</a> · <a href="https://dotnet.microsoft.com/download/dotnet/8.0">.NET 8 SDK</a> · <a href="https://nodejs.org/en/download">Node.js</a></p>
+<p class="note">只在 Unity 中运行演示不需要额外安装 Node.js 或 .NET SDK。没有网页服务器也能离线对局；首次安装和依赖下载需要网络。</p></section>
+<p class="note">这是基础 PVE 演示，不含完整正式技能、在线账号、付费抽卡或微信转换 SDK。WebGL 构建不是微信小游戏发布包。</p>
+</html>

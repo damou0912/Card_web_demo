@@ -1,0 +1,5 @@
+{
+  "name": "CardDemo.Runtime",
+  "rootNamespace": "CardDemo",
+  "references": ["CardDemo.Core", "UnityEngine.UI"]
+}

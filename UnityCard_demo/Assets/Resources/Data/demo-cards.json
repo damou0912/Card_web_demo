@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "cards": [
+    {"id":"demo_soldier","name":"演示·步卒","camp":"演示","rarity":"普通","baseAttack":3,"skill":"无","effect":"无技能。用于验证放置、移动和战力比较。","demoEffect":"None"},
+    {"id":"demo_commander","name":"演示·军师","camp":"演示","rarity":"稀有","baseAttack":2,"skill":"鼓舞","effect":"入阵：四方相邻的其他己方卡牌永久战力 +1。","demoEffect":"BoostAdjacent"},
+    {"id":"demo_archer","name":"演示·弓手","camp":"演示","rarity":"普通","baseAttack":2,"skill":"压制","effect":"入阵：四方相邻战力最高的一张非己方卡牌永久战力 -1，最低为 0；同战力按格子序号选择。","demoEffect":"WeakenEnemy"},
+    {"id":"demo_guard","name":"演示·盾卫","camp":"演示","rarity":"史诗","baseAttack":2,"skill":"护盾","effect":"每次入阵获得一次护盾，抵挡下一次交战摧毁。护盾被消耗时保留在原格。","demoEffect":"Shield"},
+    {"id":"demo_banner","name":"演示·旗手","camp":"演示","rarity":"特殊","baseAttack":1,"skill":"遗志","effect":"被摧毁离场后：原位置四方相邻的己方卡牌永久战力 +1。","demoEffect":"LastWill"}
+  ]
+}

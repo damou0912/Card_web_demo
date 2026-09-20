@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80fe223f1de479f88dae59db183efa39, type: 3}
+  m_Name: ExampleCardPage
+  m_EditorClassIdentifier:
+  pageTitle: "卡牌详情"
+  pageSubtitle: "通用页面模板 · 用于图鉴 / 组卡 / 奖励展示"
+  cardId: "preview_001"
+  cardName: "示例武将"
+  faction: "自定义势力"
+  rarity: "稀有"
+  power: 3
+  artwork: {fileID: 0}
+  artworkPlaceholder: "立绘占位区\n将图片设为 Sprite 后拖入配置中的卡牌立绘"
+  skillTitle: "鼓舞 · 示例技能"
+  skillDescription: "入阵：四方相邻的其他己方卡牌，本回合战力 +1。\n\n这里可以改成任意技能说明，长文字可滚动阅读。\n注意：此处只展示文字，实际技能仍在卡牌与技能工坊中制作。"
+  extraTitle: "其他资料"
+  extraFields:
+  - label: "定位"
+    value: "辅助（可修改）"
+  - label: "获得途径"
+    value: "这里填写通用说明"
+  showAction: 1
+  actionLabel: "选用这张卡牌"
+  footer: "预留按钮：尚未连接组卡、抽卡或购买逻辑。"
+  backgroundColor: {r: 0.055, g: 0.086, b: 0.137, a: 1}
+  surfaceColor: {r: 0.106, g: 0.157, b: 0.231, a: 1}
+  artworkBackgroundColor: {r: 0.141, g: 0.220, b: 0.290, a: 1}
+  accentColor: {r: 0.349, g: 0.800, b: 0.725, a: 1}
+  textColor: {r: 0.933, g: 0.957, b: 0.980, a: 1}
+  mutedTextColor: {r: 0.639, g: 0.710, b: 0.788, a: 1}
+  buttonTextColor: {r: 0.047, g: 0.125, b: 0.141, a: 1}
+  cardWidth: 680
+  artworkHeight: 240
+  titleFontSize: 36
+  bodyFontSize: 23

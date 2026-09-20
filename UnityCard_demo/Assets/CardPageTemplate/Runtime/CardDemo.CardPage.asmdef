@@ -1,0 +1,5 @@
+{
+  "name": "CardDemo.CardPage",
+  "rootNamespace": "CardDemo.CardPage",
+  "references": ["CardDemo.Core", "UnityEngine.UI"]
+}

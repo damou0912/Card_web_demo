@@ -1,0 +1,7 @@
+{
+  "name": "CardDemo.CardPage.Tests",
+  "rootNamespace": "CardDemo.CardPage.Tests",
+  "references": ["CardDemo.CardPage", "CardDemo.Core", "UnityEngine.UI"],
+  "includePlatforms": ["Editor"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

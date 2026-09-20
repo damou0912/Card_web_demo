@@ -4,6 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import './check-card-page.mjs';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => fs.readFileSync(path.join(project, file), 'utf8');
 const json = file => JSON.parse(read(file));
@@ -13,8 +14,32 @@ assert.equal(manifest.dependencies['com.unity.ugui'], '1.0.0');
 for (const version of Object.values(manifest.dependencies)) assert.match(version, /^\d+\.\d+\.\d+$/);
 const config = json('Assets/Resources/Config/game-config.json');
 assert.ok([4, 5].includes(config.boardSize));
-assert.equal(config.turnSeconds, 300);
-assert.equal(config.handLimit, 5);
+assert.ok(Number.isInteger(config.turnSeconds) && config.turnSeconds >= 10 && config.turnSeconds <= 1800);
+assert.ok(Number.isInteger(config.handLimit) && config.handLimit >= 3 && config.handLimit <= 10);
+assert.ok(Number.isInteger(config.deckSize) && config.deckSize >= 5 && config.deckSize <= 100);
+const workshop = json('Assets/Resources/Data/workshop-library.json');
+assert.equal(workshop.schemaVersion, 1);
+assert.ok(workshop.cards.length > 0);
+const workshopIds = new Set(workshop.cards.map(c => c.id));
+assert.equal(workshopIds.size, workshop.cards.length);
+for (const card of workshop.cards) {
+  assert.match(card.id, /^workshop_[a-zA-Z0-9_]+$/);
+  assert.equal(card.demoEffect, 'None');
+  for (const skill of card.abilities || []) {
+    assert.ok(['OnPlace','OnOwnTurnStart','OnOwnTurnEnd','OnMove','OnDestroyed','AfterCombat'].includes(skill.trigger));
+    assert.ok(['Always','HandBelow','BehindOnScore','HasAdjacentEnemy'].includes(skill.condition));
+    assert.ok(skill.steps.length > 0 && skill.steps.length <= 8);
+    for (const step of skill.steps) {
+      assert.ok(['ModifyPower','GrantShield','DrawCards','Destroy','AddActions'].includes(step.operation));
+      assert.ok(['Self','AdjacentAllies','AdjacentEnemies','AllAllies','AllEnemies','RowColumnEnemies'].includes(step.target));
+      assert.ok(['All','RandomOne','HighestPower','LowestPower'].includes(step.selection));
+      assert.ok(['Permanent','CurrentTurn'].includes(step.duration));
+    }
+  }
+}
+for (const deck of workshop.decks) assert.ok(deck.cardIds.every(id => workshopIds.has(id)));
+if (config.useWorkshopCards)
+  for (const id of [config.playerDeckId, config.aiDeckId]) assert.equal(workshop.decks.find(d => d.id === id)?.cardIds.length, config.deckSize);
 const demo = json('Assets/Resources/Data/demo-cards.json');
 assert.equal(demo.cards.length, 5);
 assert.equal(new Set(demo.cards.map(c => c.demoEffect)).size, 5);

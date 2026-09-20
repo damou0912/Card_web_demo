@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "boardSize": 4,
+  "seed": 123,
+  "activePlayer": 1,
+  "turn": 2,
+  "actions": 2,
+  "pieces": [
+    {"cell":0,"cardId":"workshop_raider","owner":1,"power":5,"shield":false,"resting":false},
+    {"cell":1,"cardId":"workshop_guard","owner":2,"power":2,"shield":true,"resting":false}
+  ],
+  "playerHand": [],
+  "aiHand": []
+}

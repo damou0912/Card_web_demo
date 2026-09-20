@@ -9,6 +9,9 @@
   "turnSeconds": 300,
   "seed": 0,
   "aiDelaySeconds": 0.65,
+  "useWorkshopCards": false,
+  "playerDeckId": "workshop_player",
+  "aiDeckId": "workshop_ai",
   "serverUrl": "",
   "wechatAppId": ""
 }

@@ -16,6 +16,7 @@ namespace CardDemo.Editor
         private string query = "";
         private string error;
         private bool showCatalog;
+        private string loadedConfig;
 
         [MenuItem("Card Demo/Configuration")]
         public static void Open() { GetWindow<DemoConfigurationWindow>("Card Demo 配置"); }
@@ -26,7 +27,8 @@ namespace CardDemo.Editor
         {
             try
             {
-                config = JsonUtility.FromJson<GameConfig>(File.ReadAllText(ConfigPath));
+                loadedConfig = File.ReadAllText(ConfigPath);
+                config = JsonUtility.FromJson<GameConfig>(loadedConfig);
                 catalog = JsonUtility.FromJson<CardCatalog>(File.ReadAllText("Assets/Resources/Data/web-card-catalog.json"));
                 error = null;
             }
@@ -37,7 +39,7 @@ namespace CardDemo.Editor
         {
             scroll = EditorGUILayout.BeginScrollView(scroll);
             EditorGUILayout.LabelField("UnityCard_demo · 起步工程", EditorStyles.boldLabel);
-            EditorGUILayout.HelpBox("当前可玩内容是 5 种独立演示卡。正式卡表仅供查阅，正式技能、账号、联网及微信 SDK 尚未迁移。", MessageType.Info);
+            EditorGUILayout.HelpBox("可选择原始演示卡或制作库卡组。正式卡表只供参考，正式技能、账号、联网及微信 SDK 尚未迁移。", MessageType.Info);
             if (!string.IsNullOrEmpty(error)) EditorGUILayout.HelpBox(error, MessageType.Error);
             if (config != null)
             {
@@ -53,6 +55,13 @@ namespace CardDemo.Editor
                 config.handLimit = EditorGUILayout.IntField("手牌上限", config.handLimit);
                 config.seed = EditorGUILayout.IntField("随机种子（0 为随机）", config.seed);
                 config.aiDelaySeconds = EditorGUILayout.FloatField("AI 行动间隔（秒）", config.aiDelaySeconds);
+                config.useWorkshopCards = EditorGUILayout.Toggle("启用制作库测试卡组", config.useWorkshopCards);
+                if (config.useWorkshopCards)
+                {
+                    config.playerDeckId = EditorGUILayout.TextField("玩家测试卡组 ID", config.playerDeckId);
+                    config.aiDeckId = EditorGUILayout.TextField("AI 测试卡组 ID", config.aiDeckId);
+                }
+                if (GUILayout.Button("打开卡牌／技能／测试卡组工具")) CardWorkshopWindow.Open();
                 EditorGUILayout.Space();
                 EditorGUILayout.LabelField("后续联网预留（当前不发起连接）", EditorStyles.boldLabel);
                 config.serverUrl = EditorGUILayout.TextField("HTTPS / WSS 地址", config.serverUrl);
@@ -91,7 +100,14 @@ namespace CardDemo.Editor
             try
             {
                 config.Validate();
-                File.WriteAllText(ConfigPath, JsonUtility.ToJson(config, true) + "\n");
+                if (config.useWorkshopCards)
+                {
+                    var library = WorkshopStore.Load();
+                    library.ResolveDeck(config.playerDeckId, config.deckSize);
+                    library.ResolveDeck(config.aiDeckId, config.deckSize);
+                }
+                WorkshopStore.SaveText(ConfigPath, JsonUtility.ToJson(config, true) + "\n", loadedConfig);
+                loadedConfig = File.ReadAllText(ConfigPath);
                 AssetDatabase.Refresh(); error = null;
                 ShowNotification(new GUIContent("已保存；重新 Play 后生效"));
             }

@@ -16,6 +16,9 @@ namespace CardDemo.Core
         public int turnSeconds = 300;
         public int seed;
         public float aiDelaySeconds = 0.65f;
+        public bool useWorkshopCards;
+        public string playerDeckId = "workshop_player";
+        public string aiDeckId = "workshop_ai";
         // Reserved connection settings, not a working network client. Never store secrets here.
         public string serverUrl = "";
         public string wechatAppId = "";
@@ -32,6 +35,8 @@ namespace CardDemo.Core
             if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(playerId) || string.IsNullOrWhiteSpace(aiId))
                 throw new ArgumentException("标题和玩家 ID 不能为空。");
             if (playerId == aiId) throw new ArgumentException("玩家和 AI 的 ID 必须不同。");
+            if (useWorkshopCards && (string.IsNullOrWhiteSpace(playerDeckId) || string.IsNullOrWhiteSpace(aiDeckId)))
+                throw new ArgumentException("使用制作库时必须指定双方测试卡组 ID。");
             if (!string.IsNullOrEmpty(serverUrl))
             {
                 Uri uri;
@@ -54,6 +59,7 @@ namespace CardDemo.Core
         public string skill;
         public string effect;
         public string demoEffect;
+        public SkillDefinition[] abilities;
 
         public DemoEffect ParsedEffect
         {
@@ -80,10 +86,12 @@ namespace CardDemo.Core
         public int Uid;
         public CardDefinition Definition;
         public int Owner; // 0 = neutral, 1 = human, 2 = AI; never follows turn perspective.
-        public int Power;
+        public int PermanentPower;
+        public int Power { get { return Math.Max(0, PermanentPower + TemporaryPower); } set { PermanentPower = Math.Max(0, value); } }
         public bool Resting;
         public bool Moved;
         public bool Shield;
+        public int TemporaryPower;
         public string Name { get { return Definition == null ? "中立守军" : Definition.name; } }
     }
 

@@ -18,6 +18,7 @@ namespace CardDemo
         private GameEngine game;
         private GameConfig config;
         private CardCatalog demoCatalog;
+        private WorkshopLibrary workshop;
         private Font font;
         private RectTransform safeRoot;
         private RectTransform boardRoot;
@@ -27,6 +28,7 @@ namespace CardDemo
         private GameObject logPanel, resultPanel;
         private GridLayoutGroup grid;
         private ScrollRect logScroll;
+        private ScrollRect detailScroll;
         private readonly Button[] boardButtons = new Button[25];
         private readonly Button[] handButtons = new Button[10];
         private int selectedHand = -1, selectedCell = -1;
@@ -54,7 +56,14 @@ namespace CardDemo
             try
             {
                 config = ReadJson<GameConfig>("Config/game-config");
-                demoCatalog = ReadJson<CardCatalog>("Data/demo-cards");
+                if (config.useWorkshopCards)
+                {
+                    workshop = ReadJson<WorkshopLibrary>("Data/workshop-library");
+                    WorkshopValidation.ThrowIfInvalid(workshop);
+                    foreach (var card in workshop.cards) card.effect = SkillText.Describe(card);
+                    demoCatalog = new CardCatalog { schemaVersion = 1, cards = workshop.cards };
+                }
+                else demoCatalog = ReadJson<CardCatalog>("Data/demo-cards");
                 config.Validate();
                 CreateBoard();
                 StartMatch();
@@ -151,6 +160,16 @@ namespace CardDemo
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             var detailPanel = Panel(safeRoot, "Details", new Vector2(.70f, .48f), new Vector2(.99f, .89f), PanelColor);
             details = Label(detailPanel, "Card Details", "", 24, TextAnchor.UpperLeft);
+            detailPanel.gameObject.AddComponent<RectMask2D>();
+            detailScroll = detailPanel.gameObject.AddComponent<ScrollRect>();
+            details.raycastTarget = true;
+            details.verticalOverflow = VerticalWrapMode.Overflow;
+            var detailContent = details.rectTransform;
+            detailContent.anchorMin = new Vector2(0, 1); detailContent.anchorMax = new Vector2(1, 1); detailContent.pivot = new Vector2(.5f, 1);
+            detailContent.offsetMin = new Vector2(12, 0); detailContent.offsetMax = new Vector2(-12, 0);
+            detailContent.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            detailScroll.content = detailContent; detailScroll.viewport = detailPanel; detailScroll.horizontal = false;
+            detailScroll.movementType = ScrollRect.MovementType.Clamped; detailScroll.scrollSensitivity = 30;
             var latestPanel = Panel(safeRoot, "Latest Events", new Vector2(.70f, .28f), new Vector2(.99f, .465f), PanelColor);
             latest = Label(latestPanel, "Recent Flow", "", 20, TextAnchor.UpperLeft);
             var statusPanel = Panel(safeRoot, "Turn Above Hand", new Vector2(.215f, .225f), new Vector2(.99f, .272f), PanelColor);
@@ -216,10 +235,12 @@ namespace CardDemo
         {
             if (config == null || demoCatalog == null) return;
             int seed = config.seed == 0 ? Environment.TickCount : config.seed;
-            game = new GameEngine(config, demoCatalog.cards, seed);
+            game = new GameEngine(config, demoCatalog.cards, seed,
+                workshop == null ? null : workshop.ResolveDeck(config.playerDeckId, config.deckSize),
+                workshop == null ? null : workshop.ResolveDeck(config.aiDeckId, config.deckSize));
             selectedCell = selectedHand = -1; seenEvents = seenTurn = -1; confirmEnd = false;
             resultPanel.SetActive(false); logPanel.SetActive(false);
-            title.text = config.title + "    |    PVE 基础演示 · 非完整网页版移植";
+            title.text = config.title + (workshop == null ? "    |    PVE 基础演示" : "    |    制作库测试对局") + " · 非完整网页版移植";
             details.text = "已就绪\n\n选中手牌，然后点击空格放置。\n演示包含鼓舞、压制、保护与被摧毁技能。\n\n正式卡表可在编辑器的 Card Demo > Configuration 中查看。";
             Refresh();
         }
@@ -252,6 +273,8 @@ namespace CardDemo
             details.text = card.name + "\nID：" + card.id + "\n品质：" + card.rarity + "   基础战力：" + card.baseAttack
                 + (piece == null ? "" : "\n当前战力：" + piece.Power + "   " + (piece.Shield ? "护盾" : "无护盾"))
                 + "\n\n「" + card.skill + "」\n" + card.effect;
+            // Multi-step authored descriptions are scrollable rather than truncated or shrunk.
+            Canvas.ForceUpdateCanvases(); detailScroll.verticalNormalizedPosition = 1;
         }
 
         private void EndHumanTurn()

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "cards": [
+    {
+      "id":"workshop_banner","name":"工坊·战旗","camp":"制作测试","rarity":"普通","baseAttack":2,"skill":"振奋","effect":"由组合技能自动生成实际说明。","demoEffect":"None",
+      "abilities":[{"name":"振奋","trigger":"OnPlace","condition":"Always","conditionValue":3,"steps":[{"operation":"ModifyPower","target":"AdjacentAllies","selection":"All","amount":2,"duration":"CurrentTurn"}]}]
+    },
+    {
+      "id":"workshop_guard","name":"工坊·护卫","camp":"制作测试","rarity":"稀有","baseAttack":3,"skill":"守护","effect":"由组合技能自动生成实际说明。","demoEffect":"None",
+      "abilities":[{"name":"守护","trigger":"OnPlace","condition":"Always","conditionValue":3,"steps":[{"operation":"GrantShield","target":"Self","selection":"All","amount":1,"duration":"Permanent"}]}]
+    },
+    {
+      "id":"workshop_scholar","name":"工坊·谋士","camp":"制作测试","rarity":"史诗","baseAttack":2,"skill":"补给","effect":"由组合技能自动生成实际说明。","demoEffect":"None",
+      "abilities":[{"name":"补给","trigger":"OnOwnTurnStart","condition":"HandBelow","conditionValue":3,"steps":[{"operation":"DrawCards","target":"Self","selection":"All","amount":1,"duration":"Permanent"}]}]
+    },
+    {
+      "id":"workshop_raider","name":"工坊·破阵者","camp":"制作测试","rarity":"特殊","baseAttack":3,"skill":"余威","effect":"由组合技能自动生成实际说明。","demoEffect":"None",
+      "abilities":[{"name":"余威","trigger":"OnDestroyed","condition":"Always","conditionValue":3,"steps":[{"operation":"ModifyPower","target":"AdjacentEnemies","selection":"RandomOne","amount":-2,"duration":"Permanent"}]}]
+    }
+  ],
+  "decks": [
+    {"id":"workshop_player","name":"玩家测试卡组","cardIds":["workshop_banner","workshop_guard","workshop_scholar","workshop_raider","workshop_banner","workshop_guard","workshop_scholar","workshop_raider","workshop_banner","workshop_guard","workshop_scholar","workshop_raider","workshop_banner","workshop_guard","workshop_scholar","workshop_raider","workshop_banner","workshop_guard","workshop_scholar","workshop_raider"]},
+    {"id":"workshop_ai","name":"AI 测试卡组","cardIds":["workshop_guard","workshop_banner","workshop_raider","workshop_scholar","workshop_guard","workshop_banner","workshop_raider","workshop_scholar","workshop_guard","workshop_banner","workshop_raider","workshop_scholar","workshop_guard","workshop_banner","workshop_raider","workshop_scholar","workshop_guard","workshop_banner","workshop_raider","workshop_scholar"]}
+  ]
+}

@@ -6,7 +6,7 @@ namespace CardDemo.Core
 {
     // A small, deterministic demonstration runtime, NOT a port of all web V2 skills.
     // No Unity, filesystem, network or clock dependencies: commands can be tested headlessly.
-    public sealed class GameEngine
+    public sealed partial class GameEngine
     {
         private readonly Random random;
         private int nextUid;
@@ -15,7 +15,7 @@ namespace CardDemo.Core
         public int Seed { get; private set; }
         public int VictoryThreshold { get { return State.Board.Length / 2 + 1; } }
 
-        public GameEngine(GameConfig config, CardDefinition[] catalog, int seed)
+        public GameEngine(GameConfig config, CardDefinition[] catalog, int seed, CardDefinition[] playerDeck = null, CardDefinition[] aiDeck = null)
         {
             if (config == null) throw new ArgumentNullException("config");
             config.Validate();
@@ -27,6 +27,7 @@ namespace CardDemo.Core
                     || string.IsNullOrWhiteSpace(card.name) || card.baseAttack < 0)
                     throw new ArgumentException("演示卡牌 ID、名称或战力无效。");
                 var validated = card.ParsedEffect;
+                WorkshopValidation.ValidateAbilities(card);
             }
             Config = config;
             Seed = seed;
@@ -34,7 +35,14 @@ namespace CardDemo.Core
             State = new GameState { Board = new Piece[config.boardSize * config.boardSize] };
             for (int owner = 1; owner <= 2; owner++)
             {
-                for (int i = 0; i < config.deckSize; i++) State.Decks[owner].Add(catalog[i % catalog.Length]);
+                var explicitDeck = owner == 1 ? playerDeck : aiDeck;
+                if (explicitDeck != null)
+                {
+                    if (explicitDeck.Length != config.deckSize || explicitDeck.Any(c => c == null || !ids.Contains(c.id)))
+                        throw new ArgumentException("测试卡组数量或卡牌引用无效。");
+                    foreach (var card in explicitDeck) State.Decks[owner].Add(catalog.First(c => c.id == card.id));
+                }
+                else for (int i = 0; i < config.deckSize; i++) State.Decks[owner].Add(catalog[i % catalog.Length]);
                 Shuffle(State.Decks[owner]);
             }
             for (int i = 0; i < 2; i++)
@@ -99,6 +107,7 @@ namespace CardDemo.Core
                 if (piece != null && piece.Owner == State.ActivePlayer) { piece.Resting = false; piece.Moved = false; }
             Log("turn", PlayerName(State.ActivePlayer), "回合", "准备阶段", PlayerName(State.ActivePlayer) + " 开始回合，行动数 " + State.Actions + "。");
             Draw(State.ActivePlayer, 1);
+            TriggerOwnerSkills(SkillTrigger.OnOwnTurnStart);
         }
 
         public bool CanPlace(int owner, int handIndex, int cell)
@@ -109,6 +118,7 @@ namespace CardDemo.Core
         public bool Place(int owner, int handIndex, int cell)
         {
             if (!CanPlace(owner, handIndex, cell)) return false;
+            StartSkillCommand();
             var definition = State.Hands[owner][handIndex];
             var piece = new Piece { Uid = ++nextUid, Definition = definition, Owner = owner, Power = definition.baseAttack, Resting = true };
             State.Hands[owner].RemoveAt(handIndex);
@@ -134,6 +144,7 @@ namespace CardDemo.Core
                     Log("shield", Label(piece), Label(piece), "护盾 / 入阵", Label(piece) + " 获得一次交战保护。");
                     break;
             }
+            RunSkills(piece, cell, SkillTrigger.OnPlace);
             return true;
         }
 
@@ -148,6 +159,7 @@ namespace CardDemo.Core
         public bool Move(int owner, int from, int to)
         {
             if (!CanMove(owner, from, to)) return false;
+            StartSkillCommand();
             var attacker = State.Board[from];
             var defender = State.Board[to];
             State.Actions--;
@@ -157,7 +169,7 @@ namespace CardDemo.Core
                 State.Board[from] = null;
                 State.Board[to] = attacker;
                 Log("move", Label(attacker), CellName(to), "主动移动", Label(attacker) + " 从 " + CellName(from) + " 移至 " + CellName(to) + "。");
-                CheckVictory();
+                if (!CheckVictory()) RunSkills(attacker, to, SkillTrigger.OnMove);
                 return true;
             }
 
@@ -177,14 +189,18 @@ namespace CardDemo.Core
             if (CheckVictory()) return true;
             if (killAttacker) LastWill(attacker, from);
             if (killDefender) LastWill(defender, to);
+            if (!State.Finished && Array.IndexOf(State.Board, attacker) >= 0)
+                RunSkills(attacker, Array.IndexOf(State.Board, attacker), SkillTrigger.AfterCombat);
+            if (!State.Finished && Array.IndexOf(State.Board, defender) >= 0)
+                RunSkills(defender, Array.IndexOf(State.Board, defender), SkillTrigger.AfterCombat);
             return true;
         }
 
-        private bool Absorb(Piece target, Piece source)
+        private bool Absorb(Piece target, Piece source, string reason = "交战")
         {
             if (!target.Shield) return false;
             target.Shield = false;
-            Log("protected", Label(target), Label(target), "护盾抵挡交战摧毁", Label(target) + " 因护盾抵挡了来自 " + Label(source) + " 的摧毁，消耗护盾并留在原格。");
+            Log("protected", Label(source), Label(target), "护盾抵挡" + reason + "摧毁", Label(target) + " 因护盾抵挡了来自 " + Label(source) + " 的「" + reason + "」摧毁，消耗护盾并留在原格。");
             return true;
         }
 
@@ -196,29 +212,37 @@ namespace CardDemo.Core
 
         private void LastWill(Piece source, int oldCell)
         {
-            if (source.Definition == null || source.Definition.ParsedEffect != DemoEffect.LastWill || State.Finished) return;
+            if (State.Finished || source.Definition == null) return;
+            RunSkills(source, oldCell, SkillTrigger.OnDestroyed);
+            if (State.Finished || source.Definition.ParsedEffect != DemoEffect.LastWill) return;
             var targets = Neighbours(oldCell).Select(n => State.Board[n]).Where(p => p != null && p.Owner == source.Owner).ToArray();
             foreach (var target in targets) ChangePower(source, target, 1, "遗志 / 被摧毁后");
             if (targets.Length == 0) Log("no-target", Label(source), "无", "遗志", Label(source) + " 的遗志没有合法目标。");
         }
 
-        private void ChangePower(Piece source, Piece target, int delta, string reason)
+        private void ChangePower(Piece source, Piece target, int delta, string reason, bool temporary = false)
         {
             int before = target.Power;
-            target.Power = Math.Max(0, before + delta);
+            if (temporary) target.TemporaryPower += delta;
+            else target.PermanentPower = Math.Max(0, target.PermanentPower + delta);
             Log("power", Label(source), Label(target), reason, Label(source) + " 因「" + reason + "」使 " + Label(target) + " 战力 " + before + " → " + target.Power + "。");
         }
 
         public bool EndTurn(int owner, string reason = "主动结束")
         {
             if (State.Finished || owner != State.ActivePlayer) return false;
+            StartSkillCommand();
+            ClearTemporaryPower();
+            TriggerOwnerSkills(SkillTrigger.OnOwnTurnEnd);
+            if (State.Finished) return true;
+            ClearTemporaryPower();
             Log("end-turn", PlayerName(owner), "回合", reason, PlayerName(owner) + " 结束回合（" + reason + "）。");
             if (State.Turn >= Config.maxTurns)
             {
                 int first = Score(1), second = Score(2);
                 Finish(first == second ? 0 : first > second ? 1 : 2, "达到回合上限");
             }
-            else { State.ActivePlayer = 3 - owner; BeginTurn(); }
+            else { State.ActivePlayer = 3 - owner; StartSkillCommand(); BeginTurn(); }
             return true;
         }
 

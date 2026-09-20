@@ -1,0 +1,6 @@
+{
+  "name": "CardDemo.CardPage.Editor",
+  "rootNamespace": "CardDemo.CardPage.Editor",
+  "references": ["CardDemo.CardPage", "UnityEngine.UI"],
+  "includePlatforms": ["Editor"]
+}

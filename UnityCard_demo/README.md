@@ -4,6 +4,12 @@
 
 **版本：Unity 2022.3.62f3（revision `96770f904ca7`）。当前是基础 PVE 演示，不是完整网页版移植，也不是可直接发布的微信小游戏。**
 
+新增卡牌制作工具：**Card Demo → Tools → Card And Skill Workshop / Battle Lab**。
+包括卡牌编辑、技能组合、测试卡组、战斗实验室，详见 [工具使用指南与示例](Documentation/AUTHORING_TOOLS.md)。
+
+新增独立的卡牌页面制作区：[`Assets/CardPageTemplate`](Assets/CardPageTemplate/README.md)。
+修改 `Samples/ExampleCardPage.asset` 即可替换页面内容、图片、颜色和字号；菜单 **Card Demo → Tools → Card Page** 可预览或生成可编辑 UI 场景。
+
 ## 新电脑最快启动
 
 1. 下载本仓库 ZIP 并解压，或 `git clone https://github.com/damou0912/Card_web_demo.git`。
@@ -38,9 +44,10 @@
 | `Assets/Resources/Config/game-config.json` | 标题、玩家 ID、4/5 格棋盘、回合秒数、回合上限、牌库与手牌数、AI 速度、种子 |
 | `Assets/Resources/Data/demo-cards.json` | 五张演示卡的数值、说明、已有演示技能类型 |
 | `Assets/Resources/Data/web-card-catalog.json` | 正式卡牌资料快照，只供查阅 |
+| `Assets/Resources/Data/workshop-library.json` | 独立制作库：卡牌、可执行技能步骤与测试卡组 |
 | `Assets/Scripts/Core/GameEngine.cs` | 演示结算；新增技能必须实现代码并增加测试，仅改描述不会新增效果 |
 
-`seed = 0` 表示每局重新随机；非零值用于重现对局。`serverUrl`、`wechatAppId` 仅预留，当前不发起联网。**客户端文件中不能写 AppSecret、数据库密码、支付密钥或访问令牌。**
+`seed = 0` 表示每局重新随机；非零值用于重现对局。`useWorkshopCards` 可切换到制作库，默认关闭；双方测试卡组 ID 可在工坊设置。`serverUrl`、`wechatAppId` 仅预留，当前不发起联网。**客户端文件中不能写 AppSecret、数据库密码、支付密钥或访问令牌。**
 
 ## Windows 辅助工具
 

@@ -70,6 +70,10 @@ namespace CardDemo.Editor
             config.Validate();
             var demo = JsonUtility.FromJson<CardCatalog>(File.ReadAllText("Assets/Resources/Data/demo-cards.json"));
             new GameEngine(config, demo.cards, 1);
+            var workshop = WorkshopStore.Load();
+            WorkshopValidation.ThrowIfInvalid(workshop);
+            if (config.useWorkshopCards)
+                new GameEngine(config, workshop.cards, 1, workshop.ResolveDeck(config.playerDeckId, config.deckSize), workshop.ResolveDeck(config.aiDeckId, config.deckSize));
             var web = JsonUtility.FromJson<CardCatalog>(File.ReadAllText("Assets/Resources/Data/web-card-catalog.json"));
             if (web.cards == null || web.cards.Length < 60 || web.cards.Select(c => c.id).Distinct().Count() != web.cards.Length)
                 throw new InvalidOperationException("正式卡牌参考数据不完整或 ID 重复。");

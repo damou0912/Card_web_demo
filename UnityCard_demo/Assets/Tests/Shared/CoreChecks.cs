@@ -42,6 +42,7 @@ namespace CardDemo.Tests
                 ExhaustedDeck, ValidateConfig, FuzzMatches };
             foreach (var test in cases) { test(); log("PASS " + test.Method.Name); }
             log("All " + cases.Length + " checks passed (including 100 full seeded matches).");
+            WorkshopChecks.RunAll(log);
         }
 
         private static void Opening()

@@ -12,6 +12,8 @@
 
 ## 新电脑最快启动
 
+GitHub 无法访问时，使用 [Gitee 双击同步方案](Documentation/GITEE_SYNC.md)：首次运行 `Download-Gitee.cmd`，之后关闭 Unity 再运行 `Update-Gitee.cmd`。Gitee 工程根目录就是 Unity 项目，不需要再找一层 `UnityCard_demo`。
+
 1. 下载本仓库 ZIP 并解压，或 `git clone https://github.com/damou0912/Card_web_demo.git`。
 2. 打开本目录的 `Tools/setup-links.html`，按页面链接安装 [Unity Hub](https://unity.com/download)。
 3. 在 Unity Hub 登录，并按自己的资格激活 Unity 许可证。安装 **2022.3.62f3**；可在 [Unity 版本归档](https://unity.com/releases/editor/archive) 搜索，或使用页面中的 Hub 安装链接。

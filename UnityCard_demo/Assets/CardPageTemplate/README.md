@@ -2,6 +2,8 @@
 
 这个文件夹只处理**卡牌长什么样、页面展示什么**，与“卡牌技能制作”分开。可复用到卡牌图鉴、组卡详情、奖励展示等页面。
 
+**只想拖动调整单张卡牌内部元素？** 直接双击 [`Prefabs/EditableCard.prefab`](Prefabs/EditableCard.prefab)，按 T 调整卡名、立绘、战力和技能的位置／大小。这个预制体没有自动布局，不会重排位置，详见 [卡牌预制体说明](Prefabs/README.md)。下文则是原有的整页详情模板。
+
 ## 最简单的修改方法
 
 1. 在 Unity Project 窗口找到 **`Assets/CardPageTemplate/Samples/ExampleCardPage.asset`**。

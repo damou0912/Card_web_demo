@@ -10,9 +10,11 @@
 新增独立的卡牌页面制作区：[`Assets/CardPageTemplate`](Assets/CardPageTemplate/README.md)。
 修改 `Samples/ExampleCardPage.asset` 即可替换页面内容、图片、颜色和字号；菜单 **Card Demo → Tools → Card Page** 可预览或生成可编辑 UI 场景。
 
+单张卡牌的可编辑预制体：[`Assets/CardPageTemplate/Prefabs/EditableCard.prefab`](Assets/CardPageTemplate/Prefabs/README.md)。双击进入 Prefab 模式，按 T 自由调整卡名、立绘、战力、技能等子物体的位置和大小，无自动排列；无需 Play。它不改变现有 Main 对局界面。
+
 ## 新电脑最快启动
 
-GitHub 无法访问时，使用 [Gitee 双击同步方案](Documentation/GITEE_SYNC.md)：首次运行 `Download-Gitee.cmd`，之后关闭 Unity 再运行 `Update-Gitee.cmd`。Gitee 工程根目录就是 Unity 项目，不需要再找一层 `UnityCard_demo`。
+后续仅使用 [GitHub 双击同步方案](Documentation/GITHUB_SYNC.md)：首次运行 `Download-GitHub.cmd`，之后关闭 Unity 再运行 `Update-GitHub.cmd`。Unity Hub 选择下载后仓库中的 `UnityCard_demo` 子目录；Git 仍需要能够连接 GitHub。
 
 1. 下载本仓库 ZIP 并解压，或 `git clone https://github.com/damou0912/Card_web_demo.git`。
 2. 打开本目录的 `Tools/setup-links.html`，按页面链接安装 [Unity Hub](https://unity.com/download)。

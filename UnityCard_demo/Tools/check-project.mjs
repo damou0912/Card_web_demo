@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import './check-card-page.mjs';
+import './check-card-prefab.mjs';
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = file => fs.readFileSync(path.join(project, file), 'utf8');
 const json = file => JSON.parse(read(file));

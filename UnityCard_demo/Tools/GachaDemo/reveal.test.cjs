@@ -16,6 +16,16 @@ const rewards = Object.freeze([
 ].map(Object.freeze));
 const cardFor = id => cards.find(c => c.id === id);
 const flush = () => new Promise(resolve => setImmediate(resolve));
+test('duplicate captions display the committed fragment reward without altering inventory or previews', () => {
+  for (const shards of [5,15,40,100,50]) {
+    const reward = Object.freeze({cardId:'a',isNew:false,shards,guarantee:false});
+    assert.equal(GachaReveal.rewardCaption(reward), `重复卡\n+${shards} 碎片`);
+    assert.equal(GachaReveal.rewardCaption(reward,false,true), `+${shards} 碎片`);
+    assert.equal(GachaReveal.rewardCaption(reward,true), '效果预览 · 不获得卡牌');
+  }
+  assert.equal(GachaReveal.rewardCaption(rewards[0]), '新卡 · 已拥有');
+  assert.equal(GachaReveal.rewardCaption(rewards[5]), '保底补发 · 已拥有');
+});
 function harness(options = {}) {
   const events = [], timers = new Map(), durations = [];
   let id = 0;
@@ -107,4 +117,16 @@ test('guaranteed orange retains its orange timing instead of the old short bonus
   const h=harness(); const run=h.animation.play([{...rewards[3],guarantee:true}],cardFor);
   await h.drain(); await run;
   assert.deepEqual(h.durations,[650,450,700,2400,650]);
+});
+test('completed grid remains for review and closes once on collect or Escape', async () => {
+  const h = harness(); h.view.review = () => h.events.push({name:'review'});
+  const run = h.animation.play([rewards[1]],cardFor);
+  await h.drain();
+  assert.equal(h.events.at(-1).name,'review'); assert.equal(h.animation.closed,false);
+  h.animation.skip(); await run;
+  assert.equal(h.events.filter(e=>e.name==='close').length,1);
+});
+test('skip and reduced-motion never block waiting for result confirmation', async () => {
+  const h = harness({reducedMotion:true}); let reviewed=false; h.view.review=()=>{reviewed=true;};
+  await h.animation.play(rewards,cardFor); assert.equal(reviewed,false); assert.equal(h.animation.closed,true);
 });

@@ -11,7 +11,7 @@ using UnityEngine.UI;
 
 namespace CardDemo
 {
-    // A self-contained test page. Never changes battle cards, accounts or production balances.
+    // Free local recruitment. Saved acquisitions unlock extra cards; no real payments or Web account sync.
     public sealed class GachaDemoPanel : MonoBehaviour
     {
         private static readonly Color Paper = new Color32(243, 240, 231, 255);
@@ -22,13 +22,17 @@ namespace CardDemo
         private GachaConfig config;
         private GachaDemo engine;
         private GachaState state;
+        private GachaProfile profile;
+        private FileStream profileLock;
         private Dictionary<string, CardDefinition> cards;
         private readonly System.Random random = new System.Random();
         private Font font;
         private RectTransform safe, content;
-        private Text balance, progress, shardTotal, milestones, status, resultHeading;
-        private GridLayoutGroup results, collection, exchange;
+        private Text balance, progress, shardTotal, fragmentHint, status, resultHeading, poolTitle, conversionStatus;
+        private GridLayoutGroup results, collection;
         private Button draw, replay;
+        private readonly Dictionary<string, Button> collectionTabs = new Dictionary<string, Button>();
+        private string collectionCamp = "三国~魏";
         private GameObject modal, revealLayer;
         private GridLayoutGroup revealGrid;
         private string savePath, loadError;
@@ -46,6 +50,22 @@ namespace CardDemo
             var view = new GameObject("Gacha Demo (test credit only)").AddComponent<GachaDemoPanel>();
             view.Closed = onClose;
         }
+
+        public static void ValidatePlayerDeck(IEnumerable<CardDefinition> deck)
+        {
+            var config = Read<GachaConfig>("Config/gacha-demo");
+            var catalog = Read<CardCatalog>("Data/web-card-catalog");
+            var engine = new GachaDemo(config, catalog.cards);
+            string path = Path.Combine(Application.persistentDataPath, "gacha-profile.json");
+            Directory.CreateDirectory(Application.persistentDataPath);
+            using (var gate = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                string legacy = GachaSaveFile.PathForPool(Application.persistentDataPath, config.poolId, "gacha-demo-v1.json");
+                var inventory = GachaSaveFile.LoadProfile(path, legacy, config.poolId, engine, ReadProfileJson,
+                    text => NormalizeState(JsonUtility.FromJson<GachaState>(text)), value => JsonUtility.ToJson(value, true));
+                GachaInventory.ValidatePlayerDeck(deck, inventory, config);
+            }
+        }
         private void Awake()
         {
             font = Resources.Load<Font>("Fonts/NotoSansSC-Regular");
@@ -56,19 +76,20 @@ namespace CardDemo
                 config = Read<GachaConfig>("Config/gacha-demo");
                 cards = Read<CardCatalog>("Data/web-card-catalog").cards.ToDictionary(c => c.id);
                 engine = new GachaDemo(config, cards.Values);
-                savePath = Path.Combine(Application.persistentDataPath, "gacha-demo-v1.json");
-                state = engine.NewState();
-                if (File.Exists(savePath))
+                savePath = Path.Combine(Application.persistentDataPath, "gacha-profile.json");
+                profile = GachaProfiles.Open(GachaProfiles.New(), engine, config.poolId, null, out _);
+                try
                 {
-                    try { state = JsonUtility.FromJson<GachaState>(File.ReadAllText(savePath)); engine.ValidateState(state); }
-                    catch (Exception error)
-                    {
-                        Debug.LogWarning(error.Message); state = engine.NewState();
-                        loadError = "旧存档不兼容或损坏，未覆盖。请确认重置此 Demo。";
-                    }
+                    Directory.CreateDirectory(Application.persistentDataPath);
+                    profileLock = new FileStream(savePath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                    string legacy = GachaSaveFile.PathForPool(Application.persistentDataPath, config.poolId, "gacha-demo-v1.json");
+                    profile = GachaSaveFile.LoadProfile(savePath, legacy, config.poolId, engine,
+                        ReadProfileJson, text => NormalizeState(JsonUtility.FromJson<GachaState>(text)), value => JsonUtility.ToJson(value, true));
                 }
+                catch (Exception error) { Debug.LogWarning(error.Message); loadError = "存档读取或结算失败。已暂停操作以保护各期进度与通用碎片，请修复存档或关闭另一实例后重开。"; }
+                state = GachaProfiles.Current(profile, config.poolId);
                 Refresh();
-                status.text = loadError ?? (state.bundles == 0 ? "已领取 500 测试元，可以开始招募。" : "已恢复本机的抽卡进度。");
+                status.text = loadError ?? (state.bundles == 0 ? "已领取 " + config.testCredit + " 测试元，可以开始招募。" : "已恢复本机的抽卡进度。");
             }
             catch (Exception error) { status.text = "抽卡 Demo 加载失败：" + error.Message; draw.interactable = false; Debug.LogException(error); }
         }
@@ -77,6 +98,22 @@ namespace CardDemo
             var text = Resources.Load<TextAsset>(resource);
             if (text == null) throw new InvalidOperationException("缺少资源：" + resource);
             return JsonUtility.FromJson<T>(text.text);
+        }
+        private static GachaState NormalizeState(GachaState value)
+        {
+            if (value != null && !value.conversionDone && value.conversion != null
+                && value.conversion.sourceShards == 0 && value.conversion.universalShards == 0) value.conversion = null;
+            return value;
+        }
+        private static GachaProfile ReadProfileJson(string json)
+        {
+            var value = JsonUtility.FromJson<GachaProfile>(json);
+            if (value != null)
+            {
+                if (value.pools != null) foreach (var period in value.pools) NormalizeState(period);
+                if (value.archivedRuns != null) foreach (var period in value.archivedRuns) NormalizeState(period);
+            }
+            return value;
         }
         private RectTransform Box(Transform parent, string name, Color color)
         {
@@ -127,29 +164,41 @@ namespace CardDemo
             var scaler = canvasObject.GetComponent<CanvasScaler>(); scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1080, 1920); scaler.matchWidthOrHeight = .5f;
             safe = Box(canvas.transform, "Safe Area", Paper); Stretch(safe);
-            content = Scroll(safe, "Recruitment");
-            Text(content, "三国 · 卡牌试作 / RECRUITMENT", 22, Muted);
-            Text(content, "蜀汉 · 群英招募", 50, Ink);
-            Text(content, "免费测试额度，金额仅为模拟，不产生真实扣款。\n与游戏账号、组卡、对局库存无关。", 25, Orange);
-            balance = Text(content, "", 36, Green);
-            progress = Text(content, "", 26, Ink);
-            shardTotal = Text(content, "", 32, Green);
-            milestones = Text(content, "", 24, Muted);
-            draw = Button(content, "招募五张 · 20 测试元", Draw, true);
-            status = Text(content, "正在加载…", 24, Green);
-            resultHeading = Text(content, "本次相逢", 32, Ink);
-            replay = Button(content, "重播本次 · 不消耗额度", Replay);
-            results = Grid(content, "Rewards");
-            Text(content, "全部卡牌 · 点击查看技能", 32, Ink);
+            // Fixed portrait composition fitted inside the safe area; only detail dialogs scroll.
+            content = Box(safe, "Recruitment Single Screen", Paper);
+            content.anchorMin = content.anchorMax = new Vector2(.5f, .5f);
+            content.sizeDelta = new Vector2(1080, 1920);
+            var layout = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(30, 30, 24, 24); layout.spacing = 12;
+            layout.childControlHeight = layout.childControlWidth = true; layout.childForceExpandHeight = false;
+            Height(Text(content, "三国 · 群英招募 / 免费测试 · 本机卡牌自动保存", 24, Muted), 36);
+            poolTitle = Text(content, "群英招募", 50, Ink); Height(poolTitle, 66);
+            balance = Text(content, "", 34, Green); Height(balance, 46);
+            progress = Text(content, "", 28, Ink); Height(progress, 42);
+            shardTotal = Text(content, "", 32, Green); Height(shardTotal, 84);
+            Height(Text(content, "全部卡牌 · 兑换 / 点击卡牌查看技能", 32, Ink), 48);
+            var tabs = Box(content, "Country Tabs (display only)", Color.clear); Height(tabs, 48);
+            var tabLayout = tabs.gameObject.AddComponent<HorizontalLayoutGroup>(); tabLayout.spacing = 12;
+            tabLayout.childControlWidth = tabLayout.childControlHeight = true; tabLayout.childForceExpandWidth = true;
+            foreach (string camp in new[] { "三国~魏", "三国~蜀", "三国~吴" })
+            {
+                var button = Button(tabs, camp.Replace("~", "-"), () => SelectCollectionCamp(camp));
+                button.GetComponent<LayoutElement>().minHeight = button.GetComponent<LayoutElement>().preferredHeight = 48;
+                collectionTabs.Add(camp, button);
+            }
             collection = Grid(content, "Collection");
-            Text(content, "卡牌下方只显示完整卡数量。重复卡已转为碎片，不计作额外完整卡。", 22, Muted);
-            Text(content, "兑换卡牌", 32, Ink);
-            Text(content, "兑换区与抽卡在同一页面；下方展示未拥有的卡牌。碎片通用规则与兑换价格待确认，暂不扣除碎片或赠送卡牌。", 24, Muted);
-            exchange = Grid(content, "Exchange Candidates");
-            Button(content, "兑换规则待确认 · 暂未开放", () => { }).interactable = false;
-            Button(content, "概率与保底规则", ShowRules);
-            Button(content, "重置此 Demo", AskReset);
-            Button(content, "关闭抽卡 Demo", Close);
+            resultHeading = Text(content, "本次相逢", 28, Ink); Height(resultHeading, 46);
+            results = Grid(content, "Rewards");
+            fragmentHint = Text(content, "", 26, Green); Height(fragmentHint, 48);
+            draw = Button(content, "招募五张 · 20 测试元", Draw, true);
+            status = Text(content, "正在加载…", 24, Green); Height(status, 62);
+            conversionStatus = Text(content, "", 24, Green); Height(conversionStatus, 72);
+            var actions = Box(content, "Actions", Color.clear); Height(actions, 74);
+            var row = actions.gameObject.AddComponent<HorizontalLayoutGroup>(); row.spacing = 12;
+            row.childControlWidth = row.childControlHeight = true; row.childForceExpandWidth = true;
+            replay = Button(actions, "重播", Replay);
+            Button(actions, "规则", ShowRules);
+            Button(actions, "关闭", Close);
         }
         private GridLayoutGroup Grid(Transform parent, string name)
         {
@@ -163,22 +212,52 @@ namespace CardDemo
             Rect area = Screen.safeArea;
             safe.anchorMin = new Vector2(area.xMin / Screen.width, area.yMin / Screen.height);
             safe.anchorMax = new Vector2(area.xMax / Screen.width, area.yMax / Screen.height);
-            foreach (var grid in new[] { results, collection, exchange })
-            {
-                SizeGrid(grid, content.rect.width - 60, 190);
-            }
-            if (revealGrid != null) SizeGrid(revealGrid, ((RectTransform)revealGrid.transform.parent).rect.width - 60, 250);
+            float scale = Mathf.Min(safe.rect.width / 1080, safe.rect.height / 1920);
+            content.localScale = Vector3.one * scale;
+            foreach (var grid in new[] { results, collection })
+                SizeGrid(grid, 1020, grid == collection ? 280 : 190, 5);
+            if (revealGrid != null) SizeRevealGrid();
             if (busy && Input.GetKeyDown(KeyCode.Escape)) skipReveal = true;
         }
-        private static void SizeGrid(GridLayoutGroup grid, float width, float height)
+        private static void SizeGrid(GridLayoutGroup grid, float width, float height, int fixedColumns = 0)
         {
             width = Mathf.Max(40, width);
-            int columns = width > 1400 ? 5 : width > 750 ? 3 : 2;
+            int columns = fixedColumns > 0 ? fixedColumns : width > 1400 ? 5 : width > 750 ? 3 : 2;
             grid.constraintCount = columns;
             grid.cellSize = new Vector2((width - (columns - 1) * 14) / columns, height);
             grid.GetComponent<LayoutElement>().preferredHeight = Mathf.Ceil(grid.transform.childCount / (float)columns) * (height + 14);
         }
-        private void Fill(GridLayoutGroup grid, IEnumerable<Tuple<string, string, bool>> entries)
+        private void SizeRevealGrid()
+        {
+            float width = Mathf.Max(60, ((RectTransform)revealGrid.transform.parent).rect.width - 60);
+            int columns = safe.rect.width > safe.rect.height ? 5 : 3;
+            if (revealGrid.transform.childCount != 5) { revealGrid.enabled = true; SizeGrid(revealGrid, width, 300, columns); return; }
+            revealGrid.enabled = false;
+            float cellWidth = (width - (columns - 1) * 14) / columns;
+            float cellHeight = Mathf.Min(370, cellWidth * 1.6f);
+            int rows = columns == 5 ? 1 : 2;
+            revealGrid.constraintCount = columns; revealGrid.cellSize = new Vector2(cellWidth, cellHeight);
+            revealGrid.GetComponent<LayoutElement>().preferredHeight = rows * (cellHeight + 14);
+            for (int i = 0; i < 5; i++)
+            {
+                var rect = (RectTransform)revealGrid.transform.GetChild(i);
+                int row = i / columns, col = i % columns;
+                float centerOffset = row == 1 ? (cellWidth + 14) / 2 : 0;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+                rect.sizeDelta = new Vector2(cellWidth, cellHeight);
+                rect.anchoredPosition = new Vector2(col * (cellWidth + 14) + centerOffset, -row * (cellHeight + 14));
+            }
+        }
+        private Text RevealText(Transform parent, float bottom, float top, int size)
+        {
+            var text = Text(parent, "", size, Ink);
+            text.rectTransform.anchorMin = new Vector2(.05f, bottom); text.rectTransform.anchorMax = new Vector2(.95f, top);
+            text.rectTransform.offsetMin = text.rectTransform.offsetMax = Vector2.zero;
+            text.alignment = TextAnchor.MiddleCenter; text.verticalOverflow = VerticalWrapMode.Truncate;
+            text.resizeTextForBestFit = true; text.resizeTextMinSize = 18; text.resizeTextMaxSize = size;
+            text.gameObject.SetActive(false); return text;
+        }
+        private void Fill(GridLayoutGroup grid, IEnumerable<Tuple<string, string, bool>> entries, bool forExchange = false)
         {
             // Detach before deferred destruction so layout immediately sees the new child count.
             foreach (Transform child in grid.transform.Cast<Transform>().ToArray()) { child.SetParent(null); Destroy(child.gameObject); }
@@ -191,49 +270,112 @@ namespace CardDemo
                 var band = Box(button.transform, "Quality Badge", RarityColor(card.rarity));
                 band.anchorMin = new Vector2(0, 1); band.anchorMax = Vector2.one; band.pivot = new Vector2(.5f, 1);
                 band.offsetMin = new Vector2(0, -48); band.offsetMax = Vector2.zero;
-                var qualityLabel = Text(band, QualityName(card.rarity), 26, Ink); Stretch(qualityLabel.rectTransform);
+                var qualityLabel = Text(band, card.camp.Replace("三国~", "") + " · " + card.rarity, 26, Ink); Stretch(qualityLabel.rectTransform);
                 qualityLabel.fontStyle = FontStyle.Bold; qualityLabel.alignment = TextAnchor.MiddleCenter;
+                if (forExchange && !entry.Item3)
+                {
+                    int cost = engine.ExchangeCost(id);
+                    long available = (long)engine.ShardBalance(state) + GachaProfiles.UniversalBalance(profile);
+                    label.rectTransform.offsetMin = new Vector2(14, 108);
+                    var exchangeButton = Button(button.transform, cost + " 碎片\n" + (available >= cost ? "兑换" : "碎片不足"), () => AskExchange(id), true);
+                    exchangeButton.interactable = !busy && loadError == null && available >= cost;
+                    var rect = (RectTransform)exchangeButton.transform;
+                    rect.anchorMin = Vector2.zero; rect.anchorMax = new Vector2(1, 0);
+                    rect.offsetMin = new Vector2(10, 10); rect.offsetMax = new Vector2(-10, 100);
+                    exchangeButton.GetComponentInChildren<Text>().fontSize = 23;
+                }
             }
         }
         private void Refresh()
         {
-            balance.text = "剩余 " + engine.Remaining(state) + " 测试元　/　已花费 " + engine.Spent(state);
-            progress.text = "完整卡牌总数 " + state.owned.Count + "/10 张　·　第 " + state.bundles + "/25 次五连";
-            shardTotal.text = "碎片总数 " + state.owned.Sum(c => c.shards) + " 枚";
-            milestones.text = string.Join("\n", config.milestones.Select(m => (engine.Spent(state) >= m.spent ? "✓ " : "○ ") + m.spent + " 测试元：至少 " + m.uniqueCards + "/10 张"));
-            draw.interactable = !busy && loadError == null && !engine.Complete(state);
+            poolTitle.text = config.title;
+            balance.text = "测试额度 " + engine.Remaining(state) + " 元　·　仅模拟，不产生真实扣款";
+            progress.text = "完整卡牌总数 " + state.owned.Count + "/" + engine.CardCount + " 张　·　优先本期碎片，通用补足";
+            int local = engine.ShardBalance(state), universal = GachaProfiles.UniversalBalance(profile);
+            shardTotal.text = config.shardName + " " + local + " 枚\n通用碎片 " + universal + " 枚";
+            conversionStatus.text = ConversionText();
+            conversionStatus.gameObject.SetActive(state.conversion != null);
+            int needed = config.groups.SelectMany(g => g.cardIds).Where(id => state.owned.All(c => c.cardId != id)).Sum(engine.ExchangeCost);
+            fragmentHint.text = engine.Complete(state) ? "本期卡牌已齐，剩余碎片已转通用。" : local + (long)universal >= needed ? "碎片已足够兑换全部缺卡。" : "保底以本期碎片补足 · 补齐还需 " + (needed - local - universal) + " 碎片";
+            draw.interactable = !busy && loadError == null && !engine.Complete(state) && engine.Remaining(state) >= config.bundlePrice;
             replay.interactable = !busy && loadError == null && state.lastRewards.Count > 0;
-            draw.GetComponentInChildren<Text>().text = engine.Complete(state) ? "本期已集齐 · 可重置体验" : "招募五张 · 20 测试元";
-            resultHeading.text = "本次相逢 · " + state.lastRewards.Count(r => !r.guarantee) + " 抽取 + " + state.lastRewards.Count(r => r.guarantee) + " 补发\n"
-                + string.Join(" / ", state.lastRewards.GroupBy(r => cards[r.cardId].rarity).Select(g => QualityName(g.Key) + " × " + g.Count()));
-            Fill(results, state.lastRewards.Select(r => Tuple.Create(r.cardId, r.guarantee ? "保底补发 · 拥有 1 张" : r.isNew ? "新卡 · 拥有 1 张" : "重复卡 · 拥有 1 张", true)));
-            Fill(collection, config.groups.SelectMany(g => g.cardIds).Select(id => {
+            draw.GetComponentInChildren<Text>().text = engine.Complete(state) ? "本期已集齐 · 卡牌已入藏" : engine.Remaining(state) < config.bundlePrice ? "抽取结束 · 请使用碎片兑换缺卡" : "招募五张 · 20 测试元";
+            int grant = state.shardGrants.Where(g => g.bundles == state.bundles).Sum(g => g.amount);
+            resultHeading.text = "本次相逢 · 第 " + state.bundles + " 次" + (grant > 0 ? " · 保底补足 " + grant + " 碎片" : "") + (state.lastRewards.Count > 5 ? " · 旧保底卡重播可见" : "");
+            Fill(results, state.lastRewards.Take(5).Select(r => Tuple.Create(r.cardId, r.isNew ? "新卡" : "+" + r.shards + " 碎片", true)));
+            var ids = config.groups.SelectMany(g => g.cardIds).OrderBy(id => id).ToArray();
+            if (!ids.Any(id => cards[id].camp == collectionCamp)) collectionCamp = cards[ids[0]].camp;
+            foreach (var tab in collectionTabs)
+            {
+                bool available = ids.Any(id => cards[id].camp == tab.Key), selected = tab.Key == collectionCamp;
+                tab.Value.gameObject.SetActive(available); tab.Value.interactable = available && !busy;
+                var tint = tab.Key == "三国~魏" ? new Color32(40, 95, 141, 255)
+                    : tab.Key == "三国~蜀" ? new Color32(161, 87, 40, 255) : new Color32(57, 113, 80, 255);
+                tab.Value.GetComponent<Image>().color = selected ? (Color)tint : new Color32(227, 231, 217, 255);
+                var label = tab.Value.GetComponentInChildren<Text>();
+                label.color = selected ? Paper : Ink; label.fontStyle = selected ? FontStyle.Bold : FontStyle.Normal;
+            }
+            Fill(collection, ids.Where(id => cards[id].camp == collectionCamp).Select(id => {
                 var owned = state.owned.FirstOrDefault(c => c.cardId == id);
-                return Tuple.Create(id, "拥有 " + (owned == null ? "0" : "1") + " 张", owned != null);
-            }));
-            Fill(exchange, config.groups.SelectMany(g => g.cardIds).Where(id => state.owned.All(c => c.cardId != id)).Select(id => Tuple.Create(id, "拥有 0 张", false)));
+                return Tuple.Create(id, owned == null ? "未拥有" : "已拥有", owned != null);
+            }), true);
+        }
+        private void SelectCollectionCamp(string camp)
+        {
+            if (busy || engine == null) return;
+            collectionCamp = camp; Refresh();
         }
         private void Draw()
         {
             if (busy || engine == null || loadError != null) return;
-            Commit(() => engine.Draw(state, random.Next), false);
+            Commit(() => GachaProfiles.Draw(profile, engine, config.poolId, random.Next), "draw");
         }
-        private void Commit(Func<GachaState> transaction, bool reset)
+        private static string PaymentText(int cost, int universal) { return (cost - universal) + " 枚本期碎片" + (universal > 0 ? " + " + universal + " 枚通用碎片" : ""); }
+        private string ConversionText()
         {
+            var c = state.conversion;
+            return c == null ? "" : "本期已集齐：剩余 " + c.sourceShards + " 枚本期碎片已转为 " + c.universalShards + " 枚通用碎片（10:1，向下取整，余数舍去）。";
+        }
+        private void AskExchange(string id)
+        {
+            if (busy || engine == null || loadError != null) return;
+            int local = engine.ShardBalance(state), universal = GachaProfiles.UniversalBalance(profile), revision = profile.revision;
+            var quote = engine.Quote(state, id, universal);
+            string poolId = config.poolId;
+            if (!quote.canAfford) return;
+            var body = Modal("确认兑换？");
+            int left = local - quote.poolUsed;
+            Text(body, "兑换「" + cards[id].name + "」需要 " + quote.cost + " 枚碎片。\n可用共 " + ((long)local + universal) + " 枚：" + config.shardName + " " + local + " 枚 + 通用碎片 " + universal
+                + " 枚。\n本次将消耗：" + PaymentText(quote.cost, quote.universalUsed) + "。\n兑换后本期剩余 " + left + " 枚，通用剩余 " + (universal - quote.universalUsed)
+                + " 枚。" + (state.owned.Count == engine.CardCount - 1 ? "\n本次将集齐，剩余本期碎片会转为 " + (left / 10) + " 枚通用碎片（余数舍去）。" : "")
+                + "\n优先使用本期碎片，通用 1:1 补足。不扣测试额度，不推进消费保底。", 28, Ink);
+            Button(body, "取消", Dismiss);
+            Button(body, "确认兑换", () => {
+                Dismiss();
+                Commit(() => {
+                    if (revision != profile.revision) throw new InvalidOperationException("进度已更新，请重新确认兑换。");
+                    return GachaProfiles.Exchange(profile, engine, poolId, id, quote.universalUsed);
+                }, "exchange", id);
+            }, true);
+        }
+        private void Commit(Func<GachaProfile> transaction, string action, string cardId = null)
+        {
+            if (busy || loadError != null) return;
             busy = true;
             bool committed = false;
             try
             {
                 var next = transaction();
-                if (reset && loadError != null && File.Exists(savePath)) File.Copy(savePath, savePath + ".invalid-" + Guid.NewGuid().ToString("N"));
-                GachaSaveFile.Write(savePath, JsonUtility.ToJson(next, true)); state = next; loadError = null;
+                GachaSaveFile.Write(savePath, JsonUtility.ToJson(next, true)); profile = next; state = GachaProfiles.Current(profile, config.poolId);
                 committed = true;
-                status.text = reset ? "已重置抽卡 Demo，恢复免费测试额度。" : engine.Complete(state) ? "十将已齐！共花费 " + engine.Spent(state) + " 测试元。" : "招募完成，卡牌与碎片已自动保存。";
+                status.text = action == "exchange" ? "兑换成功：" + cards[cardId].name + " · 已拥有。未消耗测试额度。"
+                    : action == "reset" ? "已重置本期测试进度，通用碎片余额不变。" : engine.Complete(state) ? "本期卡牌已齐！共花费 " + engine.Spent(state) + " 测试元。" : "招募完成，卡牌与碎片已自动保存。";
+                if (state.conversion != null) status.text += "\n" + ConversionText();
             }
             catch (Exception error) { status.text = "操作未完成，进度未更新：" + error.Message; Debug.LogWarning(error.Message); }
             finally { busy = false; }
             // Save and probability logic finish first. The coroutine only reads the saved snapshot.
-            if (committed && !reset) BeginReveal(false);
+            if (committed && action == "draw") BeginReveal(false);
             else Refresh();
         }
         private void Replay()
@@ -296,6 +438,7 @@ namespace CardDemo
                 sigil.alignment = TextAnchor.MiddleCenter; Height(sigil, 420);
                 revealGrid = Grid(body, "Reveal Cards"); revealGrid.gameObject.SetActive(false);
                 var faces = new List<RectTransform>(); var labels = new List<Text>();
+                var qualities = new List<Text>(); var names = new List<Text>(); var skills = new List<Text>(); var captions = new List<Text>();
                 foreach (var reward in rewards)
                 {
                     var face = Box(revealGrid.transform, "Saved Reward", Green);
@@ -305,6 +448,10 @@ namespace CardDemo
                     label.alignment = TextAnchor.MiddleCenter; label.resizeTextForBestFit = true; label.resizeTextMinSize = 18; label.resizeTextMaxSize = 30;
                     label.verticalOverflow = VerticalWrapMode.Truncate;
                     faces.Add(face); labels.Add(label);
+                    qualities.Add(RevealText(face, .79f, .95f, 26));
+                    names.Add(RevealText(face, .44f, .77f, 42));
+                    skills.Add(RevealText(face, .30f, .44f, 24));
+                    captions.Add(RevealText(face, .05f, .29f, 26));
                 }
                 var footer = Text(stage, "跳过 / 重播不改变卡牌与碎片，不消耗额外测试额度", 20, new Color32(174, 185, 164, 255));
                 footer.rectTransform.anchorMin = new Vector2(.06f, .01f); footer.rectTransform.anchorMax = new Vector2(.94f, .07f);
@@ -365,9 +512,11 @@ namespace CardDemo
                     for (float t = 0; t < .12f && !skipReveal; t += Time.unscaledDeltaTime)
                     { face.localScale = new Vector3(Mathf.Lerp(1, .04f, t / .12f), 1, 1); yield return null; }
                     face.GetComponent<Image>().color = Color.Lerp(Paper, qualityColor, .40f);
-                    string caption = reward.guarantee ? "保底补发 · 拥有 1 张" : reward.isNew ? "新卡 · 拥有 1 张" : "重复卡 · 拥有 1 张";
-                    labels[i].text = QualityName(card.rarity) + "\n" + card.name + "\n" + card.skill + "\n\n" + caption;
-                    labels[i].color = Ink;
+                    string caption = reward.guarantee ? "保底补发 · 已拥有" : reward.isNew ? "新卡 · 已拥有" : "重复卡\n+" + reward.shards + " 碎片";
+                    labels[i].gameObject.SetActive(false);
+                    qualities[i].text = QualityName(card.rarity); names[i].text = card.name;
+                    skills[i].text = card.skill; captions[i].text = caption;
+                    foreach (var part in new[] { qualities[i], names[i], skills[i], captions[i] }) part.gameObject.SetActive(true);
                     note.text = (i + 1) + "/" + rewards.Length + " · " + card.rarity + " · " + card.name + " · " + caption;
                     title.text = QualityName(card.rarity) + " · " + card.name;
                     for (float t = 0; t < .16f && !skipReveal; t += Time.unscaledDeltaTime)
@@ -390,8 +539,10 @@ namespace CardDemo
                 }
                 focus.gameObject.SetActive(false); stage.GetComponent<Image>().color = Ink;
                 title.text = "本次招募完成"; title.color = Paper;
-                note.text = rewards.Count(r => r.isNew) + " 张新卡入藏 · 获得 " + rewards.Sum(r => r.shards) + " 枚同名碎片";
+                note.text = rewards.Count(r => r.isNew) + " 张新卡入藏 · 重复转 " + rewards.Sum(r => r.shards) + " 碎片 · 保底补足 " + state.shardGrants.Where(g => g.bundles == state.bundles).Sum(g => g.amount) + " 碎片";
                 for (float t = 0; t < .65f && !skipReveal; t += Time.unscaledDeltaTime) yield return null;
+                skip.GetComponentInChildren<Text>().text = "收下卡牌";
+                while (!skipReveal) yield return null;
                 finished = true;
             }
             finally
@@ -416,32 +567,46 @@ namespace CardDemo
             var body = Scroll(frame, "Dialog Scroll"); Text(body, title, 34, Ink); return body;
         }
         private void Dismiss() { if (modal != null) Destroy(modal); modal = null; }
+        private RectTransform DetailSection(Transform parent, string name, Color background)
+        {
+            var section = Box(parent, name, background);
+            var layout = section.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(22, 22, 18, 18); layout.spacing = 12;
+            layout.childControlWidth = layout.childControlHeight = true; layout.childForceExpandHeight = false;
+            return section;
+        }
         private void ShowCard(string id)
         {
             if (busy) return;
             var card = cards[id]; var body = Modal(card.name);
-            Text(body, card.camp + " / " + card.rarity + " / ID " + card.id + "\n基础战力 " + card.baseAttack, 26, Orange);
-            Text(body, card.skill + "\n\n" + card.effect, 28, Ink);
-            Text(body, "正式技能在此仅为展示，不自动接入演示对局。", 22, Muted);
+            Text(body, card.camp.Replace("~", "-") + " · " + card.rarity, 26, Orange);
+            bool owned = state.owned.Any(c => c.cardId == id);
+            var ownership = DetailSection(body, "Ownership Frame", owned ? new Color32(228, 236, 223, 255) : new Color32(238, 230, 215, 255));
+            var outline = ownership.gameObject.AddComponent<Outline>();
+            outline.effectColor = owned ? Green : Orange; outline.effectDistance = new Vector2(1, -1);
+            Text(ownership, owned ? "已拥有" : "未拥有", 26, owned ? Green : Orange);
+            var power = DetailSection(body, "Base Power", Green);
+            Text(power, "基础战力", 22, new Color32(212, 223, 210, 255));
+            Text(power, card.baseAttack.ToString(), 52, Paper);
+            var skill = DetailSection(body, "Card Skill", new Color32(250, 248, 239, 255));
+            Text(skill, "卡牌技能", 22, Muted);
+            Text(skill, card.skill, 32, Ink);
+            var effects = DetailSection(body, "Skill Effects", new Color32(234, 236, 225, 255));
+            Text(effects, "技能效果", 22, Green);
+            Text(effects, card.effect, 28, Ink);
+            Text(body, "卡牌技能仅作展示，暂不接入对局。", 22, Muted);
             Button(body, "关闭详情", Dismiss);
         }
         private void ShowRules()
         {
             if (config == null || busy) return;
             var body = Modal("概率与规则");
-            Text(body, string.Join("\n", config.groups.Select(g => g.rarity + " " + g.cardIds.Length + " 张 · " + (g.weight / 100.0).ToString("0.##") + "% · 重复 " + g.duplicateShards + " 同名碎片")), 26, Ink);
-            Text(body, "先抽品质，再在该品质中等概率选一张。每张独立，橙卡（传说）可以首抽获得。\n\n300 / 400 / 500 测试元时，正常五张结算后按缺卡原始相对权重额外补发至 8 / 9 / 10 张。最终补齐所有卡，包括橙卡。\n\n集齐即停止。350 元是长期均价目标，不是每人的固定消费；最高 500 测试元。碎片仅预留升级用途，不可解锁新卡。\n\n浏览器与 Unity 存档独立，无账号、云同步或真实支付。", 25, Ink);
+            Text(body, string.Join("\n", config.groups.Select(g => g.rarity + " " + g.cardIds.Length + " 张 · " + (g.weight / 100.0).ToString("0.##") + "% · 重复得 " + g.duplicateShards + " 碎片 · 兑换消耗 " + g.exchangeCost)), 26, Ink);
+            Text(body, "先抽品质，再在该品质中等概率选一张。每张独立，橙卡可以首抽获得，重复卡显示本次 +X 碎片。\n\n保底不直接送卡，按最便宜缺卡补足本期碎片：\n" + string.Join("\n", config.milestones.Select(m => "第 " + (m.spent / config.bundlePrice) + " 次五连：足够兑换至 " + m.uniqueCards + " 张"))
+                + "\n每个节点仅结算一次；余额足够则补 0。本期共 " + engine.CardCount + " 张卡牌，同一奖池、共用本期碎片；国度页签只切换展示，不改变抽取范围。整套目标平均约 " + config.targetAverageCost + " 测试元，允许超过均价。保留 " + config.testCredit + " 测试元兜底，届时足够兑换整套，需手动确认。平均花费受策略及跨期通用碎片影响，不保证个人固定成本。\n\n重复卡转为本期碎片。集齐全套后在整次奖励结算完，将剩余本期碎片按 10:1 转通用，向下取整、余数舍去，仅一次。通用碎片跨期保留，1:1 抵任意期碎片，优先本期、再用通用补足，确认框列出明细。兑换不扣测试额度、不推进保底。\n\n浏览器与 Unity 存档独立，无账号、云同步或真实支付。", 25, Ink);
             Button(body, "知道了", Dismiss);
         }
-        private void AskReset()
-        {
-            if (engine == null || busy) return;
-            var body = Modal("重新开始测试？");
-            Text(body, "仅清空此抽卡 Demo 的卡牌、碎片和模拟花费，恢复 500 测试元。不影响游戏账号、卡组或对局。", 28, Ink);
-            Button(body, "取消", Dismiss);
-            Button(body, "确认重置", () => { Dismiss(); Commit(() => engine.NewState(checked(state.revision + 1)), true); }, true);
-        }
         private void Close() { if (!busy) Destroy(gameObject); }
-        private void OnDestroy() { if (Closed != null) Closed(); }
+        private void OnDestroy() { if (profileLock != null) profileLock.Dispose(); if (Closed != null) Closed(); }
     }
 }

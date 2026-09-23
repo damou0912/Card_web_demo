@@ -145,6 +145,12 @@ const rareModifications = { "稀有": { 0: { id: replacementRare.id, attack: rep
 const rareModifiedIds = deckDebug.buildCustomDeckCardIds("三国~蜀", rareModifications);
 const previousCustomDecks = deckDebug.state.customDecks;
 deckDebug.state.customDecks = { "三国~蜀": { version: 2, cardIds: customShuIds } };
+const lockedShuIds = deckDebug.getConfiguredDeckCardIds("三国~蜀");
+const lockedChaosIds = deckDebug.getConfiguredDeckCardIds("混沌");
+const savedLogin = context.authClient.loadUser;
+context.authClient.loadUser = () => 'inventory-test';
+deckDebug.state.customDeckOwner = 'inventory-test';
+deckDebug.state.ownedExtraCardIds = [replacementCommon.id, replacementRare.id];
 const configuredShuIds = deckDebug.getConfiguredDeckCardIds("三国~蜀");
 const pveCustomGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame("pve", { 1: "三国~蜀", 2: "三国~蜀" }, 5, 1);
 const onlineCustomGame = context.__CARD_DEMO_CORE_V2__.coreCreateGame(
@@ -167,6 +173,9 @@ deckDebug.state.modifyDeck = {
   originalDeck: deckDebug.buildCampDeck("三国~蜀")
 };
 const initialCommonCandidates = deckDebug.getAvailableModifyDeckCandidates("普通");
+deckDebug.state.ownedExtraCardIds = [];
+const unownedReplacementBlocked = !deckDebug.applyModifyDeckReplacement("普通", 0, replacementCommon);
+deckDebug.state.ownedExtraCardIds = [replacementCommon.id, replacementRare.id];
 const firstDefaultCommon = deckDebug.state.modifyDeck.originalDeck.find((card) => (
   deckDebug.getCardDisplay(card).rarity === "普通"
 ));
@@ -185,6 +194,9 @@ const modificationsClearedAfterRevert = Object.keys(deckDebug.state.modifyDeck.m
 deckDebug.state.modifyDeck = previousModifyDeck;
 const indexSource = fs.readFileSync(path.join(__dirname, "index.html"), "utf8");
 const customDeckValidation = {
+  unownedDeckFallsBack: lockedShuIds.every(id => defaultShuIds.includes(id)) && new Set(lockedShuIds).size === 20,
+  chaosOnlyUsesOwned: lockedChaosIds.every(id => context.CARD_INFO.some(card => card.id === id)),
+  unownedReplacementBlocked,
   savedDeckIsResolved: configuredShuIds[0] === replacementCommon.id,
   pvePlayerUsesCustomDeck: pveCustomGame.players[0].deckCatalog.some((card) => card.id === replacementCommon.id),
   pveAiKeepsDefaultDeck: !pveCustomGame.players[1].deckCatalog.some((card) => card.id === replacementCommon.id),
@@ -211,6 +223,8 @@ const customDeckValidation = {
     && /<script src="script\.js\?v=[^"]+"><\/script>/.test(indexSource)
 };
 const customDeckPassed = Object.values(customDeckValidation).every(Boolean);
+context.authClient.loadUser = savedLogin;
+deckDebug.state.customDeckOwner = null; deckDebug.state.ownedExtraCardIds = [];
 const loginPromptPolicyValid = deckDebug.shouldAutoOpenLogin(null)
   && deckDebug.shouldAutoOpenLogin("")
   && !deckDebug.shouldAutoOpenLogin("player1");

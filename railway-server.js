@@ -35,6 +35,17 @@ const contentTypes = {
   ".svg": "image/svg+xml"
 };
 const publicExtensions = new Set(Object.keys(contentTypes));
+const gachaService = require('./gacha-service');
+const accountRoutes = require('./account-routes')(db, sanitizeCustomDeck, CUSTOM_DECK_CAMPS);
+let recruitmentReady = false;
+async function verifyRecruitmentStorage() {
+  try {
+    await db.getGachaProfile('player1');
+    await gachaService.run(null);
+    recruitmentReady = true;
+  } catch (_) { recruitmentReady = false; console.error('招募规则或持久化存储不可用。'); }
+}
+void verifyRecruitmentStorage();
 
 function normalizePlayerName(value) {
   return String(value || "").trim().replace(/[<>]/g, "").slice(0, 12);
@@ -49,7 +60,7 @@ function isValidPlayerName(value) {
 function sanitizeDeckCardIds(cardIds, deckKey) {
   if (!Array.isArray(cardIds) || cardIds.length !== 20) return null;
   const normalized = cardIds.map((id) => String(id));
-  if (new Set(normalized).size !== normalized.length || normalized.some((id) => !/^0[1-3][1-5]\d{2}$/.test(id))) return null;
+  if (new Set(normalized).size !== normalized.length || normalized.some((id) => !gachaService.cardIds.has(id))) return null;
   const campPrefix = DECK_CAMP_PREFIX[deckKey];
   if (campPrefix && normalized.some((id) => !id.startsWith(campPrefix))) return null;
   const rarityCounts = normalized.reduce((counts, id) => {
@@ -326,11 +337,15 @@ function validateActionRequest(room, playerId, action) {
 }
 
 const server = http.createServer(async (request, response) => {
-  let requestedPath = decodeURIComponent((request.url || "/").split("?")[0]);
+  let requestedPath;
+  try { requestedPath = decodeURIComponent((request.url || "/").split("?")[0]); }
+  catch (_) { response.writeHead(400); response.end('Bad request'); return; }
+  if (await accountRoutes.handle(request, response, requestedPath)) return;
   if (requestedPath === "/") requestedPath = "/index.html";
   if (requestedPath === "/health") {
-    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    response.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    response.writeHead(recruitmentReady ? 200 : 503, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({ ok: recruitmentReady, rooms: rooms.size, recruitment: recruitmentReady,
+      storage: process.env.DATABASE_URL ? 'postgres' : process.env.RAILWAY_VOLUME_MOUNT_PATH ? 'volume' : 'local-json' }));
     return;
   }
 
@@ -522,7 +537,10 @@ const server = http.createServer(async (request, response) => {
   }
 
   const filePath = path.resolve(root, `.${requestedPath}`);
-  if (!filePath.startsWith(root) || !publicExtensions.has(path.extname(filePath).toLowerCase()) || !fs.existsSync(filePath)) {
+  const privatePath = /(?:^|\/)(?:\.[^/]*|node_modules|UnityCard_demo|scripts|tests|outputs)(?:\/|$)/i.test(requestedPath)
+    || /\.(?:json|mjs|cjs)$/i.test(requestedPath)
+    || /^\/(?:db(?:-postgres)?|railway-server|gacha-service|account-routes)\.js$/i.test(requestedPath);
+  if (privatePath || !filePath.startsWith(root + path.sep) || !publicExtensions.has(path.extname(filePath).toLowerCase()) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
     response.writeHead(404);
     response.end("Not found");
     return;
@@ -542,10 +560,16 @@ const server = http.createServer(async (request, response) => {
   });
 });
 
-const websocket = new WebSocketServer({ server });
-websocket.on("connection", (socket) => {
+const websocket = new WebSocketServer({ server, verifyClient: ({ origin, req }) => {
+  try { return !origin || new URL(origin).host === req.headers.host; } catch (_) { return false; }
+} });
+websocket.on("connection", (socket, upgradeRequest) => {
   sendRoomList(socket);
+  let messageQueue = Promise.resolve();
   socket.on("message", (raw) => {
+    messageQueue = messageQueue.then(() => handleMessage(raw)).catch(() => send(socket, { type: 'error', message: '账号或卡牌校验暂时不可用，请重试。' }));
+  });
+  async function handleMessage(raw) {
     let message;
     try { message = JSON.parse(String(raw)); } catch (_error) { return send(socket, { type: "error", message: "消息格式无效。" }); }
     if (message.type === "list-rooms") {
@@ -685,6 +709,10 @@ websocket.on("connection", (socket) => {
       const deckKey = String(message.deckKey || "");
       const deckCardIds = sanitizeDeckCardIds(message.deckCardIds, deckKey);
       if (!GAME_DECK_KEYS.has(deckKey) || !deckCardIds) return send(socket, { type: "error", message: "卡组数据无效，请重新选择卡组。" });
+      const account = await accountRoutes.identity(upgradeRequest);
+      const inventory = account ? await db.getGachaProfile(account.username) : null;
+      if (!gachaService.canUseDeck(deckCardIds, inventory)) return send(socket, { type: 'error', message: '卡组含未获得的额外卡，请重新登录并招募或兑换。' });
+      if (room.started || room.players[socket.playerId] !== socket) return;
       room.decks[socket.playerId] = deckKey;
       room.deckCardIds[socket.playerId] = deckCardIds;
       room.ready[socket.playerId] = false;
@@ -692,6 +720,13 @@ websocket.on("connection", (socket) => {
       return;
     }
     if (message.type === "set-ready" && !room.started) {
+      if (message.ready && room.deckCardIds[socket.playerId]) {
+        const account = await accountRoutes.identity(upgradeRequest);
+        const inventory = account ? await db.getGachaProfile(account.username) : null;
+        if (!gachaService.canUseDeck(room.deckCardIds[socket.playerId], inventory))
+          return send(socket, { type: 'error', message: '卡牌持有状态已变化，请重新登录并选择卡组。' });
+        if (room.started || room.players[socket.playerId] !== socket) return;
+      }
       room.ready[socket.playerId] = Boolean(message.ready) && Boolean(room.decks[socket.playerId]) && Boolean(room.deckCardIds[socket.playerId]);
       broadcast(room, { type: "room-state", state: roomState(room) });
       if (room.players[1] && room.players[2] && room.ready[1] && room.ready[2]) {
@@ -706,7 +741,7 @@ websocket.on("connection", (socket) => {
       socket.voluntaryLeave = true;
       socket.close();
     }
-  });
+  }
   socket.on("close", () => removeSocket(socket));
   socket.on("error", () => removeSocket(socket));
 });

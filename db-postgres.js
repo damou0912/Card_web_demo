@@ -11,9 +11,14 @@ const PRESET_ACCOUNTS = [
 const PRESET_PASSWORD = "password123";
 
 let pool = null;
+let poolReady = null;
 
 async function initPool() {
-  if (pool) return pool;
+  if (!poolReady) poolReady = openPool().catch(error => { poolReady = null; throw error; });
+  return poolReady;
+}
+
+async function openPool() {
 
   try {
     const { Pool } = require("pg");
@@ -34,8 +39,10 @@ async function initPool() {
     console.log("✅ PostgreSQL 数据库已连接");
     return pool;
   } catch (e) {
-    console.warn("⚠️  PostgreSQL 连接失败，回退到 JSON 存储:", e.message);
-    return null;
+    console.warn("PostgreSQL 初始化失败，未切换存储。");
+    if (pool) await pool.end().catch(() => {});
+    pool = null;
+    throw new Error('数据库不可用，请稍后再试。');
   }
 }
 
@@ -82,6 +89,17 @@ async function initDatabase(pool) {
       FOREIGN KEY (username) REFERENCES users(username)
     );
 
+    CREATE TABLE IF NOT EXISTS gacha_profiles (
+      username TEXT PRIMARY KEY REFERENCES users(username) ON DELETE CASCADE,
+      revision INTEGER NOT NULL,
+      profile JSONB NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS account_sessions (
+      token_hash TEXT PRIMARY KEY,
+      username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+      expires_at BIGINT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_game_records_username ON game_records(username);
     CREATE INDEX IF NOT EXISTS idx_profiles_wins ON profiles(wins DESC);
     ALTER TABLE profiles ADD COLUMN IF NOT EXISTS custom_decks JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -120,7 +138,7 @@ async function initDatabase(pool) {
       [PRESET_ACCOUNTS]
     );
   } catch (e) {
-    console.warn("表已存在或创建失败:", e.message);
+    throw e;
   }
 }
 
@@ -426,7 +444,40 @@ async function getLeaderboard(limit = 100) {
   }
 }
 
+async function getGachaProfile(username) {
+  const connection = await initPool();
+  if (!connection) throw new Error('数据库不可用');
+  const result = await connection.query('SELECT profile FROM gacha_profiles WHERE username = $1', [username]);
+  return result.rows[0]?.profile || null;
+}
+async function saveGachaProfile(username, expectedRevision, profile) {
+  const connection = await initPool();
+  if (!connection) throw new Error('数据库不可用');
+  const result = expectedRevision === null
+    ? await connection.query('INSERT INTO gacha_profiles (username, revision, profile) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [username, profile.revision, JSON.stringify(profile)])
+    : await connection.query('UPDATE gacha_profiles SET revision=$2, profile=$3 WHERE username=$1 AND revision=$4', [username, profile.revision, JSON.stringify(profile), expectedRevision]);
+  return result.rowCount === 1;
+}
+async function putAccountSession(hash, username, expiresAt) {
+  const connection = await initPool();
+  if (!connection) throw new Error('数据库不可用');
+  await connection.query('DELETE FROM account_sessions WHERE expires_at < $1', [Date.now()]);
+  await connection.query('INSERT INTO account_sessions VALUES ($1,$2,$3)', [hash, username, expiresAt]);
+}
+async function getAccountSession(hash) {
+  const connection = await initPool();
+  if (!connection) throw new Error('数据库不可用');
+  const result = await connection.query('SELECT username, expires_at FROM account_sessions WHERE token_hash=$1', [hash]);
+  return result.rows[0] ? { username: result.rows[0].username, expiresAt: Number(result.rows[0].expires_at) } : null;
+}
+async function deleteAccountSession(hash) {
+  const connection = await initPool();
+  if (!connection) throw new Error('数据库不可用');
+  await connection.query('DELETE FROM account_sessions WHERE token_hash=$1', [hash]);
+}
+
 module.exports = {
+  getGachaProfile, saveGachaProfile, putAccountSession, getAccountSession, deleteAccountSession,
   initPool,
   loginUser,
   getUserProfile,

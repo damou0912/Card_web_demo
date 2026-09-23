@@ -1,21 +1,23 @@
 {
   "schemaVersion": 1,
-  "poolId": "shu-demo-v1",
-  "title": "蜀汉 · 群英招募",
+  "poolId": "three-kingdoms-extra-v1",
+  "title": "三国 · 群英招募",
+  "shardName": "三国·第一期碎片",
   "bundlePrice": 20,
   "bundleSize": 5,
-  "testCredit": 500,
-  "targetAverageCost": 350,
+  "testCredit": 3000,
+  "targetAverageCost": 1500,
   "groups": [
-    { "rarity": "普通", "weight": 7000, "duplicateShards": 5, "cardIds": ["01121", "01122", "01123", "01124"] },
-    { "rarity": "稀有", "weight": 2000, "duplicateShards": 15, "cardIds": ["01225", "01226", "01227"] },
-    { "rarity": "史诗", "weight": 400, "duplicateShards": 40, "cardIds": ["01328"] },
-    { "rarity": "传说", "weight": 82, "duplicateShards": 100, "cardIds": ["01429"] },
-    { "rarity": "特殊", "weight": 518, "duplicateShards": 50, "cardIds": ["01530"] }
+    { "rarity": "普通", "weight": 7000, "duplicateShards": 5, "exchangeCost": 100, "cardIds": ["01121", "01122", "01123", "01124", "02121", "02122", "02123", "02124", "03121", "03122", "03123", "03124"] },
+    { "rarity": "稀有", "weight": 2000, "duplicateShards": 15, "exchangeCost": 300, "cardIds": ["01225", "01226", "01227", "02225", "02226", "02227", "03225", "03226", "03227"] },
+    { "rarity": "史诗", "weight": 400, "duplicateShards": 40, "exchangeCost": 800, "cardIds": ["01328", "02328", "03328"] },
+    { "rarity": "传说", "weight": 48, "duplicateShards": 100, "exchangeCost": 1800, "cardIds": ["01429", "02429", "03429"] },
+    { "rarity": "特殊", "weight": 552, "duplicateShards": 50, "exchangeCost": 1000, "cardIds": ["01530", "02530", "03530"] }
   ],
   "milestones": [
-    { "spent": 300, "uniqueCards": 8 },
-    { "spent": 400, "uniqueCards": 9 },
-    { "spent": 500, "uniqueCards": 10 }
+    { "spent": 900, "uniqueCards": 24 },
+    { "spent": 1200, "uniqueCards": 27 },
+    { "spent": 1500, "uniqueCards": 27 },
+    { "spent": 3000, "uniqueCards": 30 }
   ]
 }

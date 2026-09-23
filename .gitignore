@@ -11,3 +11,5 @@ outputs/
 card-game-web-files.zip
 __pycache__/
 *.py[cod]
+game-data.json
+game-data.json.writing

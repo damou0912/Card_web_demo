@@ -168,6 +168,10 @@ const authClient = (() => {
   }
 
   return {
+    logout: async () => {
+      const response = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!response.ok && response.status !== 401) throw new Error('退出失败，请重试');
+    },
     register,
     login,
     getProfile,

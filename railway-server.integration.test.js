@@ -27,6 +27,7 @@ function reservePort() {
   });
 }
 
+let testCookie = '';
 function requestJson(port, method, requestPath, body = null) {
   return new Promise((resolve, reject) => {
     const payload = body === null ? null : JSON.stringify(body);
@@ -35,12 +36,13 @@ function requestJson(port, method, requestPath, body = null) {
       port,
       path: requestPath,
       method,
-      headers: payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}
+      headers: { ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}), Cookie: testCookie }
     }, (response) => {
       let raw = "";
       response.on("data", (chunk) => { raw += chunk; });
       response.on("end", () => {
         try {
+          if (response.headers['set-cookie']) testCookie = response.headers['set-cookie'][0].split(';')[0];
           resolve({ status: response.statusCode, body: JSON.parse(raw) });
         } catch (error) {
           reject(error);
@@ -177,8 +179,11 @@ function waitForServer(child, port) {
     assert.equal((await requestJson(port, "POST", "/api/challenge/progress", { username: "player1", level: 13 })).status, 400);
 
     const defaultShuDeck = makeDefaultDeckIds("01");
+    assert.equal((await requestJson(port, 'POST', '/api/auth/login', { username: 'player1', password: 'password123' })).status, 200);
     const customShuDeck = [...defaultShuDeck];
-    customShuDeck[0] = "01121";
+    [customShuDeck[0], customShuDeck[1]] = [customShuDeck[1], customShuDeck[0]];
+    const lockedDeck = [...defaultShuDeck]; lockedDeck[0] = '01121';
+    assert.equal((await requestJson(port, 'POST', '/api/save-custom-deck', { username: 'player1', camp: '三国~蜀', deckData: { version: 2, cardIds: lockedDeck } })).status, 400);
     const initialDecks = await requestJson(port, "GET", "/api/custom-decks/player1");
     assert.equal(initialDecks.status, 200);
     assert.deepEqual(initialDecks.body.decks, {});
@@ -192,7 +197,7 @@ function waitForServer(child, port) {
     const savedDecks = await requestJson(port, "GET", "/api/custom-decks/player1");
     assert.deepEqual(savedDecks.body.decks["三国~蜀"].cardIds, customShuDeck);
     const replacementShuDeck = [...defaultShuDeck];
-    replacementShuDeck[0] = "01122";
+    [replacementShuDeck[0], replacementShuDeck[2]] = [replacementShuDeck[2], replacementShuDeck[0]];
     const overwriteDeck = await requestJson(port, "POST", "/api/save-custom-deck", {
       username: "player1", camp: "三国~蜀", deckData: { version: 2, cardIds: replacementShuDeck }
     });

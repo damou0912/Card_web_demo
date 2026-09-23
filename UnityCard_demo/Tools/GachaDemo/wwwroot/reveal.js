@@ -1,6 +1,12 @@
 'use strict';
 // Presentation only: consumes committed rewards; never draws, charges or saves.
 class GachaReveal {
+  static rewardCaption(reward, preview = false, compact = false) {
+    if (preview) return '效果预览 · 不获得卡牌';
+    if (reward.guarantee) return compact ? '旧保底新卡' : '保底补发 · 已拥有';
+    if (reward.isNew) return compact ? '新卡' : '新卡 · 已拥有';
+    return compact ? `+${reward.shards} 碎片` : `重复卡\n+${reward.shards} 碎片`;
+  }
   // Presentation vocabulary, not probability or card-strength rankings. Special is its own category.
   static quality(rarity) {
     const profiles = {
@@ -27,6 +33,7 @@ class GachaReveal {
   skip() {
     this.fast = true;
     for (const finish of [...this.pending]) finish();
+    if (this.finishReview) this.finishReview();
     if (!this.closed) this.view.waiting(); // A pending server request is NOT cancelled or retried.
   }
   wait(ms) {
@@ -57,6 +64,11 @@ class GachaReveal {
       }
       this.view.complete(rewards);
       await this.wait(650);
+      if (!this.fast && !this.closed && this.view.review) {
+        this.view.review();
+        await new Promise(resolve => { this.finishReview = resolve; });
+        this.finishReview = null;
+      }
     } finally { this.close(); }
   }
   close() {
@@ -64,6 +76,7 @@ class GachaReveal {
     this.closed = true;
     this.fast = true;
     for (const finish of [...this.pending]) finish();
+    if (this.finishReview) this.finishReview();
     this.view.close();
   }
 }

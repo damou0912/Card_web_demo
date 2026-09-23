@@ -442,9 +442,23 @@ function normalizeCustomDeckData(campKey, deckData) {
 }
 
 function getConfiguredDeckCardIds(campKey) {
-  if (campKey === CHAOS_DECK_KEY) return buildCampDeck(campKey).map((card) => card.id);
+  if (campKey === CHAOS_DECK_KEY) return Object.entries(CAMP_DECK_RARITY_COUNTS).flatMap(([rarity, count]) =>
+    shuffle(GAME_CARD_SLOT_TEMPLATES.filter(slot => slot.rarity === rarity && canUsePlayerCard(slot.id))).slice(0, count).map(slot => String(slot.id)));
   const savedDeck = normalizeCustomDeckData(campKey, state.customDecks[campKey]);
-  return savedDeck?.cardIds || getDefaultCampSlots(campKey).map((slot) => String(slot.id));
+  const defaults = getDefaultCampSlots(campKey);
+  const ids = savedDeck?.cardIds || defaults.map(slot => String(slot.id));
+  const used = new Set(ids.filter(canUsePlayerCard));
+  return ids.map(id => {
+    if (canUsePlayerCard(id)) return id;
+    const rarity = GAME_CARD_SLOT_TEMPLATES.find(slot => String(slot.id) === id)?.rarity;
+    const fallback = defaults.find(slot => slot.rarity === rarity && !used.has(String(slot.id)));
+    used.add(String(fallback.id)); return String(fallback.id);
+  });
+}
+
+function canUsePlayerCard(id) {
+  if (DEFAULT_CARD_SLOT_TEMPLATES.some(slot => String(slot.id) === String(id))) return true;
+  return state.customDeckOwner === authClient.loadUser() && (state.ownedExtraCardIds || []).includes(String(id));
 }
 
 function buildCampDeck(campKey, resolvedCardIds = null) {
@@ -665,7 +679,7 @@ function closeActionLog() {
   setActionLogOpen(false);
 }
 
-function setCustomDecksForUser(username, decks = {}) {
+function setCustomDecksForUser(username, decks = {}, ownedExtraCardIds = []) {
   const normalizedDecks = {};
   getAvailableDeckKeys().filter((camp) => camp !== CHAOS_DECK_KEY).forEach((camp) => {
     const normalized = normalizeCustomDeckData(camp, decks[camp]);
@@ -673,6 +687,7 @@ function setCustomDecksForUser(username, decks = {}) {
   });
   state.customDecks = normalizedDecks;
   state.customDeckOwner = username || null;
+  state.ownedExtraCardIds = username ? ownedExtraCardIds : [];
 }
 
 async function loadCustomDecksForCurrentUser(force = false) {
@@ -681,18 +696,19 @@ async function loadCustomDecksForCurrentUser(force = false) {
     if (state.customDeckOwner) setCustomDecksForUser(null);
     return state.customDecks;
   }
-  if (!force && state.customDeckOwner === username) return state.customDecks;
   if (state.customDeckLoadPromise) return state.customDeckLoadPromise;
   state.customDeckLoadPromise = fetch(`/api/custom-decks/${encodeURIComponent(username)}`)
     .then(async (response) => {
       const data = await response.json();
+      if (response.status === 401) { authClient.clearUser(); updateLoginStatus(); setLoginMenuOpen(true); }
       if (!response.ok || !data.success) throw new Error(data.error || "读取卡组失败");
-      setCustomDecksForUser(username, data.decks);
+      if (authClient.loadUser() !== username) return state.customDecks;
+      setCustomDecksForUser(username, data.decks, data.ownedExtraCardIds || []);
       return state.customDecks;
     })
     .catch((error) => {
       console.error("读取自定义卡组失败:", error);
-      setCustomDecksForUser(username);
+      setCustomDecksForUser(authClient.loadUser());
       showToast("读取卡组失败", "本次将使用默认卡组，请稍后重试。");
       return state.customDecks;
     })
@@ -771,7 +787,7 @@ function initializeModifyDeck() {
 function selectCampForModify(camp) {
   state.modifyDeck.selectedCamp = camp;
   state.modifyDeck.selectedRarity = null;
-  state.modifyDeck.modifications = modificationsFromDeckData(camp, state.customDecks[camp]);
+  state.modifyDeck.modifications = modificationsFromDeckData(camp, { version: 2, cardIds: getConfiguredDeckCardIds(camp) });
 
   const originalDeck = buildCampDeck(camp);
   state.modifyDeck.originalDeck = originalDeck;
@@ -894,7 +910,10 @@ function showCandidateCards(rarity, rarityIndex = null) {
     // 添加替换卡牌的标记
     const isReplacementCard = window.REPLACEMENT_CARDS &&
                               window.REPLACEMENT_CARDS.some(c => c.id === candidateSlot.id);
-    const badge = isReplacementCard ? ' <span class="new-card-badge">🆕</span>' : '';
+    const locked = !canUsePlayerCard(candidateSlot.id);
+    const badge = isReplacementCard ? `<span class="new-card-badge">${locked ? '未获得 · 招募解锁' : '已拥有'}</span>` : '';
+    button.classList.toggle('card-locked', locked);
+    if (locked) button.setAttribute('aria-disabled', 'true');
 
     button.innerHTML = `
       <strong>${candidateSlot.name}</strong>
@@ -903,6 +922,7 @@ function showCandidateCards(rarity, rarityIndex = null) {
     bindModifyDeckSkillTooltip(button, candidateSlot);
 
     button.addEventListener('click', () => {
+      if (locked) { showToast('尚未获得', '请从主界面的「群英招募」抽取或兑换，获得后才能加入卡组。'); return; }
       if (!hasReplacementTarget) {
         showToast('请先选择要替换的卡牌', '选定左侧卡牌后，即可使用这张备选卡。');
         return;
@@ -920,6 +940,7 @@ function showCandidateCards(rarity, rarityIndex = null) {
 }
 
 function applyModifyDeckReplacement(rarity, rarityIndex, candidateSlot) {
+  if (!candidateSlot || !canUsePlayerCard(candidateSlot.id)) return false;
   const originalCards = state.modifyDeck.originalDeck.filter((card) => getCardQuality(card) === rarity);
   const originalCard = originalCards[rarityIndex];
   if (!originalCard || !candidateSlot) return false;
@@ -1171,7 +1192,9 @@ async function loadPresetAccounts() {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
+  try { await authClient.logout(); }
+  catch (_) { showToast('退出失败', '网络不可用，请恢复连接后重试。'); return; }
   authClient.clearUser();
   setCustomDecksForUser(null);
   updateLoginStatus();

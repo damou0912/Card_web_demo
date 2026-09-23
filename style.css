@@ -6696,6 +6696,24 @@ body {
   cursor: default;
 }
 
+.candidate-card-btn.card-locked {
+  border-style: dashed;
+  border-color: rgba(232, 210, 166, .35);
+  background: rgba(255, 255, 255, .025);
+}
+.candidate-card-btn.card-locked .new-card-badge {
+  display: block;
+  width: fit-content;
+  margin: 8px 0 0;
+  padding: 3px 6px;
+  border: 1px solid rgba(232, 210, 166, .3);
+  border-radius: 4px;
+  color: #d9c69f;
+  font-size: 11px;
+}
+#gacha-entry { text-decoration: none; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+.action-buttons:has(#gacha-entry) { flex-wrap: wrap; }
+
 .candidate-card-btn.selected {
   background: rgba(120, 180, 140, 0.3);
   border-color: #78b48c;

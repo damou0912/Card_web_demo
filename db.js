@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const DB_FILE = process.env.GAME_DATA_FILE
   ? path.resolve(process.env.GAME_DATA_FILE)
-  : path.join(__dirname, "game-data.json");
+  : path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname, "game-data.json");
 
 // 预设账号列表
 const PRESET_ACCOUNTS = [
@@ -15,6 +15,8 @@ const PRESET_ACCOUNTS = [
 const PRESET_PASSWORD = "password123";
 
 function ensureDB() {
+  if (process.env.RAILWAY_ENVIRONMENT_ID && !process.env.RAILWAY_VOLUME_MOUNT_PATH && !process.env.GAME_DATA_FILE)
+    throw new Error('Railway 未配置持久化存储，已停止写入以保护玩家数据。');
   if (!fs.existsSync(DB_FILE)) {
     const initialData = {
       users: {},
@@ -52,7 +54,8 @@ function ensureDB() {
       };
     });
 
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), "utf-8");
+    fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+    writeDB(initialData);
   }
 }
 
@@ -63,7 +66,40 @@ function readDB() {
 }
 
 function writeDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  const temporary = DB_FILE + '.writing';
+  fs.writeFileSync(temporary, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
+  fs.renameSync(temporary, DB_FILE);
+}
+
+function getGachaProfile(username) {
+  const data = readDB();
+  if (!Object.hasOwn(data.users, username)) throw new Error('用户不存在');
+  return data.gachaProfiles?.[username] || null;
+}
+
+function saveGachaProfile(username, expectedRevision, profile) {
+  const data = readDB();
+  if (!Object.hasOwn(data.users, username)) throw new Error('用户不存在');
+  const previous = data.gachaProfiles?.[username] || null;
+  if ((previous?.revision ?? null) !== expectedRevision) return false;
+  data.gachaProfiles ||= {};
+  data.gachaProfiles[username] = profile;
+  writeDB(data); return true;
+}
+
+function putAccountSession(hash, username, expiresAt) {
+  const data = readDB();
+  data.accountSessions ||= {};
+  for (const [key, session] of Object.entries(data.accountSessions))
+    if (session.expiresAt < Date.now()) delete data.accountSessions[key];
+  data.accountSessions[hash] = { username, expiresAt };
+  writeDB(data);
+}
+function getAccountSession(hash) { return readDB().accountSessions?.[hash] || null; }
+function deleteAccountSession(hash) {
+  const data = readDB();
+  if (data.accountSessions) delete data.accountSessions[hash];
+  writeDB(data);
 }
 
 // 密码加密：简单的 PBKDF2 + base64（不如 bcrypt 但无需外部依赖）
@@ -334,6 +370,7 @@ function resetCustomDeck(username, campKey) {
 }
 
 module.exports = {
+  getGachaProfile, saveGachaProfile, putAccountSession, getAccountSession, deleteAccountSession,
   createUser,
   getPresetAccounts,
   loginUser,

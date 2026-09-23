@@ -4,62 +4,60 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>群英招募 · 抽卡 Demo</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/reveal.js" defer></script>
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="style.css">
+  <script src="reveal.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
   <main>
-    <header class="masthead"><span>三国 · 卡牌试作</span><span class="edition">RECRUITMENT / 01</span></header>
-    <section class="hero">
-      <div><p class="eyebrow">限量十将 · 独立测试奖池</p><h1 id="pool-title">群英招募</h1><p class="intro">聚群英，成一阵。每次五张，重逢化为碎片。</p></div>
-      <div class="seal" aria-hidden="true">蜀<br>汉</div>
-    </section>
-    <p class="demo-note">免费测试额度 · 页面金额仅为模拟，不产生真实扣款。与账号、组卡及对局库存无关。</p>
-    <section class="dashboard" aria-label="招募进度">
-      <div><span>剩余测试额度</span><strong id="balance">—</strong></div>
-      <div><span>模拟累计花费</span><strong id="spent">—</strong></div>
-      <div><span>完整卡牌总数</span><strong id="collected">—</strong></div>
-      <div><span>抽取次数</span><strong id="bundles">—</strong></div>
-    </section>
-    <div class="inventory-overview"><span>碎片总数 <strong id="shard-total">—</strong></span><a href="#exchange-section" class="exchange-link">兑换卡牌 ↓</a></div>
-    <div class="section-heading"><h2>集齐之路</h2><button id="rules-button" class="text-button" disabled>概率与规则 ↗</button></div>
-    <div id="milestones" class="milestones"></div>
-    <section class="recruit">
-      <div><span class="eyebrow">五连招募</span><p id="draw-hint">每张独立抽取，橙卡可在首次五连出现。</p></div>
-      <button id="draw" class="primary" disabled>招募五张 <span>20 测试元</span></button>
-    </section>
-    <p id="status" class="status" role="status" aria-live="polite">正在读取本地存档…</p>
-    <div class="quality-guide"><p>品质识别：白·普通 / 蓝·稀有 / 紫·史诗 / 橙·传说 / 青绿·特殊</p><button id="quality-preview" class="text-button" disabled>预览五种品质 · 不抽卡</button></div>
-    <section aria-labelledby="result-heading">
-      <div class="section-heading"><h2 id="result-heading" tabindex="-1">本次相逢</h2><div class="result-actions"><span id="reward-caption">等待招募</span><button id="replay" class="text-button" disabled>重播本次</button></div></div>
-      <div id="quality-summary" class="quality-summary" aria-label="本次品质统计"></div>
-      <div id="results" class="results"><p class="empty">五张卡牌将在此揭晓。点击卡牌可查看完整技能。</p></div>
-    </section>
-    <section class="collection-section" aria-labelledby="collection-heading">
-      <div class="section-heading"><h2 id="collection-heading">全部卡牌</h2><span>4 普通 / 3 稀有 / 1 史诗 / 1 传说 / 1 特殊</span></div>
-      <div id="collection" class="collection"></div>
-      <p class="footnote">卡牌下方只显示完整卡数量；重复卡已转为碎片，不计作额外完整卡。</p>
+    <header class="app-header"><div><span class="eyebrow">三国 · 卡牌试作</span><h1 id="pool-title">群英招募</h1></div><button id="rules-button" class="text-button" disabled>概率与规则</button></header>
+    <section class="wallet" aria-label="卡牌与碎片总数">
+      <div><span>测试额度</span><strong id="balance">—</strong></div>
+      <div><span>完整卡牌</span><strong id="collected">—</strong></div>
+      <div><span id="shard-name">本期碎片</span><strong id="shard-total">—</strong></div>
+      <div><span>通用碎片</span><strong id="universal-total">—</strong></div>
     </section>
     <section id="exchange-section" class="exchange-section" aria-labelledby="exchange-heading">
-      <div class="section-heading"><h2 id="exchange-heading">兑换卡牌</h2><span class="exchange-pending">兑换规则待确认</span></div>
-      <p class="exchange-description">兑换入口与抽卡放在同一页。下方可查看尚未拥有的卡牌；碎片通用规则与兑换价格确认后开放兑换。</p>
-      <div id="exchange-cards" class="exchange-cards"></div>
-      <p class="footnote">当前仅汇总碎片数字，仍保留原有同名绑定；不扣除碎片、不赠送卡牌，也不改变已有保底。</p>
+      <div class="section-heading"><h2 id="exchange-heading" tabindex="-1">全部卡牌 · 兑换</h2><span>兑换价：碎片 · 通用补足</span></div>
+      <div class="collection-navigation">
+        <div id="collection-tabs" class="collection-tabs" role="tablist" aria-label="按国度查看卡牌">
+          <button id="collection-tab-wei" type="button" role="tab" data-camp="魏" aria-controls="collection" aria-selected="true" tabindex="0" disabled>三国-魏</button>
+          <button id="collection-tab-shu" type="button" role="tab" data-camp="蜀" aria-controls="collection" aria-selected="false" tabindex="-1" disabled>三国-蜀</button>
+          <button id="collection-tab-wu" type="button" role="tab" data-camp="吴" aria-controls="collection" aria-selected="false" tabindex="-1" disabled>三国-吴</button>
+        </div>
+        <small>仅切换展示，三国共用同一卡池</small>
+      </div>
+      <div id="collection" class="collection" role="tabpanel" aria-labelledby="collection-tab-wei" tabindex="0"></div>
     </section>
-    <footer><span>本地自动保存 · 重开页面可继续</span><button id="reset" class="text-button" disabled>重置此 Demo</button></footer>
+    <section class="latest-section" aria-labelledby="result-heading">
+      <div class="section-heading"><h2 id="result-heading" tabindex="-1">本次相逢</h2><div class="result-actions"><span id="reward-caption">等待招募</span><button id="replay" class="text-button" disabled>重播</button></div></div>
+      <div id="results" class="results"><p class="empty">五张卡牌将在此揭晓</p></div>
+    </section>
+    <section class="recruit">
+      <div><span class="eyebrow">保底以本期碎片补足</span><p id="draw-hint">重复转碎片，自选兑换缺卡。</p></div>
+      <button id="draw" class="primary" disabled>招募五张 <span>20 测试元 / 5 张</span></button>
+    </section>
+    <div class="notice-line"><p id="status" class="status" role="status" aria-live="polite">正在读取本地存档…</p><button id="notice-details" class="text-button" aria-label="查看完整状态说明">详情</button></div>
+    <footer><span id="save-mode">免费 Demo · 自动保存</span><a id="back-game" href="/" hidden>返回游戏</a><button id="quality-preview" class="text-button" disabled>品质预览</button><button id="reset" class="text-button" disabled>重置测试</button></footer>
   </main>
   <dialog id="reveal-dialog" class="reveal-stage" aria-labelledby="reveal-title" aria-describedby="reveal-note">
     <div class="reveal-aura" aria-hidden="true"></div>
     <header class="reveal-header"><span>三国 · 群英赴约</span><button id="skip-reveal" type="button">跳过动画</button></header>
     <div class="reveal-intro"><p class="eyebrow">RECRUITMENT</p><h2 id="reveal-title">墨起 · 群英将至</h2><p id="reveal-note" role="status" aria-live="polite">正在招募，请稍候…</p></div>
-    <div class="summon-sigil" aria-hidden="true"><span>将</span></div>
-    <div id="reveal-cards" class="reveal-cards" aria-label="逐张揭晓"></div>
-    <div id="quality-focus" class="quality-focus" hidden aria-label="高品质卡牌特写"></div>
+    <div class="reveal-board">
+      <div class="summon-sigil" aria-hidden="true"><span>将</span></div>
+      <div id="reveal-cards" class="reveal-cards" tabindex="0" aria-label="逐张揭晓"></div>
+      <div id="quality-focus" class="quality-focus" hidden aria-label="高品质卡牌特写"></div>
+    </div>
     <p class="reveal-footer">动画只展示已保存结果 · 跳过不会改变卡牌或碎片</p>
   </dialog>
-  <dialog id="detail"><button class="close" data-close="detail" aria-label="关闭详情">×</button><div id="detail-content"></div></dialog>
+  <dialog id="detail" class="card-detail" aria-labelledby="detail-title">
+    <header class="detail-toolbar"><span>卡牌详情</span><button class="close" data-close="detail" aria-label="关闭详情">×</button></header>
+    <div id="detail-content"></div>
+  </dialog>
+  <dialog id="notice-dialog"><button class="close" data-close="notice-dialog" aria-label="关闭状态说明">×</button><h2>招募与碎片记录</h2><p id="notice-content"></p></dialog>
   <dialog id="rules"><button class="close" data-close="rules" aria-label="关闭规则">×</button><h2>概率与规则</h2><div id="rules-content"></div></dialog>
-  <dialog id="reset-dialog"><h2>重新开始测试？</h2><p>仅清空此抽卡 Demo 的卡牌、碎片及模拟花费，恢复 500 测试元。不影响游戏账号、卡组或对局。</p><div class="dialog-actions"><button data-close="reset-dialog">取消</button><button id="confirm-reset" class="primary">确认重置</button></div></dialog>
+  <dialog id="exchange-dialog" aria-labelledby="exchange-dialog-title" aria-describedby="exchange-confirmation"><h2 id="exchange-dialog-title">确认兑换？</h2><p id="exchange-confirmation"></p><div class="dialog-actions"><button data-close="exchange-dialog">取消</button><button id="confirm-exchange" class="primary">确认兑换</button></div></dialog>
+  <dialog id="reset-dialog"><h2>重新开始本期测试？</h2><p id="reset-description">归档本轮记录并恢复测试额度，保留通用碎片。不影响游戏账号。</p><div class="dialog-actions"><button data-close="reset-dialog">取消</button><button id="confirm-reset" class="primary">确认重置</button></div></dialog>
 </body>
 </html>

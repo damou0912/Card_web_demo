@@ -151,7 +151,7 @@ namespace CardDemo
             safeRoot = Panel(canvasObject.transform, "Safe Area", Vector2.zero, Vector2.one, Background);
             var header = Panel(safeRoot, "Header", new Vector2(.01f, .905f), new Vector2(.99f, .99f), PanelColor);
             title = Label(header, "Title", "Unity Card Demo", 29, TextAnchor.MiddleLeft);
-            PositionedButton(header, "招募 Demo", new Vector2(.79f, .12f), new Vector2(.98f, .88f), OpenGachaDemo, Friendly);
+            PositionedButton(header, "群英招募", new Vector2(.79f, .12f), new Vector2(.98f, .88f), OpenGachaDemo, Friendly);
             var playerPanel = Panel(safeRoot, "Fixed Player Information", new Vector2(.01f, .40f), new Vector2(.20f, .89f), PanelColor);
             players = Label(playerPanel, "Players", "", 27, TextAnchor.UpperLeft);
             var help = Panel(safeRoot, "Help", new Vector2(.01f, .23f), new Vector2(.20f, .385f), PanelColor);
@@ -237,8 +237,13 @@ namespace CardDemo
         {
             if (config == null || demoCatalog == null) return;
             int seed = config.seed == 0 ? Environment.TickCount : config.seed;
+            var playerDeck = workshop == null
+                ? Enumerable.Range(0, config.deckSize).Select(i => demoCatalog.cards[i % demoCatalog.cards.Length]).ToArray()
+                : workshop.ResolveDeck(config.playerDeckId, config.deckSize);
+            try { GachaDemoPanel.ValidatePlayerDeck(playerDeck); }
+            catch (Exception error) { details.text = error.Message; return; }
             game = new GameEngine(config, demoCatalog.cards, seed,
-                workshop == null ? null : workshop.ResolveDeck(config.playerDeckId, config.deckSize),
+                playerDeck,
                 workshop == null ? null : workshop.ResolveDeck(config.aiDeckId, config.deckSize));
             selectedCell = selectedHand = -1; seenEvents = seenTurn = -1; confirmEnd = false;
             resultPanel.SetActive(false); logPanel.SetActive(false);

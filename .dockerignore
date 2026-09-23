@@ -1,0 +1,13 @@
+.git
+.env*
+.codex*
+node_modules
+game-data.json
+**/Artifacts
+**/bin
+**/obj
+**/Library
+**/Temp
+**/Logs
+**/*.log
+**/browser-profile.json

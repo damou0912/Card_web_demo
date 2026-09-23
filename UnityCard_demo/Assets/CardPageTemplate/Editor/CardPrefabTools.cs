@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using CardDemo.Core;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -61,6 +63,7 @@ namespace CardDemo.CardPage.Editor
     {
         private CardPageData source;
         private string message;
+        private string previewCardId = "01101";
         public override void OnInspectorGUI()
         {
             EditorGUILayout.HelpBox("这是单张卡牌预制体。双击 EditableCard.prefab，在 Hierarchy 选卡名、立绘或技能文字，使用 Rect 工具（T）调整。没有自动排版，也不会在 Play 时重建。", MessageType.Info);
@@ -68,6 +71,29 @@ namespace CardDemo.CardPage.Editor
             EditorGUILayout.Space();
             source = (CardPageData)EditorGUILayout.ObjectField("可选：填入现有卡牌内容", source, typeof(CardPageData), false);
             var view = (CardPrefabView)target;
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("按真实卡牌势力预览角标", EditorStyles.boldLabel);
+            previewCardId = EditorGUILayout.TextField("卡牌 ID", previewCardId);
+            using (new EditorGUI.DisabledScope(EditorUtility.IsPersistent(view)))
+            {
+                if (GUILayout.Button("从卡牌资料填入并预览角标"))
+                {
+                    try
+                    {
+                        var asset = Resources.Load<TextAsset>("Data/web-card-catalog");
+                        if (asset == null) throw new InvalidOperationException("正式卡牌资料文件缺失。");
+                        var card = JsonUtility.FromJson<CardCatalog>(asset.text).cards.FirstOrDefault(c => c.id == previewCardId);
+                        if (card == null) throw new InvalidOperationException("正式卡牌资料中找不到此 ID。");
+                        Undo.RegisterFullObjectHierarchyUndo(view.gameObject, "预览势力角标");
+                        view.ShowCard(card);
+                        MarkChanges(view);
+                        message = view.countryBadge != null && view.countryBadge.sprite != null
+                            ? "已按卡牌的实际势力显示角标；位置和大小未改变。"
+                            : "已填入卡牌，角标暂未加载，回退势力文字。请检查配表并导出 Lua。";
+                    }
+                    catch (Exception error) { message = error.Message; }
+                }
+            }
             using (new EditorGUI.DisabledScope(EditorUtility.IsPersistent(view) || view.artwork == null || view.artworkPlaceholder == null))
             {
                 if (GUILayout.Button("换图后同步显示立绘 / 占位文字"))

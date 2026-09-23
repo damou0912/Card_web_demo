@@ -17,7 +17,7 @@ const prefab = read(`${base}/Prefabs/EditableCard.prefab`);
 const blocks = [...prefab.matchAll(/^--- !u!(\d+) &(\d+)\r?\n([\s\S]*?)(?=^--- !u!|$(?![\s\S]))/gm)];
 const byId = new Map(blocks.map(m => [m[2], { type: Number(m[1]), body: m[3] }]));
 assert.equal(byId.size, blocks.length, 'unique local object IDs');
-assert.equal(blocks.filter(m => m[1] === '1').length, 15, '15 real editable child/root objects');
+assert.equal(blocks.filter(m => m[1] === '1').length, 16, '16 real editable child/root objects, including country badge');
 for (const match of prefab.matchAll(/\{fileID: (\d+)\}/g))
   assert.ok(match[1] === '0' || byId.has(match[1]), `unresolved local reference: ${match[1]}`);
 for (const object of byId.values()) {
@@ -43,7 +43,7 @@ for (const match of prefab.matchAll(/m_Children:\r?\n((?:  - \{fileID: \d+\}\r?\
   for (const child of match[1].matchAll(/fileID: (\d+)/g)) assert.equal(byId.get(child[1])?.type, 224);
 const binding = [...byId.values()].find(o => o.type === 114 && o.body.includes(`guid: ${viewGuid}`));
 assert.ok(binding);
-for (const name of ['cardName', 'cardId', 'faction', 'rarity', 'power', 'artwork', 'artworkPlaceholder', 'skillTitle', 'skillDescription', 'extensionSlot']) {
+for (const name of ['cardName', 'cardId', 'faction', 'rarity', 'power', 'artwork', 'countryBadge', 'artworkPlaceholder', 'skillTitle', 'skillDescription', 'extensionSlot']) {
   const ref = binding.body.match(new RegExp(`^  ${name}: \\{fileID: (\\d+)\\}`, 'm'))?.[1];
   assert.equal(byId.get(ref)?.type, name === 'extensionSlot' ? 224 : 114, `bound ${name}`);
 }
@@ -53,4 +53,6 @@ assert.doesNotMatch(runtime, /\.(anchorMin|anchorMax|anchoredPosition|sizeDelta|
 const editor = read(`${base}/Editor/CardPrefabTools.cs`);
 assert.match(editor, /PrefabUtility\.InstantiatePrefab/);
 assert.match(editor, /AssetDatabase\.GenerateUniqueAssetPath/);
-console.log('PASS card prefab: 15 editable objects, script/font references, all content bindings, no automatic layout or style overwrite.');
+assert.match(byId.get('1153').body, /m_PreserveAspect: 1/);
+assert.match(byId.get('1153').body, /m_RaycastTarget: 0/);
+console.log('PASS card prefab: 16 editable objects, country badge binding, script/font references, no automatic layout or style overwrite.');

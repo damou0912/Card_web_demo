@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "poolId": "shu-demo-v1",
+  "revision": 15,
+  "bundles": 15,
+  "owned": [
+    { "cardId": "01121", "shards": 5 },
+    { "cardId": "01122", "shards": 5 },
+    { "cardId": "01123", "shards": 5 },
+    { "cardId": "01124", "shards": 5 },
+    { "cardId": "01429", "shards": 0 },
+    { "cardId": "01225", "shards": 0 },
+    { "cardId": "01226", "shards": 0 },
+    { "cardId": "01328", "shards": 0 }
+  ],
+  "lastRewards": [
+    { "cardId": "01429", "isNew": true, "shards": 0, "guarantee": false },
+    { "cardId": "01121", "isNew": false, "shards": 5, "guarantee": false },
+    { "cardId": "01122", "isNew": false, "shards": 5, "guarantee": false },
+    { "cardId": "01123", "isNew": false, "shards": 5, "guarantee": false },
+    { "cardId": "01124", "isNew": false, "shards": 5, "guarantee": false },
+    { "cardId": "01225", "isNew": true, "shards": 0, "guarantee": true },
+    { "cardId": "01226", "isNew": true, "shards": 0, "guarantee": true },
+    { "cardId": "01328", "isNew": true, "shards": 0, "guarantee": true }
+  ]
+}

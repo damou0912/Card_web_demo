@@ -16,3 +16,4 @@
 *.sh text eol=lf
 *.otf binary
 *.ttf binary
+*.xlsx binary

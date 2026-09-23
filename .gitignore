@@ -9,3 +9,5 @@ outputs/
 .tmp-*/
 .codex_tmp/
 card-game-web-files.zip
+__pycache__/
+*.py[cod]

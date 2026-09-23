@@ -95,6 +95,21 @@ namespace CardDemo.CardPage.Tests
         }
 
         [Test]
+        public void PageBadgeFollowsFactionAndRestoresFallbackOnUnknownCard()
+        {
+            view = CardPageFactory.Create(data);
+            var catalog = JsonUtility.FromJson<CardCatalog>(Resources.Load<TextAsset>("Data/web-card-catalog").text);
+            var card = Array.Find(catalog.cards, c => c.camp == "三国~吴");
+            view.ShowCard(card);
+            Assert.That(view.countryBadge.sprite, Is.EqualTo(Resources.Load<Sprite>("UI/FactionBadges/sanguo_wu")));
+            Assert.That(view.countryBadge.enabled, Is.True);
+            Assert.That(view.faction.enabled, Is.False);
+            view.Bind(data);
+            Assert.That(view.countryBadge.sprite, Is.Null);
+            Assert.That(view.faction.enabled, Is.True);
+        }
+
+        [Test]
         public void InvalidConfigurationIsRejectedBeforeChangingView()
         {
             view = CardPageFactory.Create(data); string originalName = view.cardName.text;

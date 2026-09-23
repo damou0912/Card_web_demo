@@ -36,6 +36,7 @@ namespace CardDemo
         private DateTime deadline;
         private float nextAiTime;
         private bool confirmEnd;
+        private bool gachaOpen;
         private int screenWidth, screenHeight;
         private Rect lastSafeArea;
 
@@ -150,6 +151,7 @@ namespace CardDemo
             safeRoot = Panel(canvasObject.transform, "Safe Area", Vector2.zero, Vector2.one, Background);
             var header = Panel(safeRoot, "Header", new Vector2(.01f, .905f), new Vector2(.99f, .99f), PanelColor);
             title = Label(header, "Title", "Unity Card Demo", 29, TextAnchor.MiddleLeft);
+            PositionedButton(header, "招募 Demo", new Vector2(.79f, .12f), new Vector2(.98f, .88f), OpenGachaDemo, Friendly);
             var playerPanel = Panel(safeRoot, "Fixed Player Information", new Vector2(.01f, .40f), new Vector2(.20f, .89f), PanelColor);
             players = Label(playerPanel, "Players", "", 27, TextAnchor.UpperLeft);
             var help = Panel(safeRoot, "Help", new Vector2(.01f, .23f), new Vector2(.20f, .385f), PanelColor);
@@ -292,7 +294,7 @@ namespace CardDemo
                 float cell = Mathf.Max(1, (Mathf.Min(boardRoot.rect.width, boardRoot.rect.height) - (config.boardSize - 1) * 8) / config.boardSize);
                 grid.cellSize = new Vector2(cell, cell);
             }
-            if (game == null || game.State.Finished) return;
+            if (gachaOpen || game == null || game.State.Finished) return;
             if (DateTime.UtcNow >= deadline)
             {
                 game.EndTurn(game.State.ActivePlayer, "回合时间耗尽");
@@ -304,6 +306,20 @@ namespace CardDemo
             {
                 game.StepAi(); nextAiTime = Time.unscaledTime + config.aiDelaySeconds; Refresh();
             }
+        }
+
+        private void OpenGachaDemo()
+        {
+            if (gachaOpen || FindObjectOfType<GachaDemoPanel>() != null) return;
+            gachaOpen = true;
+            DateTime opened = DateTime.UtcNow;
+            GachaDemoPanel.Open(() => {
+                if (this == null) return;
+                // This is an offline preview: preserve the current battle timer while its UI is covered.
+                deadline = deadline.Add(DateTime.UtcNow - opened);
+                nextAiTime = Time.unscaledTime + (config == null ? .65f : config.aiDelaySeconds);
+                gachaOpen = false;
+            });
         }
 
         private void ApplySafeArea()

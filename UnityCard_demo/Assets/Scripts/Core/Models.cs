@@ -78,6 +78,8 @@ namespace CardDemo.Core
     {
         public int schemaVersion;
         public string sourceSchema;
+        public string usage;
+        public string[] defaultCardIds;
         public CardDefinition[] cards;
     }
 

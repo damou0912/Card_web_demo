@@ -5,6 +5,10 @@
 **版本：Unity 2022.3.62f3（revision `96770f904ca7`）。当前是基础 PVE 演示，不是完整网页版移植，也不是可直接发布的微信小游戏。**
 
 新增卡牌制作工具：**Card Demo → Tools → Card And Skill Workshop / Battle Lab**。
+
+新增免费测试额度的 **抽卡 Demo**：无需 Unity 可双击 `Start-Gacha-Demo.cmd`，浏览器打开 `http://127.0.0.1:5186/`；Unity 菜单 **Card Demo → Tools → Gacha Demo → Open Demo Scene**，或 Main 顶部“招募 Demo”。包含五连抽、重复碎片、图鉴、保底及本地存档，不接真实支付或正式库存。详见 [抽卡说明](Documentation/GACHA_DEMO.md)。
+
+正式卡牌配置位于 `ConfigTables/`：**Card Basics.xlsx** 集中属性、技能文字和默认卡组顺序，**Faction Icons.xlsx** 配置势力图片；每份文件只有一个同名工作表。保存后双击 `Export-CardPresentation.cmd`（.NET 8 SDK），或使用 **Card Demo → Tools → Presentation → Export Tables to Lua**，生成 2 份 Lua 和现有界面读取的 JSON，不再生成 CSV。按实际势力加载角标，魏蓝、蜀橙、吴绿；详见 [Excel 使用步骤](ConfigTables/README.md) 和 [角标配置说明](Documentation/FACTION_BADGE_PIPELINE.md)。Main 的按钮式演示手牌和正式技能执行未替换。
 包括卡牌编辑、技能组合、测试卡组、战斗实验室，详见 [工具使用指南与示例](Documentation/AUTHORING_TOOLS.md)。
 
 新增独立的卡牌页面制作区：[`Assets/CardPageTemplate`](Assets/CardPageTemplate/README.md)。
@@ -108,7 +112,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\Tools\Run-Unity.ps1 -Unity
 ## 维护与移植边界
 
 - 本目录可以单独复制或归档，运行不读取 `../` 下任何网页文件。
-- 若以后更新正式卡牌资料，可在 Node.js 环境运行 `node Tools/export-web-cards.mjs /path/to/web-repo`；这是可选的单向数据生成，不会执行或修改网页源码。
+- 若以后同步网页正式卡牌资料，可运行 `node Tools/export-web-cards.mjs /path/to/web-repo`；只生成 `Artifacts/Imports/web-card-catalog.import.json` 对照稿。确认后更新 Excel 再导出，不会直接覆盖游戏 JSON 或修改网页源码。
 - `.meta` 文件必须随资源提交；不要提交 `Library`、`Temp`、`Logs`、`UserSettings`、`Builds` 或本机凭据。
 - GitHub 的 `Unity Card Demo checks` 工作流只执行静态完整性检查和纯 C# 测试，**不代表 Unity 编辑器已编译或真机验证**。
 - 未来完整移植需要明确正式规则来源、移植各势力技能和精英 AI、组卡／挑战／存档，接入权威服务器、微信身份及重连；不在本起步工程中虚构这些接口已经完成。

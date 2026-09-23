@@ -84,6 +84,34 @@ namespace CardDemo.CardPage.Tests
         }
 
         [Test]
+        public void BadgeUsesActualFactionAndClearsStaleImagesWithoutMovingSlot()
+        {
+            Assert.That(view.countryBadge, Is.Not.Null);
+            Assert.That(Resources.Load<TextAsset>(CardPresentationTables.BadgeResource), Is.Not.Null, "Lua importer must supply TextAsset");
+            var catalog = JsonUtility.FromJson<CardCatalog>(Resources.Load<TextAsset>("Data/web-card-catalog").text);
+            var card = catalog.cards.First(c => c.camp == "三国~蜀");
+            view.countryBadge.rectTransform.anchoredPosition = new Vector2(31, -21);
+            view.countryBadge.rectTransform.sizeDelta = new Vector2(120, 100);
+            view.ShowCard(card);
+            Assert.That(view.countryBadge.sprite, Is.EqualTo(Resources.Load<Sprite>("UI/FactionBadges/sanguo_shu")));
+            Assert.That(view.countryBadge.enabled, Is.True);
+            Assert.That(view.faction.enabled, Is.False);
+            Assert.That(card.camp, Is.EqualTo("三国~蜀"));
+            Assert.That(view.countryBadge.rectTransform.anchoredPosition, Is.EqualTo(new Vector2(31, -21)));
+            Assert.That(view.countryBadge.rectTransform.sizeDelta, Is.EqualTo(new Vector2(120, 100)));
+            var mismatched = new CardDefinition { id = card.id, name = card.name, camp = "三国~魏", rarity = card.rarity, baseAttack = 1 };
+            view.ShowCard(mismatched);
+            Assert.That(view.countryBadge.sprite, Is.Null);
+            Assert.That(view.countryBadge.gameObject.activeSelf, Is.False);
+            Assert.That(view.faction.enabled, Is.True);
+            view.ShowCard(card);
+            Assert.That(view.countryBadge.gameObject.activeSelf, Is.True);
+            view.ShowContent(data);
+            Assert.That(view.countryBadge.sprite, Is.Null);
+            Assert.That(view.faction.enabled, Is.True);
+        }
+
+        [Test]
         public void InvalidDataOrMissingReferencesAreRejectedBeforeChangingContent()
         {
             string before = view.cardName.text; data.cardName = "";

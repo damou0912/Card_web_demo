@@ -32,3 +32,11 @@ jobs:
         run: dotnet run --project UnityCard_demo/Tools/CoreSmokeTests/CoreSmokeTests.csproj --configuration Release
       - name: Parse all editor and runtime sources (syntax only)
         run: dotnet run --project UnityCard_demo/Tools/SourceChecks/SourceChecks.csproj --configuration Release
+      - name: Check Card Basics and Faction Icons Excel sources and Lua/JSON outputs
+        run: dotnet run --project UnityCard_demo/Tools/PresentationConfig/PresentationConfig.csproj --configuration Release -- check
+      - name: Verify offline gacha demo probabilities and guarantees
+        run: dotnet run --project UnityCard_demo/Tools/GachaDemo/GachaDemo.csproj --configuration Release -- check
+      - name: Verify local gacha persistence and duplicate-request protection
+        run: node UnityCard_demo/Tools/GachaDemo/integration.test.mjs
+      - name: Verify cosmetic gacha reveal, skip and replay
+        run: node --test UnityCard_demo/Tools/GachaDemo/reveal.test.cjs

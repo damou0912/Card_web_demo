@@ -22,6 +22,7 @@ namespace CardDemo.CardPage
         [HideInInspector] public RectTransform safeArea;
         [HideInInspector] public LayoutElement widthElement, artworkElement;
         [HideInInspector] public Image background, surface, artBackground, accentLine, artwork;
+        [HideInInspector] public Image countryBadge;
         [HideInInspector] public Text pageTitle, pageSubtitle, cardName, cardId, faction, rarity, power;
         [HideInInspector] public Text artPlaceholder, skillTitle, skillDescription, extraTitle, extraBody, footer, actionText, feedback;
         [HideInInspector] public Button actionButton;
@@ -66,6 +67,7 @@ namespace CardDemo.CardPage
             pageTitle.text = data.pageTitle; pageSubtitle.text = data.pageSubtitle;
             cardName.text = data.cardName; cardId.text = "ID  " + data.cardId;
             faction.text = "势力  " + data.faction; rarity.text = "品质  " + data.rarity; power.text = "战力  " + data.power;
+            CardBadgeResources.Bind(countryBadge, faction, data.cardId, data.faction);
             skillTitle.text = data.skillTitle; skillDescription.text = data.skillDescription;
             artwork.sprite = data.artwork; artwork.enabled = data.artwork != null;
             artPlaceholder.text = data.artworkPlaceholder;
@@ -99,6 +101,7 @@ namespace CardDemo.CardPage
             displayedCardId = definition.id;
             cardName.text = definition.name; cardId.text = "ID  " + definition.id;
             faction.text = "势力  " + definition.camp; rarity.text = "品质  " + definition.rarity; power.text = "战力  " + definition.baseAttack;
+            CardBadgeResources.Bind(countryBadge, faction, definition.id, definition.camp);
             skillTitle.text = definition.skill;
             skillDescription.text = definition.abilities != null && definition.abilities.Length > 0 ? SkillText.Describe(definition) : definition.effect;
             // A missing portrait must not display another sample card's artwork or custom metadata.

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "poolId": "shu-demo-v1",
+  "title": "蜀汉 · 群英招募",
+  "bundlePrice": 20,
+  "bundleSize": 5,
+  "testCredit": 500,
+  "targetAverageCost": 350,
+  "groups": [
+    { "rarity": "普通", "weight": 7000, "duplicateShards": 5, "cardIds": ["01121", "01122", "01123", "01124"] },
+    { "rarity": "稀有", "weight": 2000, "duplicateShards": 15, "cardIds": ["01225", "01226", "01227"] },
+    { "rarity": "史诗", "weight": 400, "duplicateShards": 40, "cardIds": ["01328"] },
+    { "rarity": "传说", "weight": 82, "duplicateShards": 100, "cardIds": ["01429"] },
+    { "rarity": "特殊", "weight": 518, "duplicateShards": 50, "cardIds": ["01530"] }
+  ],
+  "milestones": [
+    { "spent": 300, "uniqueCards": 8 },
+    { "spent": 400, "uniqueCards": 9 },
+    { "spent": 500, "uniqueCards": 10 }
+  ]
+}

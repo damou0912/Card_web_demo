@@ -56,6 +56,13 @@ namespace CardDemo.CardPage
             statsLayout.spacing = 10; statsLayout.childControlWidth = true; statsLayout.childControlHeight = true;
             statsLayout.childForceExpandWidth = true; statsLayout.childForceExpandHeight = false;
             view.faction = Stat("Faction", stats, font); view.rarity = Stat("Rarity", stats, font); view.power = Stat("Power", stats, font);
+            var badge = Rect("CountryBadge", view.faction.transform);
+            badge.anchorMin = new Vector2(0, 1); badge.anchorMax = new Vector2(0, 1);
+            badge.pivot = new Vector2(0, 1); badge.anchoredPosition = Vector2.zero;
+            badge.sizeDelta = new Vector2(76, 63);
+            view.countryBadge = badge.gameObject.AddComponent<Image>();
+            view.countryBadge.preserveAspect = true; view.countryBadge.raycastTarget = false;
+            var badgeElement = view.faction.GetComponent<LayoutElement>(); badgeElement.minHeight = 66;
 
             var art = Rect("ArtworkArea", card); view.artBackground = art.gameObject.AddComponent<Image>();
             view.artworkElement = art.gameObject.AddComponent<LayoutElement>(); view.artworkElement.preferredHeight = data.artworkHeight;

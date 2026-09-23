@@ -22,6 +22,7 @@ EditableCard                 420 × 600，单张卡牌根节点
   ArtworkArea                立绘区域，整体移动和调整大小
     Artwork                  替换 Sprite 的位置
     ArtworkPlaceholder       没有图片时的提示
+    CountryBadge             国度角标，由实际势力配表加载，可拖动位置和尺寸
   SkillTitle                 技能名称
   SkillDescription           技能描述
   ExtensionSlot              空的自定义扩展区
@@ -31,6 +32,10 @@ EditableCard                 420 × 600，单张卡牌根节点
 `Artwork` 和占位文字随立绘区伸缩；其他内容可自由摆放。长技能说明默认不自动缩小字号，放不下时请增大说明区域或调整字体。卡牌根节点改宽高后，可自行调整内部排版，没有自动避让。
 
 ## 换立绘
+
+国度角标由实际势力决定：在 `ConfigTables/Card Basics.xlsx` 只填写一次 `camp`，由 `ConfigTables/Faction Icons.xlsx` 的该势力行提供图片路径。修改后统一导出 Lua 和 JSON。根节点 Inspector 提供“按真实卡牌势力预览角标”，输入 `01101` 可预览蜀角标；具体说明见 `Documentation/FACTION_BADGE_PIPELINE.md`。
+
+`CountryBadge` 默认隐藏（示例卡未配置真实势力），绑定真实卡后按表显示。运行中不要直接给此 Image 指定另一国的图来替代势力数据。
 
 将图片放进 `Assets/CardPageTemplate/Artwork`，Texture Type 设为 **Sprite (2D and UI)**，Apply。
 把 Sprite 拖到 `Artwork` 的 **Image → Source Image**。选择根节点，点 Inspector 的 **换图后同步显示立绘 / 占位文字**。

@@ -1,4 +1,4 @@
-// Optional one-way import. The committed JSON makes the Unity project self-contained.
+// Optional reference snapshot only. Excel is authoritative; never overwrite generated game data.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,8 +24,9 @@ const cards = [...defaults, ...replacement].map(card => {
     baseAttack: card.baseAttack, skill: card.skill, effect: card.effect };
 });
 const schema = fs.readFileSync(path.join(source, 'card-info.js'), 'utf8').match(/CARD_INFO_SCHEMA_VERSION\s*=\s*"([^"]+)"/);
-const target = path.join(project, 'Assets/Resources/Data/web-card-catalog.json');
+const target = path.join(project, 'Artifacts/Imports/web-card-catalog.import.json');
+fs.mkdirSync(path.dirname(target), { recursive: true });
 fs.writeFileSync(target, JSON.stringify({ schemaVersion: 1, sourceSchema: schema?.[1] || 'unknown',
   usage: 'Reference only. Production skills are not implemented in this demo.',
   defaultCardIds: defaults.map(c => c.id), cards }, null, 2) + '\n');
-console.log(`Exported ${defaults.length} default + ${replacement.length} replacement cards to ${target}`);
+console.log(`Exported ${defaults.length} default + ${replacement.length} replacement cards to ${target}. Review and copy changes into the Excel sources; game outputs were not changed.`);

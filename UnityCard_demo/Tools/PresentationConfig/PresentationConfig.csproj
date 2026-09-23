@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/Editor/PresentationWorkbook.cs" />
+    <Compile Include="../../Assets/Editor/CardContentCompiler.cs" />
+    <Compile Include="../../Assets/Editor/CardConfigExportPlan.cs" />
+    <Compile Include="../../Assets/Scripts/Core/*.cs" />
+    <Compile Include="../../Assets/Tests/Shared/PresentationChecks.cs" />
+  </ItemGroup>
+</Project>

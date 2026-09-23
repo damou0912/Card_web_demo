@@ -85,7 +85,7 @@ Unity 顶部菜单：**Card Demo → Tools → Card And Skill Workshop**，或 *
 
 ## 数据保护
 
-- 仅修改 `Assets/Resources/Data/workshop-library.json`；90 张正式参考卡表只读。
+- 本工坊只修改 `Assets/Resources/Data/workshop-library.json`；对正式参考卡只读。正式卡属性和技能文案在 `ConfigTables/Card Basics.xlsx` 的“Card Basics”页编辑后统一导出，技能执行仍需单独制作。
 - 从正式表复制时，只复制基础资料，新 ID、新空技能；原技能文字不会被误当成已实现技能。
 - 校验重复 ID、卡组缺失引用、未知触发／效果、数量和数值范围。被卡组引用的卡禁止直接删除。
 - 保存前检测磁盘是否被其他窗口／程序修改；发生冲突时拒绝覆盖。先导出草稿，再重新读取合并。

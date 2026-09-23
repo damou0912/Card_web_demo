@@ -11,6 +11,8 @@ namespace CardDemo.CardPage
     {
         public Text cardName, cardId, faction, rarity, power;
         public Image artwork;
+        [Tooltip("按卡牌实际势力及效果表现表加载对应国度角标；只替换图片，不改手动排版。")]
+        public Image countryBadge;
         public Text artworkPlaceholder, skillTitle, skillDescription;
         public RectTransform extensionSlot;
         [SerializeField] private string displayedCardId = "preview_001";
@@ -23,6 +25,8 @@ namespace CardDemo.CardPage
                 throw new InvalidOperationException("卡牌预制体有引用未绑定，请检查 CardPrefabView。");
             foreach (var part in new Component[] { cardName, cardId, faction, rarity, power, artwork, artworkPlaceholder, skillTitle, skillDescription, extensionSlot })
                 if (!part.transform.IsChildOf(transform)) throw new InvalidOperationException("卡牌展示组件必须位于当前预制体内部。");
+            if (countryBadge != null && !countryBadge.transform.IsChildOf(transform))
+                throw new InvalidOperationException("国度角标必须位于当前预制体内部。");
         }
 
         // Explicit opt-in authoring helper. It never runs automatically when opening or playing.
@@ -52,6 +56,7 @@ namespace CardDemo.CardPage
             displayedCardId = id;
             cardName.text = name; cardId.text = "ID  " + id;
             faction.text = camp; rarity.text = quality; power.text = attack.ToString();
+            CardBadgeResources.Bind(countryBadge, faction, id, camp);
             skillTitle.text = skill; skillDescription.text = description;
             artwork.sprite = portrait; artwork.enabled = portrait != null;
             artworkPlaceholder.text = placeholder; artworkPlaceholder.gameObject.SetActive(portrait == null);

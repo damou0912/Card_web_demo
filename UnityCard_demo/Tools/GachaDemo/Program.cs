@@ -1,0 +1,103 @@
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CardDemo.Core;
+using CardDemo.Tests;
+
+internal static class Program
+{
+    private static readonly JsonSerializerOptions Json = new() { IncludeFields = true };
+    private static readonly string Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+    private static async Task<int> Main(string[] args)
+    {
+        try
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName, "Assets/Resources/Config/gacha-demo.json"))) directory = directory.Parent;
+            if (directory == null) throw new InvalidOperationException("Cannot locate Unity project.");
+            string root = directory.FullName;
+            var config = JsonSerializer.Deserialize<GachaConfig>(File.ReadAllText(Path.Combine(root, "Assets/Resources/Config/gacha-demo.json")), Json);
+            var catalog = JsonSerializer.Deserialize<CardCatalog>(File.ReadAllText(Path.Combine(root, "Assets/Resources/Data/web-card-catalog.json")), Json);
+            var engine = new GachaDemo(config, catalog.cards);
+            if (args.Length == 1 && args[0] == "check") { GachaChecks.RunAll(config, catalog.cards, Console.WriteLine, 100000); return 0; }
+            if (args.Length > 0 && args[0] != "serve") throw new ArgumentException("Usage: check | serve [port] [save-path]");
+            int port = args.Length > 1 ? int.Parse(args[1]) : 5186;
+            if (port < 1024 || port > 65535) throw new ArgumentException("Invalid local port.");
+            string origin = "http://127.0.0.1:" + port;
+            string save = args.Length > 2 ? Path.GetFullPath(args[2]) : Path.Combine(root, "Artifacts/GachaDemo/browser-save.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(save));
+            using var saveLock = new FileStream(save + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            GachaState state = engine.NewState(); string loadError = null;
+            if (File.Exists(save))
+            {
+                try { state = JsonSerializer.Deserialize<GachaState>(File.ReadAllText(save), Json); engine.ValidateState(state); }
+                catch (Exception error) when (error is JsonException || error is ArgumentException) { state = engine.NewState(); loadError = "存档损坏或奖池已变更。旧文件未覆盖，请确认重置此 Demo。"; }
+            }
+            using var listener = new HttpListener(); listener.Prefixes.Add(origin + "/"); listener.Start();
+            Console.WriteLine("Gacha Demo: " + origin + "/ — local test credit only, no payments. Ctrl+C to stop.");
+            var ids = config.groups.SelectMany(g => g.cardIds).ToHashSet();
+            object Snapshot() => new { config, cards = catalog.cards.Where(c => ids.Contains(c.id)).Select(c => new {
+                c.id, c.name, c.camp, c.rarity, c.baseAttack, c.skill, c.effect }), state, token = Token, loadError };
+            // Serialized requests + expected revision stop double-submission and stale tabs.
+            while (listener.IsListening)
+            {
+                var context = await listener.GetContextAsync();
+                try
+                {
+                    var request = context.Request; var response = context.Response;
+                    response.Headers["Cache-Control"] = "no-store";
+                    response.Headers["X-Content-Type-Options"] = "nosniff";
+                    response.Headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+                    if (request.Headers["Host"] != "127.0.0.1:" + port) { await Reply(response, 403, new { error = "Local host only." }); continue; }
+                    string path = request.Url.AbsolutePath;
+                    if (request.HttpMethod == "GET" && path == "/api/session") { await Reply(response, 200, Snapshot()); continue; }
+                    if (request.HttpMethod == "POST" && (path == "/api/draw" || path == "/api/reset"))
+                    {
+                        if (request.Headers["Origin"] != origin || request.Headers["X-Demo-Token"] != Token
+                            || request.ContentLength64 < 0 || request.ContentLength64 > 2048 || request.ContentType != "application/json")
+                        { await Reply(response, 403, new { error = "请从本地 Demo 页面操作。" }); continue; }
+                        using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
+                        using var body = JsonDocument.Parse(await reader.ReadToEndAsync());
+                        if (!body.RootElement.TryGetProperty("revision", out var revision) || !revision.TryGetInt32(out int expected) || expected != state.revision)
+                        { await Reply(response, 409, new { error = "另一个页面已更新存档，请刷新后重试。" }); continue; }
+                        if (path == "/api/draw" && loadError != null) { await Reply(response, 409, new { error = loadError }); continue; }
+                        if (path == "/api/reset" && (!body.RootElement.TryGetProperty("confirm", out var confirm) || confirm.ValueKind != JsonValueKind.True))
+                        { await Reply(response, 400, new { error = "请确认仅重置此 Demo。" }); continue; }
+                        var next = path == "/api/draw" ? engine.Draw(state, RandomNumberGenerator.GetInt32) : engine.NewState(checked(state.revision + 1));
+                        if (loadError != null && File.Exists(save)) File.Copy(save, save + ".invalid-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff"));
+                        GachaSaveFile.Write(save, JsonSerializer.Serialize(next, Json));
+                        state = next; loadError = null;
+                        await Reply(response, 200, Snapshot()); continue;
+                    }
+                    var files = new Dictionary<string, (string name, string mime)> {
+                        ["/"] = ("index.html", "text/html; charset=utf-8"),
+                        ["/app.js"] = ("app.js", "text/javascript; charset=utf-8"),
+                        ["/reveal.js"] = ("reveal.js", "text/javascript; charset=utf-8"),
+                        ["/style.css"] = ("style.css", "text/css; charset=utf-8") };
+                    if (request.HttpMethod == "GET" && files.TryGetValue(path, out var file))
+                    {
+                        byte[] bytes = await File.ReadAllBytesAsync(Path.Combine(root, "Tools/GachaDemo/wwwroot", file.name));
+                        response.ContentType = file.mime; response.ContentLength64 = bytes.Length;
+                        await response.OutputStream.WriteAsync(bytes); response.Close(); continue;
+                    }
+                    await Reply(response, 404, new { error = "Not found." });
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine(error.Message);
+                    try { await Reply(context.Response, error is IOException ? 500 : 400, new { error = error is IOException ? "存档写入失败，未扣除测试额度。请检查文件权限。" : error.Message }); }
+                    catch (Exception) { context.Response.Abort(); }
+                }
+            }
+            return 0;
+        }
+        catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
+    }
+    private static async Task Reply(HttpListenerResponse response, int code, object value)
+    {
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(value, Json);
+        response.StatusCode = code; response.ContentType = "application/json; charset=utf-8"; response.ContentLength64 = bytes.Length;
+        await response.OutputStream.WriteAsync(bytes); response.Close();
+    }
+}

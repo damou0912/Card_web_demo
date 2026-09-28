@@ -6,7 +6,10 @@
   "main": "railway-server.js",
   "scripts": {
     "start": "node railway-server.js",
-    "generate:card-info": "node scripts/generate-card-info.js"
+    "generate:card-info": "node scripts/generate-card-info.js",
+    "workshop": "node card-workshop/server.cjs",
+    "generate:workshop-presets": "node card-workshop/build-presets.cjs",
+    "test:workshop": "node card-workshop/test.cjs"
   },
   "engines": {
     "node": ">=18"

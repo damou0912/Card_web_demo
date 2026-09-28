@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>卡牌工坊 · 技能流程编辑器</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./model.js" defer></script>
+  <script src="./presets.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">策</span><div><h1>卡牌工坊 <span> / 技能流程</span></h1><p>把你的想法，连成一张卡牌。</p></div></div>
+    <div class="header-actions"><span id="save-state" role="status">本地草稿</span><button id="help-button">使用说明</button><button id="import-button">导入 JSON</button><button id="save-project">保存工程</button><button id="export-card">导出当前卡</button><button id="export-library" class="primary">导出 Unity 整库 ↗</button></div>
+    <input type="file" id="import-file" accept=".json,application/json" hidden>
+  </header>
+  <div class="workspace">
+    <aside class="library-panel panel" aria-label="卡牌资料和节点库">
+      <div class="section-heading"><h2>卡牌资料</h2><button id="new-card" class="small">＋ 新卡</button></div>
+      <div id="catalog-summary" class="catalog-summary"></div>
+      <label class="field">搜索卡牌<input id="card-search" type="search" placeholder="卡名 / 原卡 ID / 技能名"></label>
+      <label class="field">势力筛选<select id="camp-filter"><option value="">全部势力</option><option value="魏">三国-魏</option><option value="蜀">三国-蜀</option><option value="吴">三国-吴</option><option value="custom">自制 / 其他</option></select></label>
+      <label class="field">制作库<select id="card-select"></select></label>
+      <p id="filter-count" class="field-hint"></p>
+      <button id="restore-presets" class="small">补齐缺失预存卡</button>
+      <div id="source-info" class="source-info" hidden></div>
+      <div class="paired-actions"><button id="duplicate-card" class="small">复制卡牌</button><button id="delete-card" class="small danger">删除卡牌</button></div>
+      <form id="card-form" autocomplete="off">
+        <label class="field">名称<input id="card-name" name="name" maxlength="80" required></label>
+        <label class="field">配置 ID<input id="card-id" name="id" maxlength="100" spellcheck="false" required><span class="field-hint">workshop_ 前缀；修改时同步更新测试卡组引用</span></label>
+        <div class="field-row"><label class="field">势力<input id="card-camp" name="camp" list="camp-options" maxlength="40" required><datalist id="camp-options"><option value="魏"><option value="蜀"><option value="吴"><option value="群"></datalist></label><label class="field">品质<select id="card-rarity" name="rarity"></select></label></div>
+        <label class="field">基础战力<input id="card-power" name="baseAttack" type="number" min="0" max="99" step="1" required></label>
+      </form>
+      <section class="node-library"><div class="section-heading"><h2>效果节点</h2><span class="muted">点击添加</span></div><div id="node-palette"></div><p class="field-hint">每个技能最多 8 个效果。目标与持续时间在节点参数中配置。</p></section>
+      <div class="scope-note"><span class="status-dot"></span>独立制作环境<p>只保存到当前浏览器，不修改线上卡牌、账号或存档。</p></div>
+    </aside>
+    <main class="canvas-panel panel">
+      <div class="skill-toolbar"><div id="skill-tabs" role="tablist" aria-label="卡牌技能"></div><button id="add-skill" class="small">＋ 技能</button></div>
+      <div class="canvas-toolbar"><div class="tool-group"><button id="undo" title="Ctrl / Cmd + Z" aria-label="撤销">↶</button><button id="redo" title="Ctrl / Cmd + Shift + Z" aria-label="重做">↷</button><span class="separator"></span><button id="arrange">整理连线</button><button id="fit">适应画布</button></div><div class="tool-group"><button id="zoom-out" aria-label="缩小">−</button><output id="zoom-label">100%</output><button id="zoom-in" aria-label="放大">＋</button></div></div>
+      <div id="viewport" aria-label="技能流程画布：拖动节点标题移动；点击或拖动出口连接入口；拖动空白处平移">
+        <div id="stage"><svg id="edges" aria-label="节点连接" xmlns="http://www.w3.org/2000/svg"></svg><div id="nodes"></div></div>
+        <div id="empty-graph" hidden>这张卡还没有技能。<br>点击「＋ 技能」开始制作。</div>
+        <div class="canvas-caption">拖动标题移动 · 空白处平移 · 出口 → 入口连线</div>
+      </div>
+      <div class="validation-bar"><span id="validation" role="status"></span><span id="node-count"></span></div>
+      <section class="preview-panel" aria-label="流程预演">
+        <div class="section-heading"><h2>流程预演 <span class="muted">仅检查执行顺序，不结算战斗</span></h2><button id="toggle-preview" aria-expanded="true">收起</button></div>
+        <div id="preview-content"><div class="preview-controls"><label>我方手牌<input id="sim-hand" type="number" min="0" max="100" value="3"></label><label>我方占领<input id="sim-own" type="number" min="0" max="100" value="2"></label><label>对方占领<input id="sim-opponent" type="number" min="0" max="100" value="3"></label><label class="checkbox"><input id="sim-adjacent" type="checkbox" checked>相邻有非我方卡</label><button id="preview-start" class="primary">开始预演</button><button id="preview-next" disabled>下一步 →</button></div><div id="reference-choices" hidden><span>仅选择浏览路径，不判定真实场面：</span><button id="reference-yes">假设满足</button><button id="reference-no">假设不满足</button></div><ol id="trace" aria-live="polite"><li class="muted">选择预设场面条件，观察技能将按什么顺序执行。</li></ol></div>
+      </section>
+    </main>
+    <aside class="inspector-panel panel" aria-label="节点参数和卡牌预览">
+      <div class="section-heading"><h2>节点参数</h2><span id="node-kind" class="tag">未选择</span></div>
+      <div id="inspector"></div>
+      <section class="card-preview-section"><div class="section-heading"><h2>卡牌预览</h2><span class="muted">自动生成说明</span></div><article id="card-preview"><div class="preview-card-top"><span id="preview-camp"></span><span id="preview-rarity"></span></div><div class="card-illustration" aria-hidden="true"><span>策</span><small>卡面占位</small></div><h3 id="preview-name"></h3><div class="power-row"><span>基础战力</span><strong id="preview-power"></strong></div><div id="preview-skills"></div></article></section>
+    </aside>
+  </div>
+  <div id="toast" role="status" hidden></div>
+  <details class="catalog-help"><summary>关于 90 张预存卡</summary><p>60 张基础卡和 30 张额外卡均已预存。原始卡牌 ID 保留在来源资料中，工坊副本使用 workshop_web_ 前缀，不覆盖正式卡牌。13 张可用当前节点词汇表达，77 张提供完整事件与条件分支参考图。参考图可移动查看，但未接入执行；不会冒充可运行技能导出。整库可保存工程；可执行的卡牌可单独导出 Unity 配置。现有草稿只补齐缺失卡牌，已有修改不覆盖。</p></details>
+  <dialog id="help-dialog"><div class="section-heading"><h2>开始制作一张卡</h2><button id="close-help" aria-label="关闭使用说明">✕</button></div><ol><li>左侧填写名称、势力、品质与战力。</li><li>选中触发、条件或效果节点，右侧修改参数。</li><li>点击左侧效果按钮添加节点；拖动标题调整位置。</li><li>拖动节点右侧出口到左侧入口，或依次点击两个端口。重新连接会替换该出口的原连线；未接入流程的节点会提示错误。</li><li>使用「开始预演 / 下一步」观察顺序；绿色高亮表示当前步骤，不代表实际战斗结果。</li><li>「保存工程」下载包含位置与连线的 JSON；「导出 Unity 配置」生成可由 Unity 卡牌与技能工坊导入的制作库。</li></ol><p>当前支持：一个触发条件、满足时顺序执行 1～8 个效果、不满足则结束；不支持自由分支、循环及跨步骤锁定同一随机目标。每个效果会在实际执行时重新选目标。</p><p>预演不计算目标、伤害、护盾拦截、遗志连锁或胜负。正式 Web 卡牌技能尚未接入本编辑器。</p><p>Unity 导入入口：<code>Card Demo → Tools → Card And Skill Workshop → 导入 JSON</code>。导入制作库为整库替换，请先备份原库。现有测试卡组会随导入 / 导出保留；浏览器初始示例没有测试卡组。</p><p>草稿保存在当前浏览器和地址下；换浏览器、换端口或清理缓存不会同步，请定期「保存工程」。撤销 / 重做仅限本次打开页面。</p></dialog>
+  <noscript>此编辑器需要启用 JavaScript。</noscript>
+</body>
+</html>

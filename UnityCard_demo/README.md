@@ -6,6 +6,9 @@
 
 新增卡牌制作工具：**Card Demo → Tools → Card And Skill Workshop / Battle Lab**。
 
+新增无需 Unity 的[浏览器卡牌工坊](../card-workshop/README.md)：仓库根目录双击 `Start-Card-Workshop.cmd`，打开 `http://127.0.0.1:5190/`。拖拽连线制作技能、流程预演、导入 / 导出工坊 JSON；独立于正式卡表，不自动覆盖游戏内容。
+已预存正式 90 张卡牌、135 段流程；13 张映射现有可执行节点，77 张为带明确提示的参考流程。支持卡名 / 原 ID 搜索、三国筛选和单卡导出；已有浏览器草稿保留。
+
 新增免费测试额度的 **抽卡 Demo**：无需 Unity 可双击 `Start-Gacha-Demo.cmd`，浏览器打开 `http://127.0.0.1:5186/`；Unity 菜单 **Card Demo → Tools → Gacha Demo → Open Demo Scene**，或 Main 顶部“招募 Demo”。包含五连抽、重复碎片、图鉴、保底及本地存档，不接真实支付或正式库存。详见 [抽卡说明](Documentation/GACHA_DEMO.md)。
 
 正式卡牌配置位于 `ConfigTables/`：**Card Basics.xlsx** 集中属性、技能文字和默认卡组顺序，**Faction Icons.xlsx** 配置势力图片；每份文件只有一个同名工作表。保存后双击 `Export-CardPresentation.cmd`（.NET 8 SDK），或使用 **Card Demo → Tools → Presentation → Export Tables to Lua**，生成 2 份 Lua 和现有界面读取的 JSON，不再生成 CSV。按实际势力加载角标，魏蓝、蜀橙、吴绿；详见 [Excel 使用步骤](ConfigTables/README.md) 和 [角标配置说明](Documentation/FACTION_BADGE_PIPELINE.md)。Main 的按钮式演示手牌和正式技能执行未替换。

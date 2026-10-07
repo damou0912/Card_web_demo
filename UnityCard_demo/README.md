@@ -2,14 +2,16 @@
 
 独立、可搬到新电脑的 Unity 2D 卡牌起步工程。现有网页游戏无需启动，也无需复制旧电脑的缓存、字体或账号。
 
+**页面流程已拆分（2026-10-07）：加载 → 账号登录 / 游客 → 主页 → 对战。** 打开 Main 后不再直接开局；主页选择 4×4 / 5×5、演示 / 制作库牌库，可查阅正式卡牌资料。账号登录接现有 Web 服务，游客可离线体验；联网对局和精英挑战仍明确标注未迁移。入口、对应 Web 内容和维护文件见 [页面拆分说明](Documentation/PAGE_FLOW.md)。
+
 **版本：Unity 2022.3.62f3（revision `96770f904ca7`）。当前是基础 PVE 演示，不是完整网页版移植，也不是可直接发布的微信小游戏。**
 
 新增卡牌制作工具：**Card Demo → Tools → Card And Skill Workshop / Battle Lab**。
 
 新增无需 Unity 的[浏览器卡牌工坊](../card-workshop/README.md)：仓库根目录双击 `Start-Card-Workshop.cmd`，打开 `http://127.0.0.1:5190/`。拖拽连线制作技能、流程预演、导入 / 导出工坊 JSON；独立于正式卡表，不自动覆盖游戏内容。
-已预存正式 90 张卡牌、135 段流程；13 张映射现有可执行节点，77 张为带明确提示的参考流程。支持卡名 / 原 ID 搜索、三国筛选和单卡导出；已有浏览器草稿保留。
+已预存正式 90 张卡牌、135 段流程说明；13 张映射 Unity 可执行节点，原 77 张参考卡已接入对应 Web 实际技能维护，可编辑参数、脚本、辅助函数和被动标记，导出 Web 技能包，并用正式引擎检查回归。Web 脚本不能直接导入 Unity。支持卡名 / 原 ID 搜索、三国筛选和单卡导出；已有浏览器草稿无损升级。逐卡结果见 [核对记录](../card-workshop/CARD_EFFECT_AUDIT.md)。
 
-新增免费测试额度的 **抽卡 Demo**：无需 Unity 可双击 `Start-Gacha-Demo.cmd`，浏览器打开 `http://127.0.0.1:5186/`；Unity 菜单 **Card Demo → Tools → Gacha Demo → Open Demo Scene**，或 Main 顶部“招募 Demo”。包含五连抽、重复碎片、图鉴、保底及本地存档，不接真实支付或正式库存。详见 [抽卡说明](Documentation/GACHA_DEMO.md)。
+新增免费测试额度的 **抽卡 Demo**：无需 Unity 可双击 `Start-Gacha-Demo.cmd`，浏览器打开 `http://127.0.0.1:5186/`；Unity 菜单 **Card Demo → Tools → Gacha Demo → Open Demo Scene**，或 Main 主页“本机招募 Demo”。包含五连抽、重复碎片、图鉴、保底及本地存档，不接真实支付或正式库存。详见 [抽卡说明](Documentation/GACHA_DEMO.md)。
 
 正式卡牌配置位于 `ConfigTables/`：**Card Basics.xlsx** 集中属性、技能文字和默认卡组顺序，**Faction Icons.xlsx** 配置势力图片；每份文件只有一个同名工作表。保存后双击 `Export-CardPresentation.cmd`（.NET 8 SDK），或使用 **Card Demo → Tools → Presentation → Export Tables to Lua**，生成 2 份 Lua 和现有界面读取的 JSON，不再生成 CSV。按实际势力加载角标，魏蓝、蜀橙、吴绿；详见 [Excel 使用步骤](ConfigTables/README.md) 和 [角标配置说明](Documentation/FACTION_BADGE_PIPELINE.md)。Main 的按钮式演示手牌和正式技能执行未替换。
 包括卡牌编辑、技能组合、测试卡组、战斗实验室，详见 [工具使用指南与示例](Documentation/AUTHORING_TOOLS.md)。
@@ -27,7 +29,7 @@
 2. 打开本目录的 `Tools/setup-links.html`，按页面链接安装 [Unity Hub](https://unity.com/download)。
 3. 在 Unity Hub 登录，并按自己的资格激活 Unity 许可证。安装 **2022.3.62f3**；可在 [Unity 版本归档](https://unity.com/releases/editor/archive) 搜索，或使用页面中的 Hub 安装链接。
 4. Unity Hub → Projects → Add project from disk，选择 **`UnityCard_demo` 文件夹**。不要选择仓库根目录或 `Assets`。
-5. 等待首次包恢复与资源导入完成，双击 `Assets/Scenes/Main.unity`，点击 **Play**。场景中的界面在 Play 时生成，编辑状态只有一个标记对象属于正常情况。
+5. 等待首次包恢复与资源导入完成，双击 `Assets/Scenes/Main.unity`，点击 **Play**。加载完成后登录或选“游客体验”，再从主页开始 PVE。场景中的界面在 Play 时生成，编辑状态只有一个标记对象属于正常情况。
 6. 菜单 **Card Demo → Configuration** 修改参数；保存后退出并重新进入 Play 生效。
 
 主场景建议以横屏 16:10 或 16:9 查看。点击手牌，再点击空格放置；点击己方场上卡牌，再点击相邻空格或敌卡移动／攻击。右侧查看技能，左下角展开全部战斗流程。
@@ -52,13 +54,14 @@
 
 | 文件 | 用途 |
 |---|---|
+| `Assets/Resources/Config/app-flow.json` | 页面登录服务根地址、3～30 秒请求超时、是否允许游客；不保存密码或会话 |
 | `Assets/Resources/Config/game-config.json` | 标题、玩家 ID、4/5 格棋盘、回合秒数、回合上限、牌库与手牌数、AI 速度、种子 |
 | `Assets/Resources/Data/demo-cards.json` | 五张演示卡的数值、说明、已有演示技能类型 |
 | `Assets/Resources/Data/web-card-catalog.json` | 正式卡牌资料快照，只供查阅 |
 | `Assets/Resources/Data/workshop-library.json` | 独立制作库：卡牌、可执行技能步骤与测试卡组 |
 | `Assets/Scripts/Core/GameEngine.cs` | 演示结算；新增技能必须实现代码并增加测试，仅改描述不会新增效果 |
 
-`seed = 0` 表示每局重新随机；非零值用于重现对局。`useWorkshopCards` 可切换到制作库，默认关闭；双方测试卡组 ID 可在工坊设置。`serverUrl`、`wechatAppId` 仅预留，当前不发起联网。**客户端文件中不能写 AppSecret、数据库密码、支付密钥或访问令牌。**
+`seed = 0` 表示每局重新随机；非零值用于重现对局。`useWorkshopCards` 可切换到制作库，默认关闭；双方测试卡组 ID 可在工坊设置。`game-config.json` 中的 `serverUrl`、`wechatAppId` 仍是对战预留；账号页使用独立 `app-flow.json`，只在点击登录时访问现有 Web 账号接口。**客户端文件中不能写 AppSecret、数据库密码、支付密钥或访问令牌。**
 
 ## Windows 辅助工具
 

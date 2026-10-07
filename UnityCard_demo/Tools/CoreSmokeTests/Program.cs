@@ -12,6 +12,7 @@ internal static class Program
         try
         {
             CoreChecks.RunAll(Console.WriteLine);
+            AppFlowChecks.RunAll(Console.WriteLine);
             PresentationChecks.RunAll(Console.WriteLine);
             // Verify the actual shipped JSON against the same pure runtime, not just test fixtures.
             var root = new DirectoryInfo(AppContext.BaseDirectory);

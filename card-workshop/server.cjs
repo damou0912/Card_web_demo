@@ -11,6 +11,10 @@ const publicFiles = new Map([
   ['/presets.js', ['presets.js', 'text/javascript; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']]
 ]);
+for (const [url, [file, type]] of require('../card-designer/server.cjs').assets) publicFiles.set('/appearance' + url, [path.relative(__dirname, file), type]);
+for (const file of ['web-effects.js', 'web-editor.js', 'engine-harness.js', 'verify-worker.js']) publicFiles.set('/' + file, [file, 'text/javascript; charset=utf-8']);
+// Only these public game scripts can be read by the isolated regression worker.
+for (const file of ['shu-card-effects.js', 'wei-card-effects.js', 'wu-card-effects.js', 'elite-ai-info.js', 'elite-ai-effects.js', 'card-info.js', 'replacement-cards.js', 'v2-card-data.js', 'script.js', 'core-v2.js', 'core-v2.test-suite.js']) publicFiles.set('/runtime/' + file, ['../' + file, 'text/javascript; charset=utf-8']);
 function createServer() {
   return http.createServer((request, response) => {
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -18,6 +22,8 @@ function createServer() {
     response.setHeader('Cache-Control', 'no-store');
     // This is a read-only local editor. Do not expose repository files or write APIs.
     const pathname = (request.url || '/').split('?')[0];
+    if (pathname === '/appearance') { response.writeHead(302, { Location: '/appearance/' }); response.end(); return; }
+    if (pathname === '/verify-worker.js') response.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'none'");
     const file = publicFiles.get(pathname);
     if (!['GET', 'HEAD'].includes(request.method)) { response.writeHead(405, { Allow: 'GET, HEAD' }); response.end(); return; }
     if (!file) { response.writeHead(404); response.end('Not found'); return; }

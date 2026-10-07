@@ -1,0 +1,5 @@
+{
+  "serverUrl": "",
+  "requestTimeoutSeconds": 12,
+  "allowGuest": true
+}

@@ -5,14 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>卡牌工坊 · 技能流程编辑器</title>
   <link rel="stylesheet" href="./style.css">
+  <script src="./web-effects.js" defer></script>
   <script src="./model.js" defer></script>
   <script src="./presets.js" defer></script>
+  <script src="./web-editor.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
   <header class="app-header">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">策</span><div><h1>卡牌工坊 <span> / 技能流程</span></h1><p>把你的想法，连成一张卡牌。</p></div></div>
-    <div class="header-actions"><span id="save-state" role="status">本地草稿</span><button id="help-button">使用说明</button><button id="import-button">导入 JSON</button><button id="save-project">保存工程</button><button id="export-card">导出当前卡</button><button id="export-library" class="primary">导出 Unity 整库 ↗</button></div>
+    <div class="brand"><span class="brand-mark" aria-hidden="true">策</span><div><h1>卡牌工坊 <span> / 技能流程</span></h1><p>把你的想法，连成一张卡牌。 <a href="./appearance/" style="color:inherit">打开卡面外观规划器 ↗</a></p></div></div>
+    <div class="header-actions"><span id="save-state" role="status">本地草稿</span><button id="help-button">使用说明</button><button id="import-button">导入 JSON</button><button id="save-project">保存工程</button><button id="export-card">导出当前卡</button><button id="export-web" class="primary">导出 Web 技能包</button><button id="export-library">导出 Unity 整库</button></div>
     <input type="file" id="import-file" accept=".json,application/json" hidden>
   </header>
   <div class="workspace">
@@ -36,6 +38,20 @@
       <div class="scope-note"><span class="status-dot"></span>独立制作环境<p>只保存到当前浏览器，不修改线上卡牌、账号或存档。</p></div>
     </aside>
     <main class="canvas-panel panel">
+      <section id="web-editor" hidden aria-label="Web 实际技能维护">
+        <div class="web-heading"><div><h2>实际技能维护 <span class="tag">Web V2</span></h2><p>参数、脚本和被动标记直接用于 Web 技能包；下方流程图用于对照说明。</p></div><button id="web-check" class="small">校验当前卡</button></div>
+        <div id="web-flags" class="web-flags"></div>
+        <div id="web-constants"></div>
+        <label class="field">事件 / 辅助函数<select id="web-hook"></select></label>
+        <div class="web-actions"><select id="web-add-hook" aria-label="新增事件类型"></select><button id="web-add">添加事件</button><button id="web-remove" class="danger">删除当前事件</button></div>
+        <div id="web-parameters" class="web-parameters"></div>
+        <label class="field" id="web-code-label">实际效果脚本（函数体；上下文为 ctx）<textarea id="web-code" rows="14" maxlength="30000" spellcheck="false" aria-label="实际效果脚本"></textarea></label>
+        <p class="field-hint">常用操作：ctx.adjust / draw / discard / destroy / skillAttack / swapPositions。保留目标引用、执行顺序及保护返回值；完整条件和分支在脚本中维护。</p>
+        <p id="web-status" role="status"></p>
+        <div class="web-actions"><button id="web-verify">用正式引擎检查原版回归</button><button id="web-review">已核对流程说明</button></div>
+        <pre id="web-verification" aria-live="polite"></pre>
+        <details><summary>维护卡牌说明</summary><label class="field">技能名称<input id="web-skill-name" maxlength="100"></label><label class="field">当前技能说明<textarea id="web-description" rows="4" maxlength="2000"></textarea></label><p class="field-hint">技能包只导出执行逻辑；名称、战力及技能文案保存在工程内，正式卡表需另行同步。</p></details>
+      </section>
       <div class="skill-toolbar"><div id="skill-tabs" role="tablist" aria-label="卡牌技能"></div><button id="add-skill" class="small">＋ 技能</button></div>
       <div class="canvas-toolbar"><div class="tool-group"><button id="undo" title="Ctrl / Cmd + Z" aria-label="撤销">↶</button><button id="redo" title="Ctrl / Cmd + Shift + Z" aria-label="重做">↷</button><span class="separator"></span><button id="arrange">整理连线</button><button id="fit">适应画布</button></div><div class="tool-group"><button id="zoom-out" aria-label="缩小">−</button><output id="zoom-label">100%</output><button id="zoom-in" aria-label="放大">＋</button></div></div>
       <div id="viewport" aria-label="技能流程画布：拖动节点标题移动；点击或拖动出口连接入口；拖动空白处平移">
@@ -56,8 +72,17 @@
     </aside>
   </div>
   <div id="toast" role="status" hidden></div>
-  <details class="catalog-help"><summary>关于 90 张预存卡</summary><p>60 张基础卡和 30 张额外卡均已预存。原始卡牌 ID 保留在来源资料中，工坊副本使用 workshop_web_ 前缀，不覆盖正式卡牌。13 张可用当前节点词汇表达，77 张提供完整事件与条件分支参考图。参考图可移动查看，但未接入执行；不会冒充可运行技能导出。整库可保存工程；可执行的卡牌可单独导出 Unity 配置。现有草稿只补齐缺失卡牌，已有修改不覆盖。</p></details>
-  <dialog id="help-dialog"><div class="section-heading"><h2>开始制作一张卡</h2><button id="close-help" aria-label="关闭使用说明">✕</button></div><ol><li>左侧填写名称、势力、品质与战力。</li><li>选中触发、条件或效果节点，右侧修改参数。</li><li>点击左侧效果按钮添加节点；拖动标题调整位置。</li><li>拖动节点右侧出口到左侧入口，或依次点击两个端口。重新连接会替换该出口的原连线；未接入流程的节点会提示错误。</li><li>使用「开始预演 / 下一步」观察顺序；绿色高亮表示当前步骤，不代表实际战斗结果。</li><li>「保存工程」下载包含位置与连线的 JSON；「导出 Unity 配置」生成可由 Unity 卡牌与技能工坊导入的制作库。</li></ol><p>当前支持：一个触发条件、满足时顺序执行 1～8 个效果、不满足则结束；不支持自由分支、循环及跨步骤锁定同一随机目标。每个效果会在实际执行时重新选目标。</p><p>预演不计算目标、伤害、护盾拦截、遗志连锁或胜负。正式 Web 卡牌技能尚未接入本编辑器。</p><p>Unity 导入入口：<code>Card Demo → Tools → Card And Skill Workshop → 导入 JSON</code>。导入制作库为整库替换，请先备份原库。现有测试卡组会随导入 / 导出保留；浏览器初始示例没有测试卡组。</p><p>草稿保存在当前浏览器和地址下；换浏览器、换端口或清理缓存不会同步，请定期「保存工程」。撤销 / 重做仅限本次打开页面。</p></dialog>
+  <details class="catalog-help"><summary>关于 90 张预存卡</summary><p>60 张基础卡和 30 张额外卡均已预存。13 张使用 Unity 效果节点维护；原 77 张参考卡已接入对应 Web 实际技能，包含全部事件、辅助函数及被动标记，可修改参数和脚本、保存工程、导出 Web 技能包。流程图是可维护的对照说明，不替代脚本执行。旧参考草稿升级时保留名称、ID、布局和卡组，新增实际技能实现。Web 技能包不能导入 Unity；导出不会直接修改正式游戏。</p></details>
+  <dialog id="help-dialog">
+    <div class="section-heading"><h2>卡牌工坊使用说明</h2><button id="close-help" aria-label="关闭使用说明">✕</button></div>
+    <h3>Web 实际技能（原 77 张参考卡）</h3>
+    <ol><li>选择卡牌，在「实际技能维护」中选择事件或辅助函数。</li><li>修改快捷数值、完整脚本或被动标记。脚本草稿自动保存；有语法错误时保留草稿并阻止导出。</li><li>同步维护当前技能文案与下方节点说明。流程图是对照文档，实际执行以脚本为准。</li><li>点击「用正式引擎检查原版回归」。修改数值后出现原版断言差异，需要逐项确认是否符合设计。</li><li>保存工程可再次导入编辑；「导出当前 Web 卡」或「导出 Web 技能包」生成实际 JavaScript 技能。</li></ol>
+    <p>技能包沿用原卡 ID，需在三国技能脚本之后、core-v2.js 之前加载。只导出技能实现，不导出名称、战力等展示卡表；下载文件不会自动修改正式游戏。多个副本使用同一原卡 ID 时，请单独导出所需副本。</p>
+    <h3>Unity 节点技能（13 张映射卡及自制卡）</h3>
+    <ol><li>编辑卡牌资料，选中触发、条件和效果节点修改参数。</li><li>拖动标题移动，拖动出口到入口连线；条件满足时顺序执行 1～8 个效果，不满足则结束。</li><li>流程预演仅展示执行顺序；「导出当前 Unity 卡」生成 Unity 制作库。</li></ol>
+    <p>Unity 入口：Card Demo → Tools → Card And Skill Workshop → 导入 JSON。Unity 导入为整库替换，请先备份。Web 实际技能不可当作 Unity 技能导入。</p>
+    <p>工程草稿保存在同一浏览器和地址下；换浏览器、换端口不会同步。请定期「保存工程」。撤销 / 重做仅限本次打开页面，浏览器中的其他标签页变更草稿时会暂停自动覆盖。</p>
+  </dialog>
   <noscript>此编辑器需要启用 JavaScript。</noscript>
 </body>
 </html>

@@ -14,6 +14,13 @@ const manifest = json('Packages/manifest.json');
 assert.equal(manifest.dependencies['com.unity.ugui'], '1.0.0');
 for (const version of Object.values(manifest.dependencies)) assert.match(version, /^\d+\.\d+\.\d+$/);
 const config = json('Assets/Resources/Config/game-config.json');
+const pages = json('Assets/Resources/Config/app-flow.json');
+assert.equal(typeof pages.serverUrl, 'string');
+assert.equal(typeof pages.allowGuest, 'boolean');
+assert.ok(Number.isInteger(pages.requestTimeoutSeconds) && pages.requestTimeoutSeconds >= 3 && pages.requestTimeoutSeconds <= 30);
+for (const entry of ['AppBootstrap.cs', 'WebAccountClient.cs', 'DemoBootstrap.View.cs', 'Pages/LoadingPage.cs', 'Pages/LoginPage.cs', 'Pages/HomePage.cs'])
+  assert.ok(fs.existsSync(path.join(project, 'Assets/Scripts/Runtime', entry)), `Missing page module: ${entry}`);
+assert.doesNotMatch(read('Assets/Scripts/Runtime/DemoBootstrap.cs'), /RuntimeInitializeOnLoadMethod/);
 assert.ok([4, 5].includes(config.boardSize));
 assert.ok(Number.isInteger(config.turnSeconds) && config.turnSeconds >= 10 && config.turnSeconds <= 1800);
 assert.ok(Number.isInteger(config.handLimit) && config.handLimit >= 3 && config.handLimit <= 10);

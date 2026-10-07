@@ -3,6 +3,7 @@
   else root.CardWorkshop = factory();
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
+  const W = typeof module === 'object' && module.exports ? require('./web-effects.js') : globalThis.CardWorkshopWeb;
 
   const OPTIONS = {
     trigger: { OnPlace: '入场后', OnOwnTurnStart: '我方回合开始', OnOwnTurnEnd: '我方回合结束', OnMove: '主动移至空格后', OnDestroyed: '被摧毁离场后', AfterCombat: '交战后（自身存活）' },
@@ -165,6 +166,7 @@
     const errors = [];
     const cards = project.cards.map((entry, index) => {
       const card = clone(entry.card);
+      if (entry.web) errors.push(`卡牌 ${index + 1}「${card.name}」：Web 实际技能不能导出至 Unity，请使用 Web 技能包`);
       if (entry.source?.execution === 'reference') errors.push(`卡牌 ${index + 1}「${card.name}」：原卡含未接入执行的规则，只能保存参考工程`);
       card.abilities = entry.graphs.map((graph, i) => {
         try { return compileGraph(graph); } catch (error) { errors.push(`卡牌 ${index + 1}「${card.name}」 / 技能 ${i + 1}：${error.message}`); return null; }
@@ -189,10 +191,15 @@
         assert(entry.source.kind === 'production-card' && /^0[1-3][1-5]\d{2}$/.test(entry.source.id), '原卡来源标识无效');
         for (const key of ['name', 'skill', 'effect', 'module', 'catalogVersion']) assert(text(entry.source[key]), '原卡来源资料不完整');
         assert(['base', 'extra'].includes(entry.source.pool), '原卡卡池类型无效');
-        assert(['reference', 'vocabulary'].includes(entry.source.execution), '原卡执行状态缺失');
+        assert(['reference', 'vocabulary', 'web'].includes(entry.source.execution), '原卡执行状态缺失');
         assert(entry.source.isCopy === undefined || typeof entry.source.isCopy === 'boolean', '原卡副本标记无效');
         assert(entry.source.note === undefined || text(entry.source.note), '原卡备注格式无效');
       }
+      if (entry.web) {
+        assert(entry.source?.execution === 'web', 'Web 实际技能缺少原卡来源');
+        W.validate(entry.web, false);
+      }
+      if (entry.source?.execution === 'web') assert(entry.web, 'Web 实际技能实现缺失');
       const abilities = [];
       for (const graph of entry.graphs) {
         if (graph?.mode === 'reference') { validateReference(graph); continue; }
@@ -279,7 +286,8 @@
       result.cards.push(clone(entry)); known.add(entry.source.id); ids.add(entry.card.id); added++;
     }
     result.presetCatalogVersion = catalog.version;
-    return { project: parseProject(result), added };
+    const upgraded = W.upgrade(result, catalog);
+    return { project: parseProject(result), added, upgraded };
   }
 
   function addEffect(graph, operation) {

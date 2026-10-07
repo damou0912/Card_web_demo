@@ -2,6 +2,8 @@
 
 这是可以直接在 Unity 编辑器里拖动内部元素的**卡牌 Prefab**，不是整页 UI，也没有运行时拖拽系统。Main 对局界面保持原样。
 
+也可先在仓库根目录双击 `Start-Card-Designer.cmd`，使用浏览器卡面外观规划器设计 420×600 版式。其布局规范提供左上角 Anchor/Pivot 的 RectTransform 坐标，方便按规格调整本 Prefab；不会自动覆盖预制体。
+
 ## 最短操作
 
 1. Project 中双击 `Assets/CardPageTemplate/Prefabs/EditableCard.prefab`，进入 Prefab 编辑模式。无需点击 Play。

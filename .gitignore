@@ -13,3 +13,5 @@ __pycache__/
 *.py[cod]
 game-data.json
 game-data.json.writing
+card-workshop/test-output/
+card-designer/test-output/

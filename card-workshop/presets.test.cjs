@@ -31,8 +31,9 @@ test('metadata and original text exactly match production display data', () => {
   }
 });
 
-test('reference workflows survive roundtrip, cannot compile or lose execution warnings', () => {
-  for (const card of P.cards.filter(c => c.source.execution === 'reference')) {
+test('Web documentation graphs stay distinct from executable Unity graphs', () => {
+  const maintained = P.cards.filter(c => c.source.execution === 'web'); assert.equal(maintained.length, 77);
+  for (const card of maintained) {
     for (const graph of card.graphs) {
       assert.doesNotThrow(() => M.validateReference(graph));
       assert.throws(() => M.compileGraph(graph), /参考流程/);
@@ -43,7 +44,7 @@ test('reference workflows survive roundtrip, cannot compile or lose execution wa
     }
     assert.throws(() => M.compileProject(project([card])), /参考/);
     const copy = M.clone(card); copy.graphs = [];
-    assert.throws(() => M.compileProject(project([copy])), /未接入/);
+    assert.throws(() => M.compileProject(project([copy])), /Web 实际技能/);
   }
   assert.throws(() => M.compileProject(project()), /参考/);
 });

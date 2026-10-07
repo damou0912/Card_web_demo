@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1001}
   m_Layer: 0
-  m_Name: UnityCard_demo (UI is created by DemoBootstrap on Play)
+  m_Name: UnityCard_demo (Loading-Login-Home-Battle via AppBootstrap)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

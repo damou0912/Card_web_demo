@@ -9,7 +9,10 @@
     "generate:card-info": "node scripts/generate-card-info.js",
     "workshop": "node card-workshop/server.cjs",
     "generate:workshop-presets": "node card-workshop/build-presets.cjs",
-    "test:workshop": "node card-workshop/test.cjs"
+    "test:workshop": "node card-workshop/test.cjs",
+    "audit:workshop": "node card-workshop/audit.cjs",
+    "designer": "node card-designer/server.cjs",
+    "test:designer": "node card-designer/test.cjs"
   },
   "engines": {
     "node": ">=18"

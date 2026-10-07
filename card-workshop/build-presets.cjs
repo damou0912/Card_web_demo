@@ -5,20 +5,30 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const M = require('./model.js');
+const W = require('./web-effects.js');
 const { definitions } = require('./preset-definitions.cjs');
 const root = path.resolve(__dirname, '..');
 const outputPath = path.join(__dirname, 'presets.js');
 
 function build() {
   const sandbox = { window: {} }; vm.createContext(sandbox);
-  for (const file of ['card-info.js', 'replacement-cards.js', 'shu-card-effects.js', 'wei-card-effects.js', 'wu-card-effects.js']) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), sandbox, { timeout: 2000 });
+  const helpersByCamp = {};
+  for (const file of ['card-info.js', 'replacement-cards.js', 'shu-card-effects.js', 'wei-card-effects.js', 'wu-card-effects.js']) {
+    let source = fs.readFileSync(path.join(root, file), 'utf8');
+    const names = [...source.matchAll(/^  function (\w+)\(/gm)].map(m => m[1]);
+    if (file.endsWith('-card-effects.js')) {
+      source = source.replace('  window.CARD_EFFECTS_V2 =', `  window.__workshopHelpers = { ${names.join(', ')} };\n  window.CARD_EFFECTS_V2 =`);
+    }
+    vm.runInContext(source, sandbox, { timeout: 2000 });
+    if (file.endsWith('-card-effects.js')) helpersByCamp[file.split('-')[0]] = sandbox.window.__workshopHelpers;
+  }
   const cards = JSON.parse(JSON.stringify([...sandbox.window.CARD_INFO, ...sandbox.window.REPLACEMENT_CARDS]));
   const base = new Set(sandbox.window.CARD_INFO.map(c => c.id));
   const effects = sandbox.window.CARD_EFFECTS_V2;
   assert.equal(cards.length, 90); assert.equal(base.size, 60);
   assert.equal(new Set(cards.map(c => c.id)).size, 90);
   assert.deepEqual(Object.keys(definitions).sort(), cards.map(c => c.id).sort(), 'Every production card needs an explicit reviewed definition');
-  const sourceBytes = ['card-info.js', 'replacement-cards.js', 'shu-card-effects.js', 'wei-card-effects.js', 'wu-card-effects.js', 'core-v2.js', 'card-workshop/preset-definitions.cjs', 'card-workshop/build-presets.cjs', 'card-workshop/model.js'].map(file => fs.readFileSync(path.join(root, file)));
+  const sourceBytes = ['card-info.js', 'replacement-cards.js', 'shu-card-effects.js', 'wei-card-effects.js', 'wu-card-effects.js', 'core-v2.js', 'card-workshop/preset-definitions.cjs', 'card-workshop/build-presets.cjs', 'card-workshop/model.js', 'card-workshop/web-effects.js'].map(file => fs.readFileSync(path.join(root, file)));
   const version = 'production-' + crypto.createHash('sha256').update(Buffer.concat(sourceBytes)).digest('hex').slice(0, 12);
   const result = cards.sort((a, b) => a.id.localeCompare(b.id)).map(card => {
     const definition = definitions[card.id], camp = { '01': 'shu', '02': 'wei', '03': 'wu' }[card.id.slice(0, 2)];
@@ -59,10 +69,34 @@ function build() {
         ends.forEach(tail => graph.edges.push({ ...tail, to: end })); M.arrange(graph); return graph;
       });
     }
+    let web;
+    if (!definition.executable) {
+      web = { engine: 'web-v2', version: 1, hooks: {}, helpers: {}, flags: {}, constants: {} };
+      const bodyOf = fn => fn.toString().slice(fn.toString().indexOf('{') + 1, fn.toString().lastIndexOf('}')).trim();
+      for (const [key, value] of Object.entries(runtime)) {
+        if (typeof value === 'function') web.hooks[key] = bodyOf(value);
+        else if (key === 'flags') web.flags = JSON.parse(JSON.stringify(value));
+        else web.constants[key] = value;
+      }
+      // Preserve helper closures, including transitive dependencies, per card.
+      let changed;
+      do {
+        changed = false;
+        const bodies = [...Object.values(web.hooks), ...Object.values(web.helpers).map(h => h.body)].join('\n');
+        for (const [name, fn] of Object.entries(helpersByCamp[camp])) {
+          if (web.helpers[name] || !new RegExp('\\b' + name + '\\s*\\(').test(bodies)) continue;
+          const args = fn.toString().match(/^[^(]+\(([^)]*)\)/)[1].split(',').map(s => s.trim()).filter(Boolean);
+          web.helpers[name] = { args, body: bodyOf(fn) }; changed = true;
+        }
+      } while (changed);
+      W.validate(web);
+      const rebuilt = vm.runInNewContext(W.factoryCode(web), {}, { timeout: 2000 });
+      assert.deepEqual(Object.keys(rebuilt).sort(), Object.keys(runtime).sort(), card.id + ': runtime members lost');
+    }
     return {
       card: { id: 'workshop_web_' + card.id, name: card.name, camp: card.camp, rarity: card.rarity, baseAttack: card.baseAttack, skill: card.skill, effect: card.effect, demoEffect: 'None' },
-      source: { kind: 'production-card', id: card.id, name: card.name, skill: card.skill, effect: card.effect, module: `${camp}-card-effects.js`, pool: base.has(card.id) ? 'base' : 'extra', execution: definition.executable ? 'vocabulary' : 'reference', catalogVersion: version, ...(definition.note ? { note: definition.note } : {}) },
-      graphs
+      source: { kind: 'production-card', id: card.id, name: card.name, skill: card.skill, effect: card.effect, module: `${camp}-card-effects.js`, pool: base.has(card.id) ? 'base' : 'extra', execution: definition.executable ? 'vocabulary' : 'web', catalogVersion: version, ...(definition.note ? { note: definition.note } : {}) },
+      graphs, ...(web ? { web } : {})
     };
   });
   const catalog = { version, cards: result };
@@ -77,6 +111,6 @@ if (require.main === module) {
   if (process.argv.includes('--check')) assert.equal(fs.readFileSync(outputPath, 'utf8'), output, 'Presets are stale. Run npm run generate:workshop-presets');
   else fs.writeFileSync(outputPath, output, 'utf8');
   const executable = catalog.cards.filter(c => !c.graphs.some(g => g.mode === 'reference')).length;
-  console.log(`${catalog.cards.length} production cards: ${executable} executable vocabulary mappings; ${catalog.cards.length - executable} reference workflows; ${catalog.cards.reduce((n,c) => n + c.graphs.length, 0)} flows. ${catalog.version}`);
+  console.log(`${catalog.cards.length} production cards: ${executable} Unity vocabulary mappings; ${catalog.cards.length - executable} maintainable Web implementations; ${catalog.cards.reduce((n,c) => n + c.graphs.length, 0)} flow diagrams. ${catalog.version}`);
 }
 module.exports = { build, render };

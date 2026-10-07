@@ -4,6 +4,7 @@ namespace CardDemo.Tests
 {
     public sealed class RulesTests
     {
+        [Test] public void ApplicationFlowChecks() { AppFlowChecks.RunAll(TestContext.WriteLine); }
         [Test] public void CoreRegressionChecks() { CoreChecks.RunAll(TestContext.WriteLine); }
         [Test] public void PresentationConfigChecks() { PresentationChecks.RunAll(TestContext.WriteLine); }
         [Test] public void GachaDemoChecks()

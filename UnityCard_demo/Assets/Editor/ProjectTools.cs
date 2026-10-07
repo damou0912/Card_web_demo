@@ -68,6 +68,10 @@ namespace CardDemo.Editor
             if (!File.Exists(SetupStamp)) ApplyDefaults();
             var config = JsonUtility.FromJson<GameConfig>(File.ReadAllText("Assets/Resources/Config/game-config.json"));
             config.Validate();
+            var pages = JsonUtility.FromJson<AppFlowConfig>(File.ReadAllText("Assets/Resources/Config/app-flow.json"));
+            if (pages == null || pages.requestTimeoutSeconds < 3 || pages.requestTimeoutSeconds > 30)
+                throw new InvalidOperationException("页面配置的请求超时需为 3～30 秒。");
+            if (!string.IsNullOrWhiteSpace(pages.serverUrl)) AccountEndpoint.Normalize(pages.serverUrl);
             var demo = JsonUtility.FromJson<CardCatalog>(File.ReadAllText("Assets/Resources/Data/demo-cards.json"));
             new GameEngine(config, demo.cards, 1);
             var workshop = WorkshopStore.Load();

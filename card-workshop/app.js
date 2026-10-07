@@ -1,6 +1,7 @@
 (() => {
   'use strict';
   const M = window.CardWorkshop;
+  const W = window.CardWorkshopWeb;
   const $ = id => document.getElementById(id);
   const STORAGE_KEY = 'card-workshop.project.v1';
   const PRESETS = window.CardWorkshopPresets;
@@ -18,6 +19,7 @@
   const displayCamp = camp => camp.replace('三国~', '三国-');
   const singleCardProject = () => ({ format: 'card-workshop-project', version: 1, cards: [M.clone(entry())], decks: [] });
   const optionHtml = (items, value) => Object.entries(items).map(([key, name]) => `<option value="${escape(key)}"${key === value ? ' selected' : ''}>${escape(name)}</option>`).join('');
+  const webEditor = window.createWebWorkshopEditor({ entry, project: () => project, snapshot, record, persist, mutate, render, notify, downloadScript });
 
   function notify(message) {
     $('toast').textContent = message; $('toast').hidden = false;
@@ -32,9 +34,10 @@
         // Preserve the exact original draft before adding any missing preset entries.
         const backupKey = STORAGE_KEY + '.before-production-presets';
         if (!localStorage.getItem(backupKey)) localStorage.setItem(backupKey, saved);
+        if (project.cards.some(e => e.source?.execution === 'reference' && !e.web)) localStorage.setItem(STORAGE_KEY + '.before-web-maintenance-v1', saved);
         const merged = M.mergePresets(project, PRESETS); project = merged.project;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-        if (merged.added) setTimeout(() => notify(`已补入 ${merged.added} 张预存卡。原草稿及已有修改保留，迁移前草稿已备份。`), 300);
+        if (merged.added || merged.upgraded) setTimeout(() => notify(`已补入 ${merged.added} 张预存卡，接入 ${merged.upgraded} 张原参考卡的实际技能。原草稿及已有修改保留，迁移前草稿已备份。`), 300);
       }
     }
   } catch (_) {
@@ -82,7 +85,7 @@
     for (const { item, index } of matches) {
       const title = displayCamp(item.card.camp);
       if (!groups.has(title)) groups.set(title, []);
-      groups.get(title).push(`<option value="${index}">${escape(item.card.name)} · ${item.source?.pool === 'extra' ? '额外' : item.source ? '基础' : '自制'}${item.source?.execution === 'reference' ? ' · 参考' : ''}</option>`);
+      groups.get(title).push(`<option value="${index}">${escape(item.card.name)} · ${item.source?.pool === 'extra' ? '额外' : item.source ? '基础' : '自制'}${item.web ? ' · Web 技能' : item.source?.execution === 'reference' ? ' · 参考' : ''}</option>`);
     }
     $('card-select').innerHTML = (matches.some(m => m.index === cardIndex) ? '' : '<option value="" disabled selected>请选择筛选结果</option>') + [...groups].map(([title, options]) => `<optgroup label="${escape(title)}">${options.join('')}</optgroup>`).join('');
     if (matches.some(m => m.index === cardIndex)) $('card-select').value = cardIndex;
@@ -93,11 +96,13 @@
     cardIndex = Math.min(cardIndex, project.cards.length - 1);
     skillIndex = Math.min(skillIndex, Math.max(0, entry().graphs.length - 1));
     const card = entry().card;
+    document.querySelector('.node-library').hidden = !!entry().web;
+    document.querySelector('.card-preview-section .section-heading .muted').textContent = entry().web ? '当前维护说明' : '自动生成说明';
     renderCardSelect();
     const source = entry().source, allSources = new Set(project.cards.filter(e => e.source && !e.source.isCopy).map(e => e.source.id));
     $('catalog-summary').textContent = `预存 ${allSources.size} / 90 张 · 制作库共 ${project.cards.length} 张`;
     $('source-info').hidden = !source;
-    $('source-info').innerHTML = source ? `<strong>原卡 ${escape(source.id)} · ${source.pool === 'extra' ? '额外卡' : '基础卡'}</strong><p>${source.execution === 'reference' ? '参考流程 · 尚未接入执行' : '已映射工坊节点 · 非正式技能移植'}</p><details><summary>原卡技能说明</summary><p>${escape(source.effect)}</p>${source.note ? `<p>实现备注：${escape(source.note)}</p>` : ''}<p>来源：${escape(source.module)}</p></details>` : '';
+    $('source-info').innerHTML = source ? `<strong>原卡 ${escape(source.id)} · ${source.pool === 'extra' ? '额外卡' : '基础卡'}</strong><p>${entry().web ? '实际 Web 技能 · 参数 / 脚本 / 被动可维护' : source.execution === 'reference' ? '旧参考流程 · 可补齐实际技能' : 'Unity 工坊节点映射'}</p><details><summary>原卡技能说明</summary><p>${escape(source.effect)}</p>${source.note ? `<p>实现备注：${escape(source.note)}</p>` : ''}<p>来源：${escape(source.module)}</p></details>` : '';
     $('card-name').value = card.name; $('card-id').value = card.id; $('card-camp').value = card.camp;
     $('card-rarity').innerHTML = optionHtml(Object.fromEntries(M.RARITIES.map(v => [v, v])), card.rarity);
     $('card-power').value = card.baseAttack;
@@ -105,17 +110,17 @@
     $('duplicate-card').disabled = project.cards.length >= 200; $('new-card').disabled = project.cards.length >= 200;
     $('undo').disabled = !history.length; $('redo').disabled = !future.length;
     $('skill-tabs').innerHTML = entry().graphs.map((skill, index) => `<button class="skill-tab" type="button" role="tab" aria-selected="${index === skillIndex}" data-skill="${index}">${escape(skill.name)}</button>`).join('');
-    $('add-skill').disabled = entry().graphs.length >= 8;
+    $('add-skill').disabled = !!entry().web || entry().graphs.length >= 8;
     $('node-palette').innerHTML = Object.entries(M.OPTIONS.operation).map(([key, title]) => `<button class="palette-button" data-operation="${key}"${!graph() || reference() || graph().nodes.filter(n => n.type === 'effect').length >= 8 ? ' disabled' : ''}><span class="symbol" aria-hidden="true">${SYMBOLS[key]}</span>${title}<span class="add" aria-hidden="true">＋</span></button>`).join('');
-    $('preview-start').textContent = reference() ? '逐步查看参考流程' : '开始预演';
-    document.querySelector('.canvas-caption').textContent = reference() ? '原卡参考流程 · 拖动查看 · 点击节点看完整说明' : '拖动标题移动 · 空白处平移 · 出口 → 入口连线';
+    $('preview-start').textContent = reference() ? '逐步查看流程说明' : '开始预演';
+    document.querySelector('.canvas-caption').textContent = reference() ? '流程对照说明 · 点击节点维护说明 · 实际执行使用上方脚本' : '拖动标题移动 · 空白处平移 · 出口 → 入口连线';
     document.querySelectorAll('.preview-controls input').forEach(input => { input.disabled = reference(); });
-    renderGraph(); renderInspector(); renderCardPreview(); renderValidation(); renderTrace();
+    renderGraph(); renderInspector(); renderCardPreview(); renderValidation(); renderTrace(); webEditor.render();
   }
 
   function nodeSummary(item) {
     const data = item.data;
-    if (reference()) return `<span class="reference-node-badge">参考 · 不执行</span><span class="reference-node-text">${escape(data.text)}</span>`;
+    if (reference()) return `<span class="reference-node-badge">${entry().web ? '实现对照 · 说明节点' : '参考 · 不执行'}</span><span class="reference-node-text">${escape(data.text)}</span>`;
     if (item.type === 'trigger') return `<span class="main-value">${escape(M.label('trigger', data.trigger))}</span>当对应游戏事件发生时进入流程`;
     if (item.type === 'condition') return `<span class="main-value">${escape(M.label('condition', data.condition))}</span>${data.condition === 'HandBelow' ? '阈值：' + escape(data.conditionValue) : '满足继续，不满足结束'}`;
     if (item.type === 'end') return '<span class="main-value">本技能结束</span>后续连锁由游戏引擎处理';
@@ -185,6 +190,11 @@
     $('node-kind').textContent = item ? TYPE_NAMES[item.type] : '未选择';
     if (!current) { $('inspector').innerHTML = '<p>这张卡没有技能。点击「＋ 技能」创建一个。</p>'; return; }
     if (reference()) {
+      if (entry().web) {
+        $('node-kind').textContent = '流程说明';
+        $('inspector').innerHTML = `<h3>${escape(current.name)}</h3><p class="inspector-note">实际执行逻辑在上方 Web 技能编辑区维护。这里编辑对照说明，便于记录条件、目标与顺序。</p>${item ? `<label class="field">节点标题<input data-field="referenceTitle" value="${escape(item.data.title)}" maxlength="500"></label><label class="field">处理说明<textarea data-field="referenceText" rows="6" maxlength="500">${escape(item.data.text)}</textarea></label>` : '<p>点击节点维护对应的处理说明。</p>'}<p class="field-hint">原实现对应：${escape(current.hook)}</p>`;
+        return;
+      }
       $('node-kind').textContent = '参考流程';
       $('inspector').innerHTML = `<h3>${escape(current.name)}</h3><p class="inspector-note">原卡逻辑参考，尚未接入执行。可拖动节点查看，不可修改规则或导出为可运行技能。</p>${item ? `<h4>${escape(item.data.title)}</h4><p class="reference-detail">${escape(item.data.text)}</p>` : '<p>点击节点查看完整处理说明。</p>'}<p class="field-hint">对应：${escape(current.hook)}</p>${entry().source?.note ? `<p class="inspector-note">${escape(entry().source.note)}</p>` : ''}`;
       return;
@@ -216,9 +226,9 @@
     $('preview-name').textContent = card.name; $('preview-camp').textContent = displayCamp(card.camp); $('preview-rarity').textContent = card.rarity; $('preview-power').textContent = card.baseAttack;
     $('preview-camp').style.color = { 魏: '#3e70a0', 蜀: '#c47b31', 吴: '#47875d' }[card.camp.slice(-1)] || '#576958';
     $('card-preview').style.setProperty('--rarity', { 普通: '#737e73', 稀有: '#457f9f', 史诗: '#8d65aa', 传说: '#b77824', 特殊: '#b95b69' }[card.rarity]);
-    const original = entry().source ? `<div class="preview-skill"><strong>${escape(entry().source.skill)} · 原卡说明</strong><p>${escape(entry().source.effect)}</p></div>` : '';
+    const original = entry().source ? `<div class="preview-skill"><strong>${escape(entry().web ? card.skill : entry().source.skill)} · ${entry().web ? '当前说明' : '原卡说明'}</strong><p>${escape(entry().web ? card.effect : entry().source.effect)}</p></div>` : '';
     $('preview-skills').innerHTML = original + entry().graphs.map(skillGraph => {
-      if (skillGraph.mode === 'reference') return `<div class="preview-skill"><strong>${escape(skillGraph.name)}</strong><p>参考流程 · ${skillGraph.nodes.length} 个节点 · 尚未接入执行</p></div>`;
+      if (skillGraph.mode === 'reference') return `<div class="preview-skill"><strong>${escape(skillGraph.name)}</strong><p>${entry().web ? 'Web 实现对照' : '参考流程'} · ${skillGraph.nodes.length} 个说明节点</p></div>`;
       try {
         const skill = M.compileGraph(skillGraph);
         return `<div class="preview-skill"><strong>${escape(skill.name)}</strong><p>${escape(M.label('trigger', skill.trigger))} · ${escape(M.label('condition', skill.condition))}${skill.condition === 'HandBelow' ? ' ' + skill.conditionValue : ''}\n${skill.steps.map(M.describeStep).map(escape).join('\n')}</p></div>`;
@@ -235,7 +245,12 @@
     $('export-library').disabled = !!allError;
     $('export-library').title = allError ? '制作库含参考流程或无效配置。请保存工程，或选择可执行卡单独导出。' : '';
     $('export-card').disabled = !!error;
-    $('node-count').textContent = reference() ? `${graph().nodes.length} 个参考节点` : graph() ? `${graph().nodes.filter(n => n.type === 'effect').length} / 8 效果` : '无技能';
+    $('export-card').textContent = entry().web ? '导出当前 Web 卡' : '导出当前 Unity 卡';
+    if (entry().web) {
+      try { W.validate(entry().web); $('export-card').disabled = false; $('validation').textContent = '✓ 当前 Web 技能可导出 · 流程图仅作说明，脚本决定实际效果'; $('validation').className = ''; }
+      catch (e) { $('validation').textContent = 'Web 草稿待修正：' + e.message; $('validation').className = 'error'; }
+    }
+    $('node-count').textContent = reference() ? `${graph().nodes.length} 个${entry().web ? '说明' : '参考'}节点` : graph() ? `${graph().nodes.filter(n => n.type === 'effect').length} / 8 效果` : '无技能';
     $('preview-start').disabled = !graph();
   }
 
@@ -272,7 +287,7 @@
   $('camp-filter').addEventListener('change', renderCardSelect);
   $('restore-presets').disabled = !PRESETS;
   $('restore-presets').addEventListener('click', () => {
-    mutate(() => { const result = M.mergePresets(project, PRESETS); project = result.project; }, '已补齐缺失预存卡，已有卡牌及修改保持不变。');
+    mutate(() => { const result = M.mergePresets(project, PRESETS); project = result.project; }, '已补齐预存卡及缺失的 Web 技能实现，已有修改保持不变。');
   });
   $('skill-tabs').addEventListener('click', e => {
     const button = e.target.closest('[data-skill]'); if (!button) return;
@@ -304,6 +319,8 @@
     const value = e.target.type === 'number' ? (e.target.value.trim() === '' ? NaN : Number(e.target.value)) : e.target.value.trim();
     mutate(() => {
       if (field === 'skillName') graph().name = value;
+      else if (field === 'referenceTitle' && reference() && entry().web && node()) node().data.title = value;
+      else if (field === 'referenceText' && reference() && entry().web && node()) node().data.text = value;
       else if (node()) {
         const data = node().data; data[field] = value;
         if (field === 'operation') {
@@ -422,11 +439,19 @@
     const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) + '\n'], { type: 'application/json' }));
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
+  function downloadScript(name, source) {
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript;charset=utf-8' }));
+    const anchor = document.createElement('a'); anchor.href = url; anchor.download = name; document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
   $('save-project').addEventListener('click', () => { download('card-workshop-project.json', project); notify('已下载工程 JSON，包含卡牌、连线、位置和原有测试卡组。'); });
   $('export-library').addEventListener('click', () => {
     try { download('workshop-library.json', M.compileProject(project)); notify('已导出 Unity 工坊制作库。请在 Unity 的卡牌与技能工坊中导入；不会自动替换正式卡牌。'); } catch (e) { notify(e.message); }
   });
   $('export-card').addEventListener('click', () => {
+    if (entry().web) {
+      try { downloadScript(entry().card.id + '.js', W.exportScript([entry()])); notify('已导出当前卡的实际 Web 技能，使用原卡 ID；未修改正式游戏。'); } catch (e) { notify(e.message); }
+      return;
+    }
     try { download(entry().card.id + '.json', M.compileProject(singleCardProject())); notify('已导出当前卡牌的 Unity 制作库文件（不包含其他卡牌或测试卡组）。'); } catch (e) { notify(e.message); }
   });
   $('import-button').addEventListener('click', () => $('import-file').click());
@@ -435,10 +460,11 @@
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error('文件过大，请使用不超过 2 MB 的制作库 JSON');
       const imported = M.parseProject(JSON.parse((await file.text()).replace(/^\uFEFF/, '')));
+      const upgraded = PRESETS ? W.upgrade(imported, PRESETS) : 0;
       if (!confirm(`导入 ${imported.cards.length} 张卡牌，将替换当前浏览器中的制作库。建议先保存工程；导入后可以撤销。继续？`)) return;
       const before = snapshot(); project = imported; if (PRESETS) project.presetCatalogVersion = PRESETS.version; cardIndex = 0; skillIndex = 0; selected = null;
       $('card-search').value = ''; $('camp-filter').value = '';
-      record(before); render(); fit(); notify('导入成功。测试卡组引用已保留；请检查后再导出。');
+      record(before); render(); fit(); notify(`导入成功。${upgraded ? `已为 ${upgraded} 张旧参考卡补入实际 Web 技能。` : ''}测试卡组引用已保留；请检查后再导出。`);
     } catch (e) { notify('导入失败，当前内容未改变：' + e.message); }
     finally { event.target.value = ''; }
   });

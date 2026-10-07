@@ -2,3 +2,4 @@
 require('./model.test.cjs');
 require('./server.test.cjs');
 require('./presets.test.cjs');
+require('./web-effects.test.cjs');

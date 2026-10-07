@@ -72,6 +72,10 @@ namespace CardDemo.Editor
             if (pages == null || pages.requestTimeoutSeconds < 3 || pages.requestTimeoutSeconds > 30)
                 throw new InvalidOperationException("页面配置的请求超时需为 3～30 秒。");
             if (!string.IsNullOrWhiteSpace(pages.serverUrl)) AccountEndpoint.Normalize(pages.serverUrl);
+            CardDemo.Pages.UiTheme.Load().Validate();
+            var layout = Resources.Load<CardDemo.Pages.UiLayoutProfile>(CardDemo.Pages.UiLayoutProfile.ResourcePath);
+            if (layout == null) throw new InvalidOperationException("缺少 UI 布局配置。");
+            layout.Validate();
             var demo = JsonUtility.FromJson<CardCatalog>(File.ReadAllText("Assets/Resources/Data/demo-cards.json"));
             new GameEngine(config, demo.cards, 1);
             var workshop = WorkshopStore.Load();

@@ -47,7 +47,7 @@ namespace CardDemo
             scaler.referenceResolution=new Vector2(1600,1000);scaler.matchWidthOrHeight=.5f;
             var font=Resources.Load<Font>("Fonts/NotoSansSC-Regular");
             ui=new PageUi(font!=null?font:Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"));
-            safe=ui.Box(canvasObject.transform,"Safe Area",0,0,1,1,PageUi.Paper);ApplySafeArea();
+            safe=ui.Box(canvasObject.transform,"Safe Area",0,0,1,1,ui.Paper);ApplySafeArea();
             loading=new LoadingPage(ui,safe,()=>StartCoroutine(Load()));StartCoroutine(Load());
         }
         private IEnumerator Load()

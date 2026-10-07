@@ -33,7 +33,8 @@ namespace CardDemo.Pages
         }
         private static bool Finite(float v){return !float.IsNaN(v)&&!float.IsInfinity(v);}
         public static bool CanMove(RectTransform rect)
-        {return rect!=null&&rect.parent is RectTransform&&rect.parent.GetComponent<LayoutGroup>()==null&&rect.GetComponent<ContentSizeFitter>()==null;}
+        {return rect!=null&&rect.parent is RectTransform&&rect.GetComponent<UiElement>()!=null
+            &&rect.GetComponent<UiElement>().key.Contains("/")&&rect.parent.GetComponent<LayoutGroup>()==null&&rect.GetComponent<ContentSizeFitter>()==null;}
         public void Apply(Transform root)
         {
             Validate();

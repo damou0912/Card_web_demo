@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CardDemo.Core;
+using CardDemo.Pages;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -10,11 +11,13 @@ namespace CardDemo
     // Battle controller only. AppBootstrap owns loading/login/home and creates this on demand.
     public sealed partial class DemoBootstrap : MonoBehaviour
     {
-        private static readonly Color Background = new Color32(15, 22, 35, 255);
-        private static readonly Color PanelColor = new Color32(27, 39, 57, 255);
-        private static readonly Color Friendly = new Color32(40, 146, 156, 255);
-        private static readonly Color Enemy = new Color32(192, 87, 77, 255);
-        private static readonly Color Muted = new Color32(157, 176, 199, 255);
+        private UiTheme theme;
+        private UiLayoutProfile layoutProfile;
+        private Color Background { get { return theme.battleBackground; } }
+        private Color PanelColor { get { return theme.battlePanel; } }
+        private Color Friendly { get { return theme.friendly; } }
+        private Color Enemy { get { return theme.enemy; } }
+        private Color Muted { get { return theme.battleMuted; } }
         private GameEngine game;
         private GameConfig config;
         private CardCatalog demoCatalog;
@@ -51,8 +54,9 @@ namespace CardDemo
             if (config != null) throw new InvalidOperationException("对战页已初始化。");
             config = settings; demoCatalog = cards; workshop = library; returnHome = onReturnHome;
             config.Validate();
+            theme=UiTheme.Load();layoutProfile=Resources.Load<UiLayoutProfile>(UiLayoutProfile.ResourcePath);
             // Bundled, licensed font avoids relying on fonts installed on the destination PC.
-            font = Resources.Load<Font>("Fonts/NotoSansSC-Regular");
+            font = theme.font;
             if (font == null) font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildShell();
             CreateBoard(); StartMatch();
@@ -203,11 +207,11 @@ namespace CardDemo
             {
                 var piece = state.Board[cell]; var button = boardButtons[cell];
                 bool legal = selectedHand >= 0 ? game.CanPlace(1, selectedHand, cell) : selectedCell >= 0 && game.CanMove(1, selectedCell, cell);
-                Color color = piece == null ? PanelColor : piece.Owner == 1 ? Friendly * .75f : piece.Owner == 2 ? Enemy * .75f : (Color)new Color32(80, 88, 103, 255);
+                Color color = piece == null ? PanelColor : piece.Owner == 1 ? Friendly * .75f : piece.Owner == 2 ? Enemy * .75f : theme.neutral;
                 color.a = 1;
-                if (legal) color = piece == null ? new Color32(137, 110, 43, 255) : new Color32(167, 65, 64, 255);
+                if (legal) color = piece == null ? theme.legalMove : theme.legalAttack;
                 if (selectedCell == cell) color = Friendly;
-                button.GetComponent<Image>().color = color;
+                theme.Button(button,color,theme.battleText,selectedCell==cell);
                 button.GetComponentInChildren<Text>().text = piece == null ? game.CellName(cell) + (legal ? "\n可放置 / 移动" : "")
                     : piece.Name + "\n战力 " + piece.Power + "\n" + (piece.Owner == 0 ? "中立" : piece.Owner == 1 ? "我方" : "对方")
                         + (piece.Shield ? " · 盾" : "") + (piece.Resting ? " · 休整" : piece.Moved ? " · 已移动" : "");
@@ -216,8 +220,7 @@ namespace CardDemo
             {
                 var button = handButtons[i]; bool hasCard = i < state.Hands[1].Count;
                 button.interactable = hasCard;
-                button.GetComponent<Image>().color = selectedHand == i ? Friendly : PanelColor;
-                button.GetComponentInChildren<Text>().color = hasCard ? Color.white : Muted;
+                theme.Button(button,selectedHand==i?Friendly:PanelColor,hasCard?theme.battleText:Muted,selectedHand==i);
                 button.GetComponentInChildren<Text>().text = hasCard ? state.Hands[1][i].name + "\n战力 " + state.Hands[1][i].baseAttack
                     + "\n" + state.Hands[1][i].skill + "\n点击查看技能" : "空手牌位";
             }

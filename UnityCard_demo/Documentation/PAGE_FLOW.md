@@ -17,7 +17,7 @@
 | 主页 | `menu-screen` | `Pages/HomePage.cs` | PVE、4×4 / 5×5、演示 / 制作库牌库、账号信息、操作指南、90 张正式卡只读检索、势力筛选、招募 Demo 入口 |
 | 对战 | `game-screen`、对战菜单、流程弹层、`result-screen` | `DemoBootstrap.cs`、`DemoBootstrap.View.cs`、`SquareBoardLayout.cs` | 棋盘、固定双方信息、手牌、详情、计时、行动数、取消选择、认输确认、流程记录、结算、重开、返回主页 |
 
-表中脚本路径相对于 `Assets/`。`Pages/PageUi.cs` 维护前三页的通用颜色、文本、按钮、输入框和滚动容器；战场保留高对比深色布局。
+表中脚本路径相对于 `Assets/`。`Pages/PageUi.cs` 维护前三页的文本、按钮、输入框和滚动容器；四页视觉参数共用 `Resources/UI/AppUiTheme.asset`，战场保留深色配色。布局覆盖与无需 Play 的页面预览见 [页面视觉工作台](UI_FOUNDATION.md)。
 
 ### 导航与生命周期
 

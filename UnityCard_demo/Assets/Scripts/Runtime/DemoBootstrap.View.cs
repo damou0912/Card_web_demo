@@ -1,4 +1,6 @@
 using System;
+using CardDemo.Core;
+using CardDemo.Pages;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -8,13 +10,15 @@ namespace CardDemo
     // Layout and UI construction are separate from battle commands and the pure rules engine.
     public sealed partial class DemoBootstrap
     {
+        private bool designPreview;
         private RectTransform Panel(Transform parent, string name, Vector2 min, Vector2 max, Color color)
         {
             var obj = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             obj.transform.SetParent(parent, false);
             var rect = obj.GetComponent<RectTransform>();
             rect.anchorMin = min; rect.anchorMax = max; rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero;
-            obj.GetComponent<Image>().color = color;
+            theme.Surface(obj.GetComponent<Image>(),color,theme.panelSprite);
+            if(!string.IsNullOrEmpty(name))UiElement.Mark(obj);
             return rect;
         }
 
@@ -26,9 +30,10 @@ namespace CardDemo
             rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
             rect.offsetMin = new Vector2(8, 3); rect.offsetMax = new Vector2(-8, -3);
             var text = obj.GetComponent<Text>();
-            text.font = font; text.text = value; text.fontSize = size; text.color = Color.white;
+            text.font = font; text.text = value; text.fontSize = theme.Size(size); text.color = theme.battleText;
             text.alignment = alignment; text.supportRichText = false; text.raycastTarget = false;
             text.horizontalOverflow = HorizontalWrapMode.Wrap; text.verticalOverflow = VerticalWrapMode.Truncate;
+            if(parent.GetComponent<UiElement>()!=null)UiElement.Mark(obj);
             return text;
         }
 
@@ -37,11 +42,8 @@ namespace CardDemo
             var rect = Panel(parent, value, Vector2.zero, Vector2.one, color);
             var button = rect.gameObject.AddComponent<Button>();
             button.targetGraphic = rect.GetComponent<Image>();
-            var colors = button.colors;
-            colors.highlightedColor = new Color(1.15f, 1.15f, 1.15f);
-            colors.selectedColor = Color.white;
-            button.colors = colors;
             Label(rect, "Label", value, size, TextAnchor.MiddleCenter);
+            theme.Button(button,color,theme.battleText);
             button.onClick.AddListener(() => action());
             return button;
         }
@@ -56,16 +58,17 @@ namespace CardDemo
 
         private void BuildShell()
         {
-            if (Camera.main == null)
+            if (Camera.main == null || designPreview)
             {
                 var cameraObject = new GameObject("Main Camera", typeof(Camera));
+                cameraObject.transform.SetParent(transform,false);
                 cameraObject.tag = "MainCamera";
                 var camera = cameraObject.GetComponent<Camera>();
                 camera.orthographic = true; camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Background;
                 cameraObject.transform.position = new Vector3(0, 0, -10);
             }
-            if (FindObjectOfType<EventSystem>() == null)
+            if (Application.isPlaying && FindObjectOfType<EventSystem>() == null)
                 new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
             var canvasObject = new GameObject("Card Demo UI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             canvasObject.transform.SetParent(transform, false);
@@ -74,6 +77,7 @@ namespace CardDemo
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1600, 1000); scaler.matchWidthOrHeight = 0.5f;
             safeRoot = Panel(canvasObject.transform, "Safe Area", Vector2.zero, Vector2.one, Background);
+            UiElement.Mark(safeRoot.gameObject,"battle");theme.Surface(safeRoot.GetComponent<Image>(),Background,theme.battleBackgroundSprite);
             var header = Panel(safeRoot, "Header", new Vector2(.01f, .905f), new Vector2(.99f, .99f), PanelColor);
             title = Label(header, "Title", "Unity Card Demo", 25, TextAnchor.MiddleLeft);
             title.rectTransform.anchorMax = new Vector2(.79f, 1);
@@ -86,7 +90,7 @@ namespace CardDemo
             PositionedButton(help, "取消选择", new Vector2(.05f,.04f), new Vector2(.95f,.36f), CancelSelection, PanelColor);
             boardRoot = Panel(safeRoot, "Board", new Vector2(.215f, .28f), new Vector2(.685f, .89f), Background);
             grid = boardRoot.gameObject.AddComponent<GridLayoutGroup>();
-            grid.spacing = new Vector2(8, 8); grid.childAlignment = TextAnchor.MiddleCenter;
+            grid.spacing = new Vector2(theme.boardGap, theme.boardGap); grid.childAlignment = TextAnchor.MiddleCenter;
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             boardRoot.gameObject.AddComponent<SquareBoardLayout>();
             var detailPanel = Panel(safeRoot, "Details", new Vector2(.70f, .48f), new Vector2(.99f, .89f), PanelColor);
@@ -114,9 +118,9 @@ namespace CardDemo
             PositionedButton(safeRoot, "返回主页", new Vector2(.11f, .09f), new Vector2(.20f, .145f), RequestHome, PanelColor);
             PositionedButton(safeRoot, "展开卡牌流程", new Vector2(.01f, .02f), new Vector2(.20f, .08f), () => { logPanel.SetActive(true); UpdateLog(); }, PanelColor);
             BuildLog();
-            var resultOverlay = Panel(safeRoot, "Match Result", Vector2.zero, Vector2.one, new Color(0,0,0,.68f));
+            var resultOverlay = Panel(safeRoot, "Match Result", Vector2.zero, Vector2.one, theme.overlay);
             resultPanel = resultOverlay.gameObject;
-            var resultRect = Panel(resultOverlay, "Result Card", new Vector2(.25f, .28f), new Vector2(.75f, .76f), new Color32(24, 38, 58, 255));
+            var resultRect = Panel(resultOverlay, "Result Card", new Vector2(.25f, .28f), new Vector2(.75f, .76f), PanelColor);
             var resultTextPanel = Panel(resultRect, "Summary", new Vector2(.03f, .23f), new Vector2(.97f, .96f), Color.clear);
             result = Label(resultTextPanel, "Winner And Score", "", 30, TextAnchor.MiddleCenter);
             PositionedButton(resultRect, "再来一局", new Vector2(.04f, .05f), new Vector2(.32f, .19f), StartMatch, Friendly);
@@ -124,12 +128,13 @@ namespace CardDemo
             PositionedButton(resultRect, "返回主页", new Vector2(.68f, .05f), new Vector2(.96f, .19f), RequestHome, PanelColor);
             resultPanel.SetActive(false);
             BuildBattleMenu();
+            if(layoutProfile!=null)layoutProfile.Apply(safeRoot);
             ApplySafeArea();
         }
 
         private void BuildLog()
         {
-            var root = Panel(safeRoot, "Full Card Flow", new Vector2(.12f, .08f), new Vector2(.97f, .91f), new Color32(19, 29, 44, 255));
+            var root = Panel(safeRoot, "Full Card Flow", new Vector2(.12f, .08f), new Vector2(.97f, .91f), PanelColor);
             logPanel = root.gameObject;
             var logHeading = Panel(root, "Heading", new Vector2(.02f, .89f), new Vector2(.70f, .99f), Color.clear);
             Label(logHeading, "Title", "全部卡牌流程 · 来源 / 目标 / 原因", 28, TextAnchor.MiddleLeft);
@@ -155,11 +160,13 @@ namespace CardDemo
             {
                 int index = i;
                 boardButtons[i] = Button(boardRoot, "", () => ClickCell(index), PanelColor, config.boardSize == 5 ? 17 : 23);
+                boardButtons[i].name="Cell_"+i;
             }
             for (int i = 0; i < config.handLimit; i++)
             {
                 int index = i;
                 handButtons[i] = Button(handRoot, "", () => ClickHand(index), PanelColor, 24);
+                handButtons[i].name="Hand_"+i;
                 var layout = handButtons[i].gameObject.AddComponent<LayoutElement>();
                 layout.minWidth = 0; layout.preferredWidth = 1; layout.flexibleWidth = 1;
             }
@@ -167,7 +174,7 @@ namespace CardDemo
 
         private void BuildBattleMenu()
         {
-            var overlay = Panel(safeRoot, "Battle Menu", Vector2.zero, Vector2.one, new Color(0,0,0,.68f));
+            var overlay = Panel(safeRoot, "Battle Menu", Vector2.zero, Vector2.one, theme.overlay);
             menuPanel = overlay.gameObject;
             var panel = Panel(overlay, "Menu Card", new Vector2(.29f,.23f), new Vector2(.71f,.80f), PanelColor);
             var heading = Panel(panel, "Heading", new Vector2(.05f,.77f), new Vector2(.95f,.98f), Color.clear);
@@ -176,7 +183,7 @@ namespace CardDemo
             PositionedButton(panel, "认输并结算", new Vector2(.08f,.37f), new Vector2(.92f,.52f), RequestSurrender, Enemy);
             PositionedButton(panel, "返回主页", new Vector2(.08f,.17f), new Vector2(.92f,.32f), RequestHome, Background);
             menuPanel.SetActive(false);
-            var confirm = Panel(safeRoot, "Battle Confirmation", Vector2.zero, Vector2.one, new Color(0,0,0,.68f));
+            var confirm = Panel(safeRoot, "Battle Confirmation", Vector2.zero, Vector2.one, theme.overlay);
             confirmationPanel = confirm.gameObject;
             var box = Panel(confirm, "Confirmation Card", new Vector2(.25f,.32f), new Vector2(.75f,.70f), PanelColor);
             var body = Panel(box, "Message", new Vector2(.04f,.30f), new Vector2(.96f,.95f), Color.clear);
@@ -187,5 +194,26 @@ namespace CardDemo
             }, Enemy);
             confirmationPanel.SetActive(false);
         }
+
+#if UNITY_EDITOR
+        // Visual fixture only: never constructs GameEngine, loads inventory, logs in or starts an AI.
+        public void BuildDesignPreview(UiTheme previewTheme,UiLayoutProfile previewLayout,int state)
+        {
+            enabled=false;designPreview=true;theme=previewTheme;layoutProfile=previewLayout;font=theme.font;
+            config=new GameConfig();BuildShell();CreateBoard();
+            title.text="UI 布局预览 / 不运行对局";
+            players.text="对方 ID\nAI_Preview\n手牌 4 / 牌库 16\n占领 3 格\n\n我方 ID\nUI_Preview\n手牌 5 / 牌库 15\n占领 4 格";
+            details.text="卡牌详情区\n\n这里预留卡名、势力、品质与技能描述。\n长文可在运行时滚动查看。\n\n本场景仅用于视觉排版。";
+            latest.text="流程摘要区\n预留实际对战消息与动画提示。";
+            status.text="我方回合  |  行动 2  |  剩余 04:36  |  回合 8 / 30";
+            for(int i=0;i<16;i++)boardButtons[i].GetComponentInChildren<Text>().text=i==5?"己方示例牌\n战力 4":i==10?"对方示例牌\n战力 3":"("+(i/4+1)+","+(i%4+1)+")";
+            theme.Button(boardButtons[5],Friendly,theme.battleText,true);theme.Button(boardButtons[10],Enemy,theme.battleText);
+            for(int i=0;i<config.handLimit;i++)handButtons[i].GetComponentInChildren<Text>().text="示例手牌 "+(i+1)+"\n战力 4\n技能标题\n只读占位";
+            if(state==1)menuPanel.SetActive(true);
+            if(state==2){result.text="获胜者 ID：UI_Preview\n\n我方 9 : 5 对方\n回合数：12\n布局预览，不计入战绩";resultPanel.SetActive(true);}
+            // Preview callbacks are intentionally inert, even if this scene is played accidentally.
+            foreach(var button in GetComponentsInChildren<Button>(true))button.onClick.RemoveAllListeners();
+        }
+#endif
     }
 }

@@ -53,7 +53,7 @@ namespace CardDemo.Pages
             if(font==null)throw new InvalidOperationException("UI 主题需要指定中文字体。");
             if(float.IsNaN(fontScale)||fontScale<.8f||fontScale>1.2f||buttonFontSize<16||buttonFontSize>30||inputFontSize<16||inputFontSize>30)
                 throw new InvalidOperationException("UI 字号或字号缩放超出允许范围。");
-            if(transitionSeconds<.02f||transitionSeconds>.3f||selectedOutline<0||selectedOutline>4||boardGap<4||boardGap>20)
+            if(float.IsNaN(transitionSeconds)||float.IsNaN(selectedOutline)||float.IsNaN(boardGap)||transitionSeconds<.02f||transitionSeconds>.3f||selectedOutline<0||selectedOutline>4||boardGap<4||boardGap>20)
                 throw new InvalidOperationException("UI 交互或间距参数无效。");
         }
         public int Size(int size){return Mathf.Max(10,Mathf.RoundToInt(size*fontScale));}
@@ -61,12 +61,16 @@ namespace CardDemo.Pages
         {image.color=color;image.sprite=sprite;image.type=sprite!=null&&sprite.border.sqrMagnitude>0?Image.Type.Sliced:Image.Type.Simple;}
         public void Button(Button button,Color background,Color foreground,bool isSelected=false)
         {
-            var image=button.GetComponent<Image>();Surface(image,background,buttonSprite);
+            // ColorBlock drives the CanvasRenderer tint; keep vertex color white to avoid multiplying the palette twice.
+            var image=button.GetComponent<Image>();Surface(image,Color.white,buttonSprite);
             var colors=button.colors;
             colors.normalColor=background;colors.highlightedColor=Color.Lerp(background,onPrimary,.12f);
             colors.pressedColor=Color.Lerp(background,ink,.20f);colors.selectedColor=colors.highlightedColor;
             colors.disabledColor=Color.Lerp(background,muted,.48f);colors.colorMultiplier=1;colors.fadeDuration=transitionSeconds;
             button.colors=colors;
+            // Bind the skin immediately instead of fading from the Image's initial white.
+            // Subsequent pointer/selection events still use the configured transition duration.
+            if(button.targetGraphic!=null)button.targetGraphic.CrossFadeColor(button.IsInteractable()?colors.normalColor:colors.disabledColor,0,true,true);
             var text=button.GetComponentInChildren<Text>();if(text!=null)text.color=foreground;
             var outline=button.GetComponent<Outline>();if(outline==null)outline=button.gameObject.AddComponent<Outline>();
             outline.effectColor=primary;outline.effectDistance=new Vector2(selectedOutline,-selectedOutline);outline.enabled=isSelected;
